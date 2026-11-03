@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import release_pipeline as rp
+import release_runtime as rt
 import release_verify_delivery as delivery
 import release_verify_offline as offline
 
@@ -54,7 +55,7 @@ class EvidenceTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.journal = rp.Journal(self.root / "state", {"version": "1.2.3"})
+        self.journal = rt.Journal(self.root / "state", {"version": "1.2.3"})
         self.output = self.root / "artifact"
         self.output.write_text("original")
 
@@ -71,7 +72,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_interrupted_attempt_retained_and_retried_in_new_directory(self):
         first = self.journal.begin("build", "one")
-        restarted = rp.Journal(self.journal.directory, {"version": "1.2.3"})
+        restarted = rt.Journal(self.journal.directory, {"version": "1.2.3"})
         self.assertFalse(restarted.reusable("build", "one"))
         second = restarted.begin("build", "one")
         self.assertNotEqual(first, second)
@@ -86,7 +87,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_wrong_release_state_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "another checkout/version"):
-            rp.Journal(self.journal.directory, {"version": "1.2.4"})
+            rt.Journal(self.journal.directory, {"version": "1.2.4"})
 
     def test_atomic_save_failure_preserves_previous_state(self):
         before = self.journal.path.read_bytes()
@@ -110,27 +111,27 @@ class EvidenceTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
         source = repo / "app.py"
         source.write_text("one")
-        first = rp.source_fingerprint(repo)
+        first = rt.source_fingerprint(repo)
         source.write_text("two")
-        self.assertNotEqual(first, rp.source_fingerprint(repo))
+        self.assertNotEqual(first, rt.source_fingerprint(repo))
         source.write_text("one")
-        self.assertEqual(first, rp.source_fingerprint(repo))
+        self.assertEqual(first, rt.source_fingerprint(repo))
         (repo / "new.py").write_text("extra")
-        self.assertNotEqual(first, rp.source_fingerprint(repo))
+        self.assertNotEqual(first, rt.source_fingerprint(repo))
 
     def test_lock_excludes_other_worktrees_and_releases_after_exit(self):
         subprocess.run(["git", "init", "-q", str(self.root / "repo")], check=True)
-        with rp.release_lock(self.root / "repo"):
+        with rt.release_lock(self.root / "repo"):
             with self.assertRaisesRegex(RuntimeError, "Another managed release"):
-                with rp.release_lock(self.root / "repo"):
+                with rt.release_lock(self.root / "repo"):
                     self.fail("second lock acquired")
-        with rp.release_lock(self.root / "repo"):
+        with rt.release_lock(self.root / "repo"):
             pass
 
 
 class BrowserReportTests(unittest.TestCase):
     def test_valid_catalog_and_report(self):
-        self.assertEqual(rp.cases(report(), "chromium", True), rp.cases(report(executed=False), "chromium", False))
+        self.assertEqual(rt.cases(report(), "chromium", True), rt.cases(report(executed=False), "chromium", False))
 
     def test_rejects_failures_skips_flakes_retries_and_incomplete_results(self):
         variants = []
@@ -151,7 +152,7 @@ class BrowserReportTests(unittest.TestCase):
         variants += [report(ids=()), report(ids=("a", "a")), report(executed=False)]
         for data in variants:
             with self.subTest(data=data), self.assertRaises(RuntimeError):
-                rp.cases(data, "chromium", True)
+                rt.cases(data, "chromium", True)
 
     def test_wrong_engine_workers_retry_settings_rejected(self):
         variants = [report("firefox")]
@@ -163,7 +164,7 @@ class BrowserReportTests(unittest.TestCase):
         variants.append(data)
         for data in variants:
             with self.assertRaises(RuntimeError):
-                rp.cases(data, "chromium", True)
+                rt.cases(data, "chromium", True)
 
     def test_isolation_removes_inherited_data_credentials_and_browser_overrides(self):
         with patch.dict(
@@ -175,7 +176,7 @@ class BrowserReportTests(unittest.TestCase):
                 "PLAYWRIGHT_TEST_BASE_URL": "https://production",
             },
         ):
-            env = rp.isolation_environment()
+            env = rt.isolation_environment()
         self.assertNotIn("CAGELEDGER_DB", env)
         self.assertNotIn("PLAYWRIGHT_TEST_BASE_URL", env)
         self.assertEqual(env["CAGELEDGER_EPHEMERAL_DB"], "1")
@@ -323,7 +324,7 @@ class PipelineSimulationTests(unittest.TestCase):
         self.pipeline.branch = "main"
         self.pipeline.preflight_remote = "new"
         self.pipeline.journal.data.update(
-            commit="new", image_manifest=rp.hashed({"version": "image"}), latest_baseline="old"
+            commit="new", image_manifest=rt.hashed({"version": "image"}), latest_baseline="old"
         )
         (self.root / "package.json").write_text(json.dumps({"version": "1.2.3", "build": 1}))
         log = self.root / "image.log"
@@ -438,34 +439,34 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
             "git@git.cellnucle.us:hugo/cageledger.git",
             "ssh://git@git.cellnucle.us/hugo/cageledger.git",
         ):
-            self.assertTrue(rp.official_origin(url))
+            self.assertTrue(rt.official_origin(url))
         for url in ("git@git.cellnucle.us:other/cageledger.git", "git@foreign.example:hugo/cageledger.git"):
-            self.assertFalse(rp.official_origin(url))
+            self.assertFalse(rt.official_origin(url))
 
     def test_git_auth_failure_is_not_absence(self):
         for code in (1, 128):
             with patch.object(rp.subprocess, "run", return_value=SimpleNamespace(returncode=code)):
                 with self.assertRaisesRegex(RuntimeError, "unknown"):
-                    rp.remote_ref(Path("/tmp"), "refs/tags/v1.2.3")
+                    rt.remote_ref(Path("/tmp"), "refs/tags/v1.2.3")
         with patch.object(rp.subprocess, "run", return_value=SimpleNamespace(returncode=2)):
-            self.assertIsNone(rp.remote_ref(Path("/tmp"), "refs/tags/v1.2.3"))
+            self.assertIsNone(rt.remote_ref(Path("/tmp"), "refs/tags/v1.2.3"))
 
     def test_conflicting_remote_tag_is_not_overwritten(self):
-        self.assertFalse(rp.reconcile_ref(None, "expected"))
-        self.assertTrue(rp.reconcile_ref("expected", "expected"))
+        self.assertFalse(rt.reconcile_ref(None, "expected"))
+        self.assertTrue(rt.reconcile_ref("expected", "expected"))
         with self.assertRaises(RuntimeError):
-            rp.reconcile_ref("foreign", "expected")
+            rt.reconcile_ref("foreign", "expected")
 
     def test_registry_manifest_success_and_exact_missing_responses(self):
         image = "registry.example/repo:1.2.3"
         manifest = {"schemaVersion": 2, "manifests": [{"digest": "sha256:" + "a" * 64}]}
         success = SimpleNamespace(returncode=0, stdout=json.dumps(manifest), stderr="")
-        self.assertEqual(rp.manifest_result(success, image), rp.hashed(manifest))
+        self.assertEqual(rt.manifest_result(success, image), rt.hashed(manifest))
         for text in (f"ERROR: {image}: not found", f"ERROR: {image}: manifest unknown"):
             with patch.object(
                 rp.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout="", stderr=text + "\n")
             ):
-                self.assertIsNone(rp.manifest_identity(Path("/tmp"), image))
+                self.assertIsNone(rt.manifest_identity(Path("/tmp"), image))
 
     def test_registry_refusals_timeouts_and_ambiguous_responses_stay_unknown(self):
         image = "registry.example/repo:1.2.3"
@@ -482,7 +483,7 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
         ]
         for error in errors:
             with self.subTest(error=error), self.assertRaises(RuntimeError):
-                rp.manifest_result(SimpleNamespace(returncode=1, stdout="", stderr=error), image)
+                rt.manifest_result(SimpleNamespace(returncode=1, stdout="", stderr=error), image)
         for result in [
             SimpleNamespace(returncode=127, stdout="", stderr=f"ERROR: {image}: not found"),
             SimpleNamespace(returncode=1, stdout="unexpected", stderr=f"ERROR: {image}: not found"),
@@ -491,14 +492,14 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
             SimpleNamespace(returncode=0, stdout='{"schemaVersion":2,"manifests":[]}', stderr=""),
         ]:
             with self.assertRaises(RuntimeError):
-                rp.manifest_result(result, image)
+                rt.manifest_result(result, image)
         with patch.object(rp.subprocess, "run", side_effect=subprocess.TimeoutExpired("docker", 60)):
             with self.assertRaises(subprocess.TimeoutExpired):
-                rp.manifest_identity(Path("/tmp"), image)
+                rt.manifest_identity(Path("/tmp"), image)
 
     def test_chinese_release_path_uses_nul_delimiters(self):
-        with patch.object(rp, "command", return_value="wiki/更新日志.md\0package.json\0") as command:
-            self.assertEqual(rp.changed_paths(Path("/tmp")), {"wiki/更新日志.md", "package.json"})
+        with patch.object(rt, "command", return_value="wiki/更新日志.md\0package.json\0") as command:
+            self.assertEqual(rt.changed_paths(Path("/tmp")), {"wiki/更新日志.md", "package.json"})
             self.assertIn("-z", command.call_args.args[0])
 
     def test_detached_descendants_are_owned_but_foreign_processes_are_not(self):
@@ -507,8 +508,8 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
             70002: {"parent": 70001, "group": 70002, "identity": "child"},
             70003: {"parent": 1, "group": 70003, "identity": "foreign"},
         }
-        with patch.object(rp, "process_snapshot", return_value=rows), patch.object(rp.os, "killpg") as kill:
-            owner = rp.OwnedProcesses(SimpleNamespace(pid=70001, poll=lambda: None))
+        with patch.object(rt, "process_snapshot", return_value=rows), patch.object(rp.os, "killpg") as kill:
+            owner = rt.OwnedProcesses(SimpleNamespace(pid=70001, poll=lambda: None))
             self.assertEqual(owner.live, {70001, 70002})
             owner.signal(15)
             self.assertEqual({call.args[0] for call in kill.call_args_list}, {70001, 70002})
@@ -516,10 +517,10 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
     def test_recycled_and_unknown_group_members_never_signalled(self):
         rows = {70001: {"parent": 1, "group": 70001, "identity": "original"}}
         with (
-            patch.object(rp, "process_snapshot", side_effect=lambda: copy.deepcopy(rows)),
+            patch.object(rt, "process_snapshot", side_effect=lambda: copy.deepcopy(rows)),
             patch.object(rp.os, "killpg") as kill,
         ):
-            owner = rp.OwnedProcesses(SimpleNamespace(pid=70001, poll=lambda: None))
+            owner = rt.OwnedProcesses(SimpleNamespace(pid=70001, poll=lambda: None))
             rows[70002] = {"parent": 1, "group": 70001, "identity": "unknown"}
             with self.assertRaisesRegex(RuntimeError, "Unknown/recycled"):
                 owner.signal(15)
@@ -532,7 +533,7 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
 
     def test_guard_blocks_before_process_launch(self):
         guard = SimpleNamespace(check=lambda: False, reason="new Jetsam")
-        runner = rp.Runner(Path("/tmp"), guard)
+        runner = rt.Runner(Path("/tmp"), guard)
         with patch.object(rp.subprocess, "Popen") as start:
             with self.assertRaisesRegex(RuntimeError, "Jetsam"):
                 runner.run(["anything"], Path("/tmp/unused.log"))
@@ -561,7 +562,7 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
     def test_real_owned_process_completes_without_signalling_unrelated_processes(self):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "command.log"
-            runner = rp.Runner(Path(directory), SimpleNamespace(check=lambda: True, reason=""))
+            runner = rt.Runner(Path(directory), SimpleNamespace(check=lambda: True, reason=""))
             runner.run([sys.executable, "-c", "print('isolated command passed')"], log)
             self.assertIn("isolated command passed", log.read_text())
 
