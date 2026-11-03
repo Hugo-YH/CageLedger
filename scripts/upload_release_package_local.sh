@@ -127,17 +127,17 @@ else
   AUTH_ARGS=(-u "${CREDENTIAL_USERNAME}:${CREDENTIAL_PASSWORD}")
 fi
 
-HTTP_CODE="$(curl -sS -o "$RELEASE_FILE" -w '%{http_code}' "${AUTH_ARGS[@]}" \
+HTTP_CODE="$(curl --connect-timeout 15 --max-time 300 -sS -o "$RELEASE_FILE" -w '%{http_code}' "${AUTH_ARGS[@]}" \
   "${API_BASE}/repos/${REPOSITORY}/releases/tags/${TAG}")"
 if [[ "$HTTP_CODE" = "200" ]]; then
   RELEASE_JSON="$(cat "$RELEASE_FILE")"
   EXISTING_RELEASE_ID="$(printf '%s' "$RELEASE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
-  RELEASE_JSON="$(curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
+  RELEASE_JSON="$(curl --connect-timeout 15 --max-time 300 -fsS -X PATCH "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
     --data-binary "@${REQUEST_DIR}/release-update.json" \
     "${API_BASE}/repos/${REPOSITORY}/releases/${EXISTING_RELEASE_ID}")"
 elif [[ "$HTTP_CODE" = "404" ]]; then
-  RELEASE_JSON="$(curl -fsS -X POST "${AUTH_ARGS[@]}" \
+  RELEASE_JSON="$(curl --connect-timeout 15 --max-time 300 -fsS -X POST "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
     --data-binary "@${REQUEST_DIR}/release-create.json" \
     "${API_BASE}/repos/${REPOSITORY}/releases")"
@@ -163,32 +163,32 @@ value = release.get("published_at") or release.get("created_at")
 print("yes" if not value or datetime.fromisoformat(value.replace("Z", "+00:00")).year <= 1970 else "no")
 ')"
 if [[ "$RELEASE_NEEDS_DATE" = "yes" ]]; then
-  curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
+  curl --connect-timeout 15 --max-time 300 -fsS -X PATCH "${AUTH_ARGS[@]}" \
     -H 'Content-Type: application/json' \
     -d '{"draft":true}' \
     "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}" >/dev/null
 fi
 PACKAGE_NAME="$(basename "$PACKAGE_PATH")"
-ASSETS_JSON="$(curl -fsS "${AUTH_ARGS[@]}" \
+ASSETS_JSON="$(curl --connect-timeout 15 --max-time 300 -fsS "${AUTH_ARGS[@]}" \
   "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}/assets")"
 ASSET_ID="$(printf '%s' "$ASSETS_JSON" | python3 -c 'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item.get("name") == name), ""))' "$PACKAGE_NAME")"
 
 if [[ -n "$ASSET_ID" ]]; then
   echo "Release ${TAG} already contains ${PACKAGE_NAME}; keeping the immutable asset."
 else
-  curl -fsS -X POST "${AUTH_ARGS[@]}" \
+  curl --connect-timeout 15 --max-time 300 -fsS -X POST "${AUTH_ARGS[@]}" \
     -F "attachment=@${PACKAGE_PATH}" \
     "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" >/dev/null
 fi
 
 # Publish only after the requested package is present. Never report success
 # for a draft or an epoch-dated record hidden behind old releases in the list.
-RELEASE_JSON="$(curl -fsS -X PATCH "${AUTH_ARGS[@]}" \
+RELEASE_JSON="$(curl --connect-timeout 15 --max-time 300 -fsS -X PATCH "${AUTH_ARGS[@]}" \
   -H 'Content-Type: application/json' \
   -d '{"draft":false}' \
   "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}")"
 # Read back persisted metadata, rather than trusting the publish response alone.
-RELEASE_JSON="$(curl -fsS "${AUTH_ARGS[@]}" "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}")"
+RELEASE_JSON="$(curl --connect-timeout 15 --max-time 300 -fsS "${AUTH_ARGS[@]}" "${API_BASE}/repos/${REPOSITORY}/releases/${RELEASE_ID}")"
 printf '%s' "$RELEASE_JSON" >"$RELEASE_FILE"
 node scripts/release_notes_payload.mjs --verify "$RELEASE_FILE" --expected "${REQUEST_DIR}/release-create.json"
 printf '%s' "$RELEASE_JSON" | python3 -c '
