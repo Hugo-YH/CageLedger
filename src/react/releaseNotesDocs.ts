@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.26.0",
+    build: "255",
+    releasedAt: "2026-11-03",
+    title: "预约信息补充",
+    items: [
+      "文字识别后按饲养需求编号或采购单号查找已有图片预约，展示原图、已有信息和本次文字的差异，确认后将文字补充到原预约",
+      "合并时保留已有字段和图片，只补充空缺信息，并留存补充文字、字段来源及操作记录；接收日期与饲养周期按原有规则联动",
+      "多条匹配、编号关联冲突、已接收或未留存图片的预约会给出提示并阻止合并；确认期间预约发生变化时要求重新核对，避免覆盖他人修改",
+    ],
+  },
+  {
     version: "1.25.1",
     build: "254",
     releasedAt: "2026-11-02",
