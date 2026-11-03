@@ -50,7 +50,9 @@ from release_runtime import (
 
 
 class Pipeline:
-    def __init__(self, repo, version, directory, guard):
+    def __init__(self, repo, version, directory, guard, browser_slots=1):
+        require(type(browser_slots) is int and browser_slots in (1, 2), "Browser slots must be 1 or 2")
+        self.browser_slots = browser_slots
         self.repo, self.version = repo, version
         self.journal = Journal(directory, {"repo": str(repo.resolve()), "version": version})
         self.runner = Runner(repo, guard)
@@ -195,7 +197,22 @@ class Pipeline:
         command(["node", "scripts/sync_release_notes_from_docs.mjs"], self.repo)
         command(["node", "scripts/release_notes_payload.mjs", "--version", self.version, "--check"], self.repo)
 
+    def browser_capacity(self):
+        # Admission and the runtime guard remain authoritative. This stricter
+        # scheduling budget only decides whether to start a second group.
+        self.runner.healthy()
+        guard = self.runner.guard
+        sample = guard.sample
+        if self.browser_slots == 2 and (
+            sample["free_percent"] >= 45
+            and sample["load1"] <= guard.policy.cpus
+            and sample["swap_mib"] - guard.policy.baseline_swap <= 256
+        ):
+            return 2
+        return 1
+
     def browsers(self):
+        self.verify_runtime()
         fingerprint = self.fingerprint()
         catalog_dir = self.journal.directory / ("catalog-" + uuid4().hex)
         catalog_dir.mkdir()
@@ -218,7 +235,8 @@ class Pipeline:
                     "engine": engine,
                     "shard": shard,
                     "catalog": sorted(catalogs[engine]),
-                    "topology": "3-shards-2-slots-v1",
+                    "topology": "3-shards-resource-slots-v2",
+                    "maximum_slots": self.browser_slots,
                 }
             )
             entry = self.journal.data["stages"].get(name, {})
@@ -264,12 +282,15 @@ class Pipeline:
                 self.journal.end(name, "failed", reason=str(error))
                 raise
 
-        # Two slots, work-conserving; Firefox and WebKit retain their serial relation.
+        # Never increase concurrency again after pressure reduces this run's budget.
+        # Every group retains its own ports/database, even when run sequentially.
+        slots = self.browser_slots
         pending, active, results = list(jobs), {}, {}
         failure = None
-        with ThreadPoolExecutor(max_workers=2) as pool:
+        with ThreadPoolExecutor(max_workers=self.browser_slots) as pool:
             while pending or active:
-                while pending and len(active) < 2 and failure is None:
+                slots = min(slots, self.browser_capacity())
+                while pending and len(active) < slots and failure is None:
                     index = next((i for i, j in enumerate(pending) if j[0] != "webkit" or "firefox" in results), None)
                     if index is None:
                         break
@@ -586,6 +607,13 @@ def main():
     parser.add_argument(
         "--skip-full-verify", action="store_true", help="Compatibility alias: reuse only verified matching receipts"
     )
+    parser.add_argument(
+        "--browser-slots",
+        type=int,
+        choices=(1, 2),
+        default=1,
+        help="Maximum independent browser groups (default: 1; resource guard may reduce 2)",
+    )
     parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--validate-build", type=Path)
     parser.add_argument(
@@ -600,7 +628,9 @@ def main():
         version = command(["node", "scripts/bump_version.mjs", "--bump", args.bump or "beta"])
     require(re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.-]*", version), "Invalid version")
     if args.dry_run:
-        print("preflight → prepare → check → build → 3 Chromium shards + Firefox + WebKit (2 slots) → offline package")
+        print(
+            f"preflight → prepare → check → build → 3 Chromium shards + Firefox + WebKit (up to {args.browser_slots} slots) → offline package"
+        )
         print("→ signed commit/tag" if not args.verify_only else "→ stop before commit/tag")
         if args.push and not args.verify_only:
             print("→ version images → Git refs → Release → Wiki → delivery/offline verification → latest")
@@ -618,7 +648,7 @@ def main():
     )
     with release_lock(ROOT):
         guard = HostGuard(directory / "host")
-        pipeline = Pipeline(ROOT, version, directory, guard)
+        pipeline = Pipeline(ROOT, version, directory, guard, browser_slots=args.browser_slots)
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, lambda _s, _f: pipeline.runner.stopping.set())
         pipeline.preflight()

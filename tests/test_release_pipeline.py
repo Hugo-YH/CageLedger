@@ -189,7 +189,10 @@ class PipelineSimulationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.pipeline = rp.Pipeline(self.root, "1.2.3", self.root / "evidence", Mock())
+        guard = Mock()
+        guard.sample = {"free_percent": 55, "load1": 2, "swap_mib": 100}
+        guard.policy = SimpleNamespace(cpus=10, baseline_swap=100)
+        self.pipeline = rp.Pipeline(self.root, "1.2.3", self.root / "evidence", guard)
         self.pipeline.fingerprint = Mock(return_value="source-runtime")
         self.pipeline.verify_runtime = Mock()
         self.active = 0
@@ -197,6 +200,7 @@ class PipelineSimulationTests(unittest.TestCase):
         self.calls = []
         self.mutex = threading.Lock()
         self.fail_webkit = False
+        self.interrupt_name = None
         self.pipeline.runner.run = self.fake_run
 
     def fake_run(self, args, output, env=None, probe=None):
@@ -213,6 +217,8 @@ class PipelineSimulationTests(unittest.TestCase):
             self.maximum = max(self.maximum, self.active)
             self.calls.append(name)
         try:
+            if name == self.interrupt_name:
+                raise RuntimeError("memory/swap resource guard")
             time.sleep(0.02 if name == "chromium-1" else 0.04)
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text("simulation")
@@ -243,12 +249,72 @@ class PipelineSimulationTests(unittest.TestCase):
             self.pipeline.browsers()
 
     def test_two_slots_complete_exact_coverage_then_reuse_all(self):
+        self.pipeline.browser_slots = 2
         self.run_browsers()
         self.assertEqual(self.maximum, 2)
         self.assertEqual(len(self.calls), 5)
         self.assertLess(self.calls.index("firefox"), self.calls.index("webkit"))
         self.run_browsers()
         self.assertEqual(len(self.calls), 5)
+
+    def test_default_single_slot_preserves_five_independent_databases(self):
+        self.run_browsers()
+        self.assertEqual(self.maximum, 1)
+        self.assertEqual(self.calls, ["chromium-1", "chromium-2", "chromium-3", "firefox", "webkit"])
+        databases = [v["health"]["database"] for v in self.pipeline.journal.data["stages"].values()]
+        self.assertEqual(len(set(databases)), 5)
+
+    def test_slot_configuration_change_invalidates_browser_receipts(self):
+        self.run_browsers()
+        self.calls.clear()
+        self.pipeline.browser_slots = 2
+        self.run_browsers()
+        self.assertEqual(len(self.calls), 5)
+
+    def test_resource_budget_reduces_requested_two_slots(self):
+        self.pipeline.browser_slots = 2
+        for sample in ({"free_percent": 44}, {"load1": 11}, {"swap_mib": 357}):
+            with self.subTest(sample=sample):
+                self.pipeline.runner.guard.sample = {"free_percent": 55, "load1": 2, "swap_mib": 100, **sample}
+                self.assertEqual(self.pipeline.browser_capacity(), 1)
+        self.run_browsers()
+        self.assertEqual(self.maximum, 1)
+
+    def test_runtime_guard_failure_stops_scheduling_without_success(self):
+        self.pipeline.runner.healthy = Mock(side_effect=RuntimeError("memory/swap resource guard"))
+        with self.assertRaisesRegex(RuntimeError, "memory/swap"):
+            self.run_browsers()
+        self.assertEqual(self.calls, [])
+        self.assertNotIn("browser_input", self.pipeline.journal.data)
+
+    def test_interrupted_single_slot_resumes_only_unfinished_groups(self):
+        self.interrupt_name = "chromium-3"
+        with self.assertRaisesRegex(RuntimeError, "memory/swap"):
+            self.run_browsers()
+        self.assertEqual(self.calls, ["chromium-1", "chromium-2", "chromium-3"])
+        self.interrupt_name = None
+        self.calls.clear()
+        self.run_browsers()
+        self.assertEqual(self.calls, ["chromium-3", "firefox", "webkit"])
+
+    def test_budget_reduction_is_latched_for_remainder_of_run(self):
+        self.pipeline.browser_slots = 2
+        self.pipeline.browser_capacity = Mock(side_effect=[1, 2, 2, 2, 2, 2])
+        self.run_browsers()
+        self.assertEqual(self.maximum, 1)
+
+    def test_changed_converter_runtime_blocks_before_reusing_receipts(self):
+        self.run_browsers()
+        self.calls.clear()
+        self.pipeline.verify_runtime.side_effect = RuntimeError("converter runtime changed")
+        with self.assertRaisesRegex(RuntimeError, "converter runtime changed"):
+            self.run_browsers()
+        self.assertEqual(self.calls, [])
+
+    def test_invalid_concurrency_rejected(self):
+        for value in (0, 3, True, "1"):
+            with self.subTest(value=value), self.assertRaises(RuntimeError):
+                rp.Pipeline(self.root, "1.2.3", self.root / "invalid", Mock(), value)
 
     def test_webkit_failure_keeps_firefox_and_all_chromium(self):
         self.fail_webkit = True
