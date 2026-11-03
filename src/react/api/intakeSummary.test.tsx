@@ -72,3 +72,17 @@ it("propagates stale-version conflicts instead of returning a printable batch", 
     { status: 409 },
   );
 });
+
+it("passes structured number filters to server pages instead of candidate search", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ items: [], page: {} }));
+  const columnFilters = {
+    batchNumberSearch: ["(Z2025137）"],
+    batchNumberIacuc: ["Z2025137"],
+    batchApprovalDate: ["2026-10-14"],
+    batchSequence: ["06"],
+  };
+  await listIntakeBatchSummaries({ limit: 10, offset: 510, columnFilters });
+  const url = new URL(String(fetchSpy.mock.calls[0][0]), "http://localhost");
+  expect(JSON.parse(url.searchParams.get("columnFilters")!)).toEqual(columnFilters);
+  expect(url.searchParams.get("offset")).toBe("510");
+});

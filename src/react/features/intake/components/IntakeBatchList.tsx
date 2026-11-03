@@ -16,6 +16,7 @@ import {
   normalizeIntakeBatchNo,
   normalizeIntakeOrderIdentifiers,
 } from "../../../../domain/intake";
+import { IntakeNumberFilters } from "./IntakeNumberFilters";
 import { IntakeSummaryExport } from "./IntakeSummaryExport";
 import { IntakeStatistics } from "./IntakeStatistics";
 import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
@@ -135,7 +136,7 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
         { key: "intakePurpose", label: "接收用途", width: 100 },
         { key: "purchaseOrderNo", label: "采购单号", width: 168 },
         { key: "orderNo", label: "订单编号", width: 180 },
-        { key: "batchNo", label: "批次号", width: 140 },
+        { key: "batchNo", label: "批次号", width: 260 },
         { key: "supplier", label: "购买单位", width: 128 },
         { key: "pi", label: "项目负责人", width: 110 },
         { key: "owner", label: "实验负责人", width: 110 },
@@ -178,6 +179,30 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
               : key === "pi" || key === "owner"
                 ? formatPersonNames(String(value))
                 : String(value);
+        if (key === "batchNo" && item.batchNumberInfo) {
+          const info = item.batchNumberInfo;
+          return (
+            <Space orientation="vertical" size={0}>
+              <span className="table-cell-text" title={text}>
+                {text}
+              </span>
+              {info.status === "parsed" ? (
+                <>
+                  <Typography.Text type="secondary">编号内 {info.iacuc}</Typography.Text>
+                  <Typography.Text type="secondary">审批 {info.approvalDate}</Typography.Text>
+                  <Typography.Text type="secondary">第 {info.sequence} 批</Typography.Text>
+                </>
+              ) : (
+                <Typography.Text type="secondary">
+                  {info.status === "missing" ? "未填写批次编号" : "编号不可解析，保留原值"}
+                </Typography.Text>
+              )}
+              {info.status === "parsed" && info.iacuc !== item.iacuc?.trim().toUpperCase() ? (
+                <Typography.Text type="warning">编号内 IACUC 与业务 IACUC 不同，请核对</Typography.Text>
+              ) : null}
+            </Space>
+          );
+        }
         if (key === "owner") {
           return <ProjectPeopleCopyButton item={item} disabled={loading} />;
         }
@@ -277,6 +302,17 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
         }
       />
       <Card className="intake-batch-list-card">
+        <IntakeNumberFilters
+          key={JSON.stringify([
+            filters.batchNumberSearch,
+            filters.batchNumberIacuc,
+            filters.batchApprovalDate,
+            filters.batchSequence,
+          ])}
+          filters={filters}
+          onFilter={onFilter}
+          loading={loading}
+        />
         {bulkNotice ? (
           <Alert className="intake-bulk-feedback" role="status" showIcon title={bulkNotice} type={bulkNoticeKind} />
         ) : null}

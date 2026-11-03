@@ -337,9 +337,7 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
     purchaseOrderNo: purchaseNumbers.find((number) => !/^DC/i.test(number)) || "",
     orderNo: orderNumber || purchaseNumbers.find((number) => /^DC/i.test(number)) || "",
   });
-  const referenceYear = Number(
-    batchMatch?.[2]?.slice(0, 4) || purchaseOrderNo.match(/20\d{2}/)?.[0] || new Date().getFullYear(),
-  );
+  const referenceYear = Number(purchaseOrderNo.match(/20\d{2}/)?.[0] || new Date().getFullYear());
   const supplier = matchField(raw, ["供应商", "购买单位"]).split(/\s+(?:品系|数量|饲养房间)/)[0];
   const strainRaw =
     source

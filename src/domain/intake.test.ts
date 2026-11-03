@@ -536,3 +536,10 @@ it.each(["采购申请日期：2026-11-02", "采购单号：不走锐竞", "饲�
     expect(parseIntakeMessage(text).purchaseOrderNo).toBe("");
   },
 );
+
+it("does not use demand approval year to infer a receipt year", () => {
+  const year = new Date().getFullYear();
+  const item = parseIntakeMessage("饲养需求批次号：（Z2000137）2000101406\n接收日期：11月3日");
+  expect(item.intakeDate).toBe(`${year}-11-03`);
+  expect(parseIntakeMessage("饲养需求批次号：（Z2000137）2000101406").intakeDate).toBe("");
+});

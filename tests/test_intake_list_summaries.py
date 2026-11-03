@@ -8,6 +8,7 @@ from server_app.repositories.entities import list_intake_batches_page
 from server_app.repositories.filter_options import filtered_where
 from server_app.repositories.intake_summaries import FIELDS
 from server_app.shared.concurrency import StaleWriteError
+from server_app.shared.intake_batch_number import parse_intake_batch_number
 from server_app.web.entity_contracts import ENTITY_ORDER_BY
 
 ACTOR = {"id": "admin", "role": "admin"}
@@ -74,7 +75,16 @@ class IntakeSummaryReadTests(unittest.TestCase):
         full = self.listing()
         summary = self.listing(True)
         self.assertEqual(full["page"], summary["page"])
-        self.assertEqual(summary["items"], [{key: row.get(key) for key in FIELDS} for row in full["items"]])
+        self.assertEqual(
+            summary["items"],
+            [
+                {
+                    **{key: row.get(key) for key in FIELDS},
+                    "batchNumberInfo": parse_intake_batch_number(row.get("batchNo")),
+                }
+                for row in full["items"]
+            ],
+        )
         self.assertTrue(
             all("recognition" not in row and "cards" not in row and "rawMessage" not in row for row in summary["items"])
         )

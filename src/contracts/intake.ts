@@ -154,6 +154,14 @@ export interface IntakeListParams {
   personFilterMode?: "individual";
 }
 
+/** Read-only interpretation of batchNo; never a source for intakeDate or renumbering. */
+export interface IntakeBatchNumberInfo {
+  status: "parsed" | "unparseable" | "missing";
+  iacuc: string | null;
+  approvalDate: string | null;
+  sequence: string | null;
+}
+
 /** Display/action summary; never submit this object as a complete editable batch. */
 export type IntakeBatchListItem = Pick<
   IntakeBatch,
@@ -181,7 +189,7 @@ export type IntakeBatchListItem = Pick<
   | "confirmedCardCount"
   | "remainingCardCount"
   | "updatedAt"
->;
+> & { batchNumberInfo?: IntakeBatchNumberInfo };
 
 export interface IntakeSummaryExportParams {
   startDate: string;

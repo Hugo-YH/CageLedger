@@ -521,3 +521,11 @@ HTTP默认最多32个连接处理线程，过载在业务执行前返回503及Re
 登录会话与登录审计在同一事务提交，原create_session默认提交的调用保持兼容。报销附件上传数量／查重与元数据在写锁中检查，失败只清本次且确认未被提交引用的文件；提交不确定时保留。删除报销单先提交数据库与审计，再清其专属附件目录；异常旧ID或越界链接不触及根目录、流程附件或外部文件。
 
 Excel业务文本显式写字符串，用户输入的等号不变成公式；系统生成的SUM、差值公式和金额类型不变。AI请求不转发重定向授权头，响应与错误体上限4MiB，错误不返回凭据、配置URL或内部路径。图像只用业务允许的格式解码，Pillow安全升级保留TIFF原图与原PNG预览的数值含义。
+
+## 待接收批次编号派生查询
+
+`GET /api/intake-batches?view=summary` 新增只读 `batchNumberInfo`：`status` 为 `parsed`、`unparseable`、`missing`，以及可空的 `iacuc`、`approvalDate`、`sequence`。来源是完整 `batchNo`，序号为保留前导零的字符串；审批日期不是接收日期。详情和默认完整列表维持原 payload，编辑客户端不得用摘要覆盖详情。
+
+`columnFilters` 新增 `batchNumberSearch`（规范化括号和大小写后的字面子串）、`batchNumberIacuc`（编号内伦理号）、`batchApprovalDate`（YYYY-MM-DD 精确日期）、`batchSequence`（数字序号，忽略前导零）。同键多值为 OR，键间为 AND，过滤在计数和 SQL 分页之前执行。既有 `iacuc` 顶层参数仍查询业务 IACUC；既有 `batchNo` 列筛选仍按完整比较键精确匹配。查询键和全选分页复用原 `columnFilters`，不得只过滤客户端候选。
+
+解析使用连接内纯 SQLite 函数，完整编号及 payload 不改写，无 DDL、回填、唯一约束或版本更新。序号长度不固定，不推断累计次数；日历校验失败时不部分猜测结构。新增查询可能扫描批次标量列，不能宣称使用了派生字段索引。

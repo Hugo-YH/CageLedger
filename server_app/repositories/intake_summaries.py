@@ -4,6 +4,7 @@ import json
 
 from server_app.cache import cache_build_lock, cache_generation, cache_get, cache_key, cache_set
 from server_app.runtime_logging import log_stage
+from server_app.shared.intake_batch_number import parse_intake_batch_number
 
 FIELDS = (
     "id",
@@ -37,7 +38,8 @@ def projection(column="payload"):
 
 
 def decode_summary(value):
-    return dict(zip(FIELDS, json.loads(value), strict=True))
+    item = dict(zip(FIELDS, json.loads(value), strict=True))
+    return {**item, "batchNumberInfo": parse_intake_batch_number(item.get("batchNo"))}
 
 
 def page(conn, filters, where, params, order):

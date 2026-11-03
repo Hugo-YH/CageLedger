@@ -8,6 +8,7 @@ from server_app.repositories.person_names import (
     person_options,
     prepare_person_filters,
 )
+from server_app.shared.intake_batch_number import intake_number_predicate, register_intake_number_functions
 from server_app.shared.intake_identifiers import (
     intake_identifier_key,
     intake_identifier_values,
@@ -121,6 +122,8 @@ def list_intake_batches_page(conn, filters, filtered_where, entity_order_by):
 
 def intake_batch_where(filters, filtered_where, exclude_column="", conn=None):
     if conn is not None:
+        register_intake_number_functions(conn)
+    if conn is not None:
         filters = prepare_person_filters(
             conn, filters, "intake_batches", {"pi": "pi", "owner": "owner"}, exclude=exclude_column
         )
@@ -155,7 +158,15 @@ def intake_batch_where(filters, filtered_where, exclude_column="", conn=None):
         cleaned = [
             str(value).strip() for value in values if str(value).strip() or (key == "intakeDate" and value == "")
         ]
-        if not spec or not cleaned:
+        if not cleaned:
+            continue
+        number_filter = intake_number_predicate(key, cleaned)
+        if number_filter is not None:
+            clause, values = number_filter
+            where_parts.append(clause)
+            next_params.extend(values)
+            continue
+        if not spec:
             continue
         if key == "batchNo":
             cleaned = [intake_identifier_key(value, batch=True) for value in cleaned]
