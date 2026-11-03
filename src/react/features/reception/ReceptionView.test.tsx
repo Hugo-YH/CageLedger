@@ -68,7 +68,8 @@ const record: ReceptionRecord = {
   id: "one",
   batchId: "one",
   batchNo: "RECEPTION-ONE",
-  purchaseOrderNo: "PO-1",
+  purchaseOrderNo: "C2026041317057",
+  orderNo: "DC202604131705702",
   iacuc: "Z1",
   pi: "权威项目负责人",
   owner: "权威实验负责人",
@@ -145,6 +146,8 @@ it("shows the list without directories, previews frozen versions, and keeps sele
   render(view());
   await screen.findByText(record.batchNo);
   expect(screen.getByText("权威项目负责人")).toBeInTheDocument();
+  expect(screen.getByText(record.purchaseOrderNo)).toBeInTheDocument();
+  expect(screen.getByText(record.orderNo!)).toBeInTheDocument();
   expect(screen.getByTitle(record.supplier)).toHaveTextContent("江苏集萃");
   expect(requestJson).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("button", { name: "导出Excel" })).toBeDisabled();
@@ -225,10 +228,17 @@ it.each([
     render(view());
     await screen.findByText(record.batchNo);
     expect(screen.getByText("预约数量")).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: /预约性别/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "预约规格" })).not.toBeInTheDocument();
+    // Check visible column labels without computing accessible names for every
+    // nested sort/filter control in the Ant Design headers.
+    const headers = screen.getAllByRole("columnheader").map((header) => header.textContent ?? "");
+    expect(headers.some((text) => text.includes("预约性别"))).toBe(false);
+    expect(headers.some((text) => text.includes("预约规格"))).toBe(false);
+    expect(headers).toEqual(
+      expect.arrayContaining([expect.stringContaining("采购单号"), expect.stringContaining("订单编号")]),
+    );
     expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: action })).toBeEnabled();
+    const row = screen.getByText(record.batchNo).closest("tr")!;
+    expect(within(row).getByRole("button", { name: action })).toBeEnabled();
     if (displayed) expect(screen.getByText(`登记 ${quantity} 只`)).toBeInTheDocument();
     else expect(screen.queryByText(/^登记 .* 只$/)).not.toBeInTheDocument();
     expect(screen.queryByText("登记数量")).not.toBeInTheDocument();
