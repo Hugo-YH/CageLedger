@@ -30,6 +30,7 @@ from release_runtime import (
     cases,
     changed_paths,
     command,
+    converter_identity,
     database_probe,
     digest,
     hashed,
@@ -94,6 +95,8 @@ class Pipeline:
 
     def preflight(self):
         require(sys.version_info >= (3, 13), "Python 3.13 required")
+        self.journal.data["converter"] = converter_identity()
+        self.journal.save()
         node_version = command(["node", "-p", "process.versions.node"], self.repo).split(".")
         require(int(node_version[0]) == 22 and int(node_version[1]) >= 12, "Node >=22.12 <23 required")
         require(not (self.repo / ".env").exists(), "Release requires an env-free isolated checkout")
@@ -626,6 +629,7 @@ def main():
             not frozen or frozen == pipeline.fingerprint(),
             "Release input/runtime changed after commit; use a new version",
         )
+        pipeline.stage("converter-smoke", [sys.executable, "scripts/check_release_converter.py"])
         pipeline.stage("check", ["npm", "run", "check"])
         pipeline.stage("build", ["npm", "run", "build"], [ROOT / "web-dist", ROOT / ".vitepress/dist"])
         pipeline.browsers()

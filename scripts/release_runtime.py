@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -80,6 +81,38 @@ def source_fingerprint(repo):
     )
 
 
+def converter_executable(required=True):
+    configured = os.environ.get("CAGELEDGER_LIBREOFFICE_BIN", "").strip()
+    candidate = configured or shutil.which("soffice") or shutil.which("libreoffice")
+    if not candidate and not required:
+        return None
+    require(bool(candidate), "LibreOffice required; configure CAGELEDGER_LIBREOFFICE_BIN before release")
+    path = Path(candidate).expanduser().resolve(strict=True)
+    require(path.is_file() and os.access(path, os.X_OK), "LibreOffice executable unavailable")
+    return path
+
+
+def converter_identity():
+    path = converter_executable()
+    # Managed release admission currently supports macOS only. Hash the entire
+    # signed bundle: Writer depends on libraries, filters, fonts and resources.
+    require(sys.platform == "darwin", "Unsupported release converter platform")
+    bundle = next((parent for parent in path.parents if parent.suffix == ".app"), None)
+    require(bundle is not None, "Release converter must belong to a verified macOS application bundle")
+    command(["codesign", "--verify", "--deep", "--strict", str(bundle)])
+    command(["spctl", "--assess", "--type", "execute", str(bundle)])
+    with tempfile.TemporaryDirectory(prefix="cageledger-release-converter-") as temporary:
+        version = command(
+            [str(path), "-env:UserInstallation=" + Path(temporary).as_uri(), "--version"],
+            timeout=30,
+        )
+    require(
+        bool(re.fullmatch(r"LibreOffice [0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)? [0-9a-f]+", version)),
+        "Unrecognized LibreOffice version response",
+    )
+    return {"executable": str(path), "bundle": str(bundle), "bundle_sha256": hashed(tree(bundle)), "version": version}
+
+
 def runtime_fingerprint(repo):
     script = "import {chromium,firefox,webkit} from 'playwright'; console.log(JSON.stringify([chromium,firefox,webkit].map(b=>b.executablePath())))"
     paths = json.loads(command(["node", "--input-type=module", "-e", script], repo, env=isolation_environment()))
@@ -102,6 +135,7 @@ def runtime_fingerprint(repo):
             "node_binary": digest(command(["node", "-p", "process.execPath"], repo)),
             "platform": command(["uname", "-a"], repo),
             "browsers": browsers,
+            "converter": converter_identity(),
             "npm_install": tree(repo / "node_modules/.package-lock.json"),
             "environment": {k: os.environ.get(k, "") for k in ("TZ", "LANG", "LC_ALL")},
             "python_install": command([sys.executable, "-m", "pip", "freeze", "--all"], repo),
@@ -227,6 +261,7 @@ def cases(report, engine, executed):
 
 
 def isolation_environment():
+    converter = converter_executable(required=False)
     env = dict(os.environ)
     # Do not allow inherited application configuration to select production data/services.
     for key in list(env):
@@ -244,6 +279,8 @@ def isolation_environment():
         CAGELEDGER_E2E_GITEA_TOKEN="",
         DEEPSEEK_API_KEY="",
     )
+    if converter is not None:
+        env["CAGELEDGER_LIBREOFFICE_BIN"] = str(converter)
     return env
 
 

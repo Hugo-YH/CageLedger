@@ -93,6 +93,8 @@ npm run check
 
 完整发布门禁包含基础质量检查、React 应用与 VitePress 文档站生产构建、Chromium 完整 Playwright，以及 Firefox／WebKit 桌面兼容专项。E2E 使用临时 SQLite，测试数据不会写入正式数据库。当前 `npm run verify:full` 仍按上述顺序串行执行，作为兼容和低资源回退入口；Mac mini 的 `release:local` 由 `scripts/release_pipeline.py` 按下方配置自动编排并保存可恢复证据。
 
+发布前必须提供已有、可验证的 LibreOffice Writer 转换器。macOS 使用 `CAGELEDGER_LIBREOFFICE_BIN` 指向完整应用包中的 `Contents/MacOS/soffice`；发布流程不会自动下载安装、挂载镜像或修改安全设置。预检先核实可执行文件、完整应用签名、公证和版本，再在资源准入后用临时文档与独立 Writer profile 实际生成 PDF。缺失、拒绝、超时或无法识别的响应均阻断发布。隔离环境只保留这一明确的工具路径，不继承生产数据库、服务或凭据配置；源码和运行时指纹包含转换器路径、版本及完整应用包内容。转换器或资源变化后，旧验证结果不可复用。只读镜像由操作者核实来源后挂载，并在本次验证和交付完成后卸载。
+
 桌面专项通过 `npm run test:e2e:compat` 单独运行；首次使用执行 `npx playwright install firefox webkit` 安装当前锁定 Playwright 配套的浏览器，不升级依赖。专项串行启动两个独立临时服务及数据库，单 worker、零重试，不允许复用开发服务。默认端口为 5193/5194/5195 与 5203/5204/5205，`CAGELEDGER_COMPAT_PORT` 可调整起始端口；`CAGELEDGER_COMPAT_OUTPUT_DIR` 指定日志报告、截图及样式证据目录，默认位于 `test-results/desktop-compat`。
 
 专项包含 1440px／1180px 下的全部工作入口、公开页面和代表性表单、筛选、权限、异步反馈。Chromium 专用 CDP 和模拟相机用例继续由全量回归覆盖，WebKit 结果仅表示引擎自动化通过，不等同真实 Safari 或手机设备实测。失败不得通过跳过或删除断言消除；重试通过项须定位原因，并对相关用例连续复验两次。
