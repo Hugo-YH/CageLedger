@@ -16,7 +16,7 @@ async function setup(page: Page) {
   await openIntakeEntry(page);
 }
 
-async function original(page: Page, suffix: string) {
+async function original(page: Page, suffix: string, overrides: Partial<IntakeBatch> = {}) {
   const item: IntakeBatch = {
     species: "mouse",
     roomMatched: true,
@@ -55,6 +55,7 @@ async function original(page: Page, suffix: string) {
       warnings: [],
       fieldSources: { quantity: "原图24只" },
     },
+    ...overrides,
   };
   const response = await page.request.post("/api/intake-batches", {
     data: { item, recognitionImages: [{ name: "原预约.png", dataUrl: `data:image/png;base64,${png}` }] },
@@ -176,4 +177,114 @@ test("association conflicts cannot merge and a stale preview keeps the text unti
   await dialog.getByRole("button", { name: "确认更新原预约", exact: true }).click();
   await expect(dialog).toBeHidden();
   expect((await saved(page, item.id)).notes).toBe("另一位同事已核对");
+});
+
+test("standard batch-number spacing matches the saved image original through both identifiers and batch-only lookup", async ({
+  page,
+}, info) => {
+  await setup(page);
+  const room = await page.request.post("/api/rooms", {
+    data: {
+      item: {
+        id: "room-e2e-8101-spacing",
+        name: "8101",
+        area: "E2E",
+        roomManager: "E2E 房间管理员",
+        facility: "zhujiang",
+        defaultSpecies: "mouse",
+        defaultBillingItem: "mouse_standard",
+        defaultCustomerType: "internal",
+        defaultAnimalCount: 1,
+      },
+    },
+  });
+  expect(room.ok(), await room.text()).toBe(true);
+  await page.reload();
+  await openIntakeEntry(page);
+  const originalBatchNo = "（Z2025170）  2026102902";
+  const purchaseOrderNo = "C2026110229486";
+  const item = await original(page, `spacing-${Date.now()}`, {
+    batchNo: originalBatchNo,
+    purchaseOrderNo,
+    iacuc: "Z2025170",
+    roomName: "8101",
+    quantity: 6,
+    finalCardCount: 1,
+    suggestedCardCount: 1,
+    remainingCardCount: 1,
+    recognition: {
+      extractedText: "原图6只，房间8101",
+      warnings: [],
+      fieldSources: { quantity: "原图6只", roomName: "原图8101" },
+    },
+  });
+  expect(item.batchNo).toBe(originalBatchNo);
+  const image = item.recognition!.images![0];
+  const imageBefore = await (await page.request.get(image.url)).body();
+
+  const batchOnly = await page.request.post("/api/intake-batches/recognition-preview", {
+    data: {
+      item: {
+        batchNo: "(Z2025170)2026102902",
+        intakeDate: "2026-11-11",
+        rawMessage: "饲养需求批次号为(Z2025170) 2026102902\n进驻日期：2026-11-11",
+      },
+    },
+  });
+  expect(batchOnly.ok(), await batchOnly.text()).toBe(true);
+  const batchOnlyPreview = (await batchOnly.json()) as IntakeRecognitionMergePreview;
+  expect(batchOnlyPreview.total).toBe(1);
+  expect(batchOnlyPreview.items[0]).toMatchObject({
+    item: { id: item.id, batchNo: originalBatchNo },
+    matchedFields: ["batchNo"],
+    classification: "batch_only",
+    canMerge: true,
+  });
+
+  const text =
+    "经审核采购申请单号为C2026110229486，饲养需求批次号为(Z2025170) 2026102902\n" +
+    "供应商：广东药康\n品系：C57\n数量：6\n饲养房间：8101\n进驻日期： 2026-11-11";
+  await page.getByLabel("预约消息", { exact: true }).fill(text);
+  const previewResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/intake-batches/recognition-preview" &&
+      response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  const response = await previewResponse;
+  expect(response.ok(), await response.text()).toBe(true);
+  const preview = (await response.json()) as IntakeRecognitionMergePreview;
+  expect(preview.total).toBe(1);
+  expect(preview.items[0]).toMatchObject({ item: { id: item.id }, classification: "same_pair", canMerge: true });
+  expect(preview.items[0].matchedFields).toHaveLength(2);
+  expect(preview.items[0].matchedFields).toEqual(expect.arrayContaining(["purchaseOrderNo", "batchNo"]));
+  const dialog = page.getByRole("dialog", { name: "核对已有图片预约", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("匹配：采购单号、批次号");
+  const confirm = dialog.getByRole("button", { name: "确认更新原预约", exact: true });
+  await expect(confirm).toBeEnabled();
+  expect((await saved(page, item.id)).updatedAt).toBe(item.updatedAt);
+  await page.screenshot({ path: info.outputPath("spacing-merge-preview.png"), animations: "disabled" });
+  await confirm.click();
+  await expect(dialog).toBeHidden();
+  const updated = await saved(page, item.id);
+  expect(updated).toMatchObject({
+    id: item.id,
+    batchNo: originalBatchNo,
+    purchaseOrderNo,
+    quantity: 6,
+    roomName: "8101",
+    intakeDate: "2026-11-11",
+  });
+  expect(updated.rawMessage).toContain(item.rawMessage);
+  expect(updated.rawMessage).toContain(text);
+  expect(updated.recognition!.images).toEqual(item.recognition!.images);
+  expect(await (await page.request.get(image.url)).body()).toEqual(imageBefore);
+  const matching = await page.request.post("/api/intake-batches/recognition-preview", {
+    data: { item: { batchNo: "(Z2025170)2026102902", purchaseOrderNo, rawMessage: text } },
+  });
+  expect(matching.ok(), await matching.text()).toBe(true);
+  const afterPreview = (await matching.json()) as IntakeRecognitionMergePreview;
+  expect(afterPreview.total).toBe(1);
+  expect(afterPreview.items[0].item.id).toBe(item.id);
 });

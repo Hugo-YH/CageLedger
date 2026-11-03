@@ -266,6 +266,28 @@ class RecognitionMergeTests(unittest.TestCase):
         change = next(row for row in candidate["changes"] if row["field"] == "finalCardCount")
         self.assertEqual((change["after"], change["source"]), (0, "image"))
 
+    def test_saved_image_batch_with_layout_spaces_matches_text_pair_or_demand_alone(self):
+        original = self.original(batchNo="（Z2025170）  2026102902", purchaseOrderNo="C2026110229486")
+        incoming = {
+            **self.incoming,
+            "batchNo": "(Z2025170)2026102902",
+            "purchaseOrderNo": "C2026110229486",
+            "intakeDate": "2026-11-11",
+        }
+        candidate = self.preview(incoming)["items"][0]
+        self.assertEqual(candidate["classification"], "same_pair")
+        self.assertEqual(candidate["matchedFields"], ["purchaseOrderNo", "batchNo"])
+        self.assertTrue(candidate["canMerge"])
+        self.assertEqual(candidate["mergedItem"]["batchNo"], original["batchNo"])
+        only_demand = self.preview({**incoming, "purchaseOrderNo": ""})["items"][0]
+        self.assertEqual(only_demand["classification"], "batch_only")
+        self.assertTrue(only_demand["canMerge"])
+        saved = self.merge(candidate, incoming)
+        self.assertEqual(
+            (saved["id"], saved["batchNo"], saved["intakeDate"]), (original["id"], original["batchNo"], "2026-11-11")
+        )
+        self.assertEqual(saved["recognition"]["images"], original["recognition"]["images"])
+
     def test_read_adapter_requires_login_and_never_writes(self):
         handler = Mock()
         handler.current_user.return_value = None

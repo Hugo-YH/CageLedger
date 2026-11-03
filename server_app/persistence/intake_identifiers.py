@@ -3,7 +3,7 @@
 import json
 
 from server_app.shared.concurrency import begin_write
-from server_app.shared.intake_identifiers import intake_identifier_values
+from server_app.shared.intake_identifiers import intake_identifier_key, intake_identifier_values
 
 
 def ensure_intake_identifier_schema(conn):
@@ -24,5 +24,14 @@ def ensure_intake_identifier_schema(conn):
                 "UPDATE intake_batches SET purchase_order_no=?, purchase_order_key=?, batch_no_key=? WHERE id=?",
                 (*values, row["id"]),
             )
+    # Lookup keys are derived: repair older formatting-sensitive keys without
+    # rewriting the source number, payload, version, images or business audit.
+    updates = [
+        (intake_identifier_key(row["batch_no"], batch=True), row["id"])
+        for row in conn.execute("SELECT id, batch_no, batch_no_key FROM intake_batches").fetchall()
+        if row["batch_no_key"] != intake_identifier_key(row["batch_no"], batch=True)
+    ]
+    if updates:
+        conn.executemany("UPDATE intake_batches SET batch_no_key=? WHERE id=?", updates)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_intake_purchase_order_key ON intake_batches(purchase_order_key)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_intake_batch_no_key ON intake_batches(batch_no_key)")

@@ -297,7 +297,9 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
     : matchField(raw, ["饲养需求批次号", "批次号"]);
   const iacuc = batchMatch?.[1]?.toUpperCase() || "";
   const purchaseOrderNo =
-    source.match(/锐[竞竟](?:采购)?(?:单号|订单编号|采购订单编号)?\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})/i)?.[1] || "";
+    source.match(/锐[竞竟](?:采购)?(?:单号|订单编号|采购订单编号)?\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})/i)?.[1] ||
+    source.match(/(?:采购(?:申请)?单号|采购订单(?:编号|号))\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})/i)?.[1] ||
+    "";
   const referenceYear = Number(
     batchMatch?.[2]?.slice(0, 4) || purchaseOrderNo.match(/20\d{2}/)?.[0] || new Date().getFullYear(),
   );

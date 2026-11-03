@@ -88,6 +88,94 @@ class IntakeIdentifierMigrationTests(unittest.TestCase):
             self.assertEqual(len(indexes), 2)
             self.assertTrue(all(not row["unique"] for row in indexes))
 
+    def test_existing_lookup_keys_are_repaired_without_rewriting_business_data(self):
+        with closing(sqlite3.connect(":memory:")) as conn, conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("CREATE TABLE intake_batches(id TEXT, batch_no TEXT, updated_at TEXT, payload TEXT)")
+            raw = "（Z2025170）  \u30002026102902"
+            item = batch(
+                "old", batchNo=raw, updatedAt="original-version", recognition={"images": [{"id": "retained-image"}]}
+            )
+            conn.execute(
+                "INSERT INTO intake_batches VALUES(?,?,?,?)", ("old", raw, "original-version", json.dumps(item))
+            )
+            ensure_intake_identifier_schema(conn)
+            conn.execute("UPDATE intake_batches SET batch_no_key=?", ("(Z2025170)  \u30002026102902",))
+            before = tuple(
+                conn.execute(
+                    "SELECT batch_no,updated_at,payload,purchase_order_no,purchase_order_key FROM intake_batches"
+                ).fetchone()
+            )
+            conn.commit()
+            ensure_intake_identifier_schema(conn)
+            self.assertEqual(
+                conn.execute("SELECT batch_no_key FROM intake_batches").fetchone()[0], "(Z2025170)2026102902"
+            )
+            self.assertEqual(
+                tuple(
+                    conn.execute(
+                        "SELECT batch_no,updated_at,payload,purchase_order_no,purchase_order_key FROM intake_batches"
+                    ).fetchone()
+                ),
+                before,
+            )
+            rows = conn.execute(
+                "SELECT id FROM intake_batches WHERE batch_no_key=?", ("(Z2025170)2026102902",)
+            ).fetchall()
+            self.assertEqual([row["id"] for row in rows], ["old"])
+            changes = conn.total_changes
+            ensure_intake_identifier_schema(conn)
+            self.assertEqual(conn.total_changes, changes)
+
+    def test_lookup_key_repair_rolls_back_as_one_transaction(self):
+        with closing(sqlite3.connect(":memory:")) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("CREATE TABLE intake_batches(id TEXT, batch_no TEXT, payload TEXT)")
+            for identity in ("a", "b"):
+                item = batch(identity, batchNo="(Z2025170) 2026102902")
+                conn.execute("INSERT INTO intake_batches VALUES(?,?,?)", (identity, item["batchNo"], json.dumps(item)))
+            ensure_intake_identifier_schema(conn)
+            conn.execute("UPDATE intake_batches SET batch_no_key='old-key'")
+            conn.execute(
+                "CREATE TRIGGER block_second_key BEFORE UPDATE OF batch_no_key ON intake_batches WHEN NEW.id='b' BEGIN SELECT RAISE(ABORT,'test interruption'); END"
+            )
+            conn.commit()
+            with self.assertRaises(sqlite3.IntegrityError), conn:
+                ensure_intake_identifier_schema(conn)
+            self.assertEqual(
+                [row[0] for row in conn.execute("SELECT batch_no_key FROM intake_batches ORDER BY id")],
+                ["old-key", "old-key"],
+            )
+
+
+class IntakeIdentifierKeyTests(unittest.TestCase):
+    def test_standard_batch_layout_spaces_are_ignored_without_changing_other_identifiers(self):
+        expected = "(Z2025170)2026102902"
+        for value in (
+            "（Z2025170）2026102902",
+            "(z2025170) 2026102902",
+            "（ Z2025170 ）  2026102902",
+            "(Z2025170)\t2026102902",
+            "(Z2025170)\u00a0\u30002026102902",
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(intake_identifier_values({"batchNo": value})[2], expected)
+        for value in (
+            "(Z2025171)2026102902",
+            "(Z2025170)2026102903",
+            "ABC 123",
+            "(ABC) 123456",
+            "(Z2025170)2026 102902",
+        ):
+            self.assertNotEqual(intake_identifier_values({"batchNo": value})[2], expected)
+        self.assertNotEqual(
+            intake_identifier_values({"batchNo": "ABC 123"})[2], intake_identifier_values({"batchNo": "ABC123"})[2]
+        )
+        self.assertNotEqual(
+            intake_identifier_values({"purchaseOrderNo": "C 123"})[1],
+            intake_identifier_values({"purchaseOrderNo": "C123"})[1],
+        )
+
 
 class IntakeDuplicateTests(unittest.TestCase):
     def setUp(self):

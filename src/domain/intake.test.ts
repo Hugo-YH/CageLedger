@@ -379,3 +379,30 @@ it("recognizes an explicit delivery date when supplementing an image reservation
   for (const label of ["送货日期", "预约送货日期", "送达日期", "收货日期"])
     expect(parseIntakeMessage(`${label}：2026-11-06`, "录入人", []).intakeDate).toBe("2026-11-06");
 });
+
+it("recognizes both identifiers and the date in the approved procurement notice", () => {
+  const text =
+    "经审核采购申请单号为C2026110229486，饲养需求批次号为(Z2025170) 2026102902\n" +
+    "供应商：广东药康\n品系：C57\n数量：6\n饲养房间：8101\n进驻日期： 2026-11-11";
+  expect(parseIntakeMessage(text, "接收人员", ["8101"])).toMatchObject({
+    purchaseOrderNo: "C2026110229486",
+    batchNo: "（Z2025170）2026102902",
+    quantity: 6,
+    roomName: "8101",
+    intakeDate: "2026-11-11",
+  });
+});
+
+it.each(["采购单号：C2026110229486", "采购申请单号为C2026110229486", "采购订单编号：C2026110229486"])(
+  "recognizes %s without requiring a platform name",
+  (text) => {
+    expect(parseIntakeMessage(text).purchaseOrderNo).toBe("C2026110229486");
+  },
+);
+
+it.each(["采购申请日期：2026-11-02", "采购单号：不走锐竞", "饲养需求批次号为(Z2025170)2026102902"])(
+  "does not turn %s into a purchase order number",
+  (text) => {
+    expect(parseIntakeMessage(text).purchaseOrderNo).toBe("");
+  },
+);

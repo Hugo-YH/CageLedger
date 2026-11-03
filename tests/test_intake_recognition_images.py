@@ -83,7 +83,7 @@ def batch(identity="new-batch"):
 
 
 class ImageRecognitionTests(unittest.TestCase):
-    def test_standard_image_batch_number_has_no_layout_spaces_but_legacy_comparison_is_unchanged(self):
+    def test_standard_image_batch_number_and_comparison_share_layout_insensitive_keys(self):
         result = structure_image_sources(
             {
                 "imageSources": [
@@ -96,7 +96,7 @@ class ImageRecognitionTests(unittest.TestCase):
         self.assertTrue(all(source["batchNo"] == result["batchNo"] for source in result["imageSources"]))
         from server_app.shared.intake_identifiers import intake_identifier_key
 
-        self.assertNotEqual(
+        self.assertEqual(
             intake_identifier_key("（Z2026108） 2026102609", batch=True),
             intake_identifier_key(result["batchNo"], batch=True),
         )
