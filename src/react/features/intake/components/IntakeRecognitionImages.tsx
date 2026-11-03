@@ -8,7 +8,6 @@ import type {
 } from "../../../api/contracts";
 import { HelpPopover } from "../../../components/ui";
 import { IntakeRecognitionReview } from "./IntakeRecognitionReview";
-import { normalizeIntakeOrderIdentifiers } from "../../../../domain/intake";
 
 type LocalImage = IntakeRecognitionImageInput & { key: string };
 
@@ -156,10 +155,7 @@ function RecognitionSources({ sources, imageNames }: { sources: IntakeRecognitio
               {fields
                 .filter(([field], fieldIndex) => fields.findIndex(([key]) => key === field) === fieldIndex)
                 .map(([field, label]) => {
-                  const value =
-                    field === "purchaseOrderNo" || field === "orderNo"
-                      ? normalizeIntakeOrderIdentifiers(source)[field]
-                      : source[field];
+                  const value = source[field];
                   if (value === null || value === undefined || value === "") {
                     if (field !== "batchNo") return null;
                     return <li key={`${field}-${label}`}>{label}：未识别，需核对</li>;
