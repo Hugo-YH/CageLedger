@@ -242,6 +242,12 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await ensureTestInfrastructure(page);
 
   const pi = `E2E 重新登记负责人 ${Date.now()}`;
+  async function dismissSuccessNotice() {
+    const notice = page.locator(".ant-notification-notice-success").filter({ hasText: pi });
+    await expect(notice).toBeVisible();
+    await notice.getByRole("button", { name: "关闭通知", exact: true }).click();
+    await expect(notice).toBeHidden();
+  }
   await page.request.post("/api/quantity-sheets", {
     data: {
       sheet: {
@@ -283,6 +289,7 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await modal.getByRole("button", { name: "保存登记" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
   await expect(row).toContainText("结算单 已交回", { timeout: 10_000 });
+  await dismissSuccessNotice();
 
   // 撤回已登记流程
   await row.getByRole("button", { name: "撤回", exact: true }).click();
@@ -291,6 +298,9 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await revokeModal.getByLabel("撤回原因").fill("发现登记信息有误");
   await revokeModal.getByRole("button", { name: "确认撤回" }).click();
   await expect(row).toContainText("已发起", { timeout: 10_000 });
+  await expect(revokeModal).toHaveCount(0);
+  // The notice overlays row actions; hovering it also pauses automatic dismissal.
+  await dismissSuccessNotice();
 
   // 第二次交回登记：撤回后回填上次结算单交回状态，本次补交回报销单
   await row.getByRole("button", { name: "登记" }).click();
@@ -304,6 +314,7 @@ test("改回已发起后重新登记，时间轴保留两次交回记录", async
   await modal.getByRole("button", { name: "保存登记" }).click();
   await expect(modal).toHaveCount(0, { timeout: 10_000 });
   await expect(row).toContainText("报销单 已交回", { timeout: 10_000 });
+  await dismissSuccessNotice();
 
   // 主时间轴只保留生效环节，历史记录默认折叠
   await row.getByRole("button", { name: "查看" }).click();

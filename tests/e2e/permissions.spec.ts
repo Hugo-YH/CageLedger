@@ -30,24 +30,41 @@ test("admin can create infrastructure and manage a room account", async ({ page 
 });
 
 test("room administrator keeps the server-side permission boundary", async ({ page }) => {
+  // Use the browser's authenticated transport for this boundary check. The
+  // runner's shared Node HTTP pool can reuse a closing dev-proxy connection.
+  async function browserRequest(method: string, path: string, data?: Record<string, unknown>) {
+    return page.evaluate(
+      async ({ method, path, data }) => {
+        const response = await fetch(path, {
+          method,
+          headers: data ? { "Content-Type": "application/json" } : undefined,
+          body: data ? JSON.stringify(data) : undefined,
+        });
+        return { ok: response.ok, status: response.status, body: (await response.json()) as unknown };
+      },
+      { method, path, data },
+    );
+  }
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
-  await ensureTestInfrastructure(page);
-  const username = `e2e_room_${Date.now()}`;
-  const createResponse = await page.request.post("/api/users", {
-    data: {
-      username,
-      displayName: "E2E 权限管理员",
-      password: "e2e-password",
-      role: "room_admin",
-      roomIds: ["room-e2e-8014"],
-    },
+  const roomId = `room-permissions-${Date.now()}`;
+  const room = await browserRequest("POST", "/api/rooms", {
+    item: { id: roomId, name: roomId, area: "E2E", facility: "zhujiang" },
   });
-  expect(createResponse.ok()).toBeTruthy();
-  const created = (await createResponse.json()) as { user: { id: string } };
+  expect(room.status).toBe(201);
+  const username = `e2e_room_${Date.now()}`;
+  const createResponse = await browserRequest("POST", "/api/users", {
+    username,
+    displayName: "E2E 权限管理员",
+    password: "e2e-password",
+    role: "room_admin",
+    roomIds: [roomId],
+  });
+  expect(createResponse.ok).toBeTruthy();
+  const created = createResponse.body as { user: { id: string } };
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await page.getByLabel("用户名", { exact: true }).fill(username);
   await page.getByLabel("密码", { exact: true }).fill("e2e-password");
@@ -55,12 +72,13 @@ test("room administrator keeps the server-side permission boundary", async ({ pa
   await expect(page.getByText("房间管理员 · 1 个饲养间", { exact: true })).toBeVisible();
   await openSettingsView(page, "房间管理");
   await expect(page.getByRole("button", { name: "新增饲养间", exact: true })).toHaveCount(0);
-  const usersResponse = await page.request.get("/api/users");
-  expect(usersResponse.status()).toBe(403);
+  const usersResponse = await browserRequest("GET", "/api/users");
+  expect(usersResponse.status).toBe(403);
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByText("管理员 · 全部饲养间", { exact: true })).toBeVisible();
-  expect((await page.request.delete(`/api/users/${created.user.id}`)).ok()).toBeTruthy();
+  expect((await browserRequest("DELETE", `/api/users/${created.user.id}`)).ok).toBeTruthy();
+  expect((await browserRequest("DELETE", `/api/rooms/${roomId}`)).ok).toBeTruthy();
 });
