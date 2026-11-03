@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from server_app.domains.intake.ai_parse import _normalize_payload
 from server_app.domains.intake.husbandry_period import (
@@ -84,3 +85,24 @@ class IntakeCalendarPeriodTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeliveryDateRecognitionTests(unittest.TestCase):
+    def test_explicit_delivery_date_is_evidence_but_purchase_application_date_is_not(self):
+        from server_app.domains.intake.ai_parse import ai_parse_intake_message
+
+        for text in ("送货日期：2026-11-06", "2026年11月6日送达", "预约收货日期：2026-11-06"):
+            with (
+                self.subTest(text=text),
+                patch(
+                    "server_app.domains.intake.ai_parse.deepseek_chat_json",
+                    return_value=({"intakeDate": "2026-11-06"}, {}),
+                ),
+            ):
+                item, _ = ai_parse_intake_message(text, [])
+                self.assertEqual(item["intakeDate"], "2026-11-06")
+        with patch(
+            "server_app.domains.intake.ai_parse.deepseek_chat_json", return_value=({"intakeDate": "2026-11-06"}, {})
+        ):
+            item, _ = ai_parse_intake_message("采购申请日期：2026-11-06", [])
+            self.assertEqual(item["intakeDate"], "")

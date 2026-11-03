@@ -20,6 +20,7 @@ from server_app.domains.system_features.session import session_payload
 from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
 from server_app.web.intake_ai import intake_ai_parse_handler, intake_recognition_image_handler
 from server_app.web.intake_reads import intake_print_data_handler
+from server_app.web.intake_recognition_merge import intake_recognition_preview_handler
 from server_app.web.intake_strain import intake_strain_standardize_handler
 from server_app.web.response import JsonResponse
 from server_app.web.route_registration import register_domain_routes
@@ -90,6 +91,7 @@ API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
 API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
 API_ROUTER.add("POST", r"/api/intake-batches/print-data", intake_print_data_handler)
+API_ROUTER.add("POST", r"/api/intake-batches/recognition-preview", intake_recognition_preview_handler)
 API_ROUTER.add("GET", r"/api/receptions", read_reception)
 API_ROUTER.add("GET", r"/api/receptions/filter-options", read_reception)
 API_ROUTER.add("POST", r"/api/receptions/preview", prepare_reception)

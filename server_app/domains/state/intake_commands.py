@@ -15,6 +15,7 @@ from server_app.domains.administration import audit_event, merge_audit_logs, wri
 from server_app.domains.intake.duplicates import confirm_duplicate_identifiers, duplicate_confirmation_event
 from server_app.domains.intake.recognition_evidence import sanitize_evidence
 from server_app.domains.intake.recognition_images import ImageWriteSession, decode_images
+from server_app.domains.intake.recognition_merge import confirmed_merge
 from server_app.domains.state.audit_diff import build_audit_events, validate_state_write_permission
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.persistence import assemble_state
@@ -56,6 +57,13 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
         existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
         normalized_payload = dict(payload)
         raw_item = dict(payload.get("item") if isinstance(payload.get("item"), dict) else payload)
+        merge_changes = None
+        if "recognitionMerge" in payload:
+            if method != "PUT" or images:
+                raise ValueError("文字补充合并只能更新已有预约，请先核对合并预览")
+            raw_item, merge_changes = confirmed_merge(
+                conn, existing, payload["recognitionMerge"], payload.get("expectedUpdatedAt")
+            )
         raw_item.pop("recognitionImages", None)
         # Only server-owned metadata may reference persisted images. Old clients
         # omitting provenance retain the existing record instead of removing it.
@@ -120,6 +128,23 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
                     "部分识别所用原图未留档，请重新添加识别时的图片或重新识别；新添加图片不会替代旧识别依据。",
                 ]
         events = build_audit_events(actor, old_state, state, updated_at)
+        if merge_changes is not None:
+            events.append(
+                audit_event(
+                    actor,
+                    "intake_batch.recognition_merged",
+                    "intake_batch",
+                    item["id"],
+                    f"{actor['displayName']} 核对图片后合并预约文字 {item.get('batchNo', '')}",
+                    [],
+                    updated_at,
+                    {"updatedAt": existing.get("updatedAt")},
+                    {
+                        "changes": merge_changes,
+                        "rawMessage": payload["recognitionMerge"]["incoming"].get("rawMessage", ""),
+                    },
+                )
+            )
         if confirmation:
             events.append(duplicate_confirmation_event(actor, item, confirmation, updated_at))
         if added_images:

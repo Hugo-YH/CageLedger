@@ -39,7 +39,7 @@ SYSTEM_RULES = """你是实验动物接收预约消息解析器。请从用户�
   "quantity": "数量，整数",
   "roomName": "饲养房间号，如 8101",
   "intakePurpose": "接收用途，仅 housing 或 direct_sampling",
-  "intakeDate": "接收/进驻日期，统一为 YYYY-MM-DD",
+  "intakeDate": "接收/进驻/预约送货日期，统一为 YYYY-MM-DD",
   "endDate": "结束日期，统一为 YYYY-MM-DD",
   "husbandryDays": "明确的饲养周期天数，整数",
   "husbandryMonths": "明确的饲养周期月数，正整数",
@@ -125,7 +125,7 @@ def _stated_husbandry_date(value: Any, text: str, *, end=False) -> bool:
     full = r"\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}(?:\s*[日号])?"
     short = r"\d{1,2}\s*(?:月\s*\d{1,2}\s*[日号]|/\s*\d{1,2})"
     date_text = rf"(?:{full}|{short})(?!\d)"
-    action = r"(?:结束|截止|到期|终止)(?:饲养)?" if end else r"接收|到货|进驻|入驻|入住"
+    action = r"(?:结束|截止|到期|终止)(?:饲养)?" if end else r"接收|到货|进驻|入驻|入住|送货|送达|收货"
     prefix = rf"(?:{action}|饲养至|饲养到)" if end else rf"(?:{action})"
     fields = re.finditer(
         rf"{prefix}\s*(?:日期|时间)?\s*(?:为|是|在|于)?\s*[:：]?\s*({date_text})|"

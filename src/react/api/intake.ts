@@ -12,6 +12,7 @@ import type {
   IntakeWriteResponse,
   PagedResponse,
 } from "./contracts";
+import type { IntakeRecognitionMergePreview } from "../../contracts/intake";
 import { ApiError, requestDownload, requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
@@ -100,6 +101,7 @@ export function saveIntakeBatch({
   checkDuplicates,
   duplicateConfirmation,
   recognitionImages,
+  recognitionMerge,
 }: IntakeSaveRequest) {
   return requestJson<IntakeWriteResponse>(
     exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
@@ -108,12 +110,21 @@ export function saveIntakeBatch({
       body: JSON.stringify({
         item,
         ...(recognitionImages?.length ? { recognitionImages } : {}),
+        ...(recognitionMerge ? { recognitionMerge } : {}),
         expectedUpdatedAt: exists ? item.updatedAt : "",
         ...(checkDuplicates ? { checkDuplicates: true } : {}),
         ...(duplicateConfirmation ? { duplicateConfirmation } : {}),
       }),
     },
   );
+}
+
+export function previewIntakeRecognitionMerge(item: Partial<IntakeBatch>, excludeId?: string, signal?: AbortSignal) {
+  return requestJson<IntakeRecognitionMergePreview>("/api/intake-batches/recognition-preview", {
+    method: "POST",
+    signal,
+    body: JSON.stringify({ item, ...(excludeId ? { excludeId } : {}) }),
+  });
 }
 
 function isIntakeDuplicateDetails(value: unknown): value is IntakeDuplicateDetails {

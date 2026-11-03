@@ -374,3 +374,8 @@ describe("intake husbandry dates", () => {
     expect(normalizeIntakeBatch({ intakePurpose: "direct_sampling", husbandryMonths: 1 }).husbandryMonths).toBeNull();
   });
 });
+
+it("recognizes an explicit delivery date when supplementing an image reservation", () => {
+  for (const label of ["送货日期", "预约送货日期", "送达日期", "收货日期"])
+    expect(parseIntakeMessage(`${label}：2026-11-06`, "录入人", []).intakeDate).toBe("2026-11-06");
+});

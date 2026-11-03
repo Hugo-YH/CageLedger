@@ -1,7 +1,5 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
-import { intakePeople } from "../../../domain/intakePeople";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button } from "antd";
 
@@ -14,22 +12,21 @@ import type {
   SessionUser,
 } from "../../api/contracts";
 import {
-  aiParseIntakeMessage,
   fetchIntakeBatchesForPrint,
   intakeDuplicateDetails,
-  standardizeIntakeStrain,
   useConfirmIntakeBatchesReceipt,
   useDeleteIntakeBatch,
   useIntakeBatches,
   useMarkIntakeBatchesPrinted,
   useSaveIntakeBatch,
 } from "../../api/intake";
-import { fetchIacucSearch } from "../../api/iacuc";
-import { queryKeys } from "../../api/queryKeys";
 import { ApiError } from "../../api/client";
 import { ActionButton, ModalPresence } from "../../components/ui";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useIntakeRecognition } from "./hooks/useIntakeRecognition";
+import { useIntakeMessageRecognition } from "./hooks/useIntakeMessageRecognition";
+import { useIntakeRecognitionMerge } from "./hooks/useIntakeRecognitionMerge";
+import { IntakeRecognitionMergeDialog } from "./components/IntakeRecognitionMergeDialog";
 import { useIntakeEditorRead } from "./hooks/useIntakeEditorRead";
 import { useIntakeSelection } from "./hooks/useIntakeSelection";
 import { AsyncActionButton, ModalShell, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
@@ -37,11 +34,9 @@ import {
   createIntakeDraft,
   missingIntakeRequiredFields,
   normalizeIntakeBatch,
-  parseIntakeMessage,
   updateIntakeDraft,
   isDirectSampling,
   canConfirmIntakeReceipt,
-  abbreviateSupplier,
 } from "../../../domain/intake";
 import {
   openIntakeCardPrint,
@@ -72,7 +67,6 @@ export function IntakeView({
     activeMode.current = mode;
     draftRevision.current += 1;
   }
-  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   // Leave the initial key unset so the server can put undetermined dates first.
@@ -135,6 +129,40 @@ export function IntakeView({
   const pendingEdit = editRead.target;
   const cancelEditorRead = editRead.cancel;
   const save = useSaveIntakeBatch();
+  const merge = useIntakeRecognitionMerge({
+    revision: draftRevision,
+    save,
+    saveInFlight,
+    onSaved: (item) => {
+      selection.update([item]);
+      completeSavedDraft(saveIntent(draft, false), item, "预约信息已合并");
+      setEditingDialog(false);
+    },
+  });
+  const { parseMessage, aiParseMessage } = useIntakeMessageRecognition({
+    draft,
+    user,
+    mode,
+    editing,
+    roomNames,
+    revision: draftRevision,
+    recognition,
+    requireRooms,
+    replaceDraft,
+    setNotice,
+    onTextRecognized: merge.preview,
+  });
+  const mergeFeedback = merge.state?.checking ? (
+    <Alert showIcon type="info" title="正在匹配已有图片预约…" />
+  ) : merge.state?.error ? (
+    <Alert
+      showIcon
+      type="error"
+      title="已有预约匹配失败"
+      description={`${merge.state.error} 文字识别草稿已保留。`}
+      action={<Button onClick={merge.retry}>重试匹配</Button>}
+    />
+  ) : null;
   const remove = useDeleteIntakeBatch();
   const markBatchesPrinted = useMarkIntakeBatchesPrinted();
   const confirmBatchesReceipt = useConfirmIntakeBatchesReceipt();
@@ -248,7 +276,7 @@ export function IntakeView({
     setNotice(error instanceof Error ? error.message : fallback);
   }
 
-  function completeSavedDraft(intent: IntakeSaveIntent, savedItem: IntakeBatch) {
+  function completeSavedDraft(intent: IntakeSaveIntent, savedItem: IntakeBatch, title?: string) {
     if (!isCurrentSaveIntent(intent)) return false;
     recognition.reset();
     if (intent.exists) {
@@ -261,110 +289,8 @@ export function IntakeView({
     replaceDraft(createIntakeDraft(user.displayName, user.phone));
     setEditing(false);
     setNotice("");
-    feedback.success("待接收批次已保存", `${savedItem.batchNo}，可继续录入下一批。`);
+    feedback.success(title || "待接收批次已保存", `${savedItem.batchNo}，可继续录入下一批。`);
     return true;
-  }
-
-  async function parseMessage() {
-    if (!requireRooms()) return;
-    const revision = draftRevision.current;
-    const valid = () => revision === draftRevision.current && activeMode.current === mode;
-    try {
-      let parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
-      if (parsed.strainRaw && parsed.strainStandard === parsed.strainRaw) {
-        const result = await standardizeIntakeStrain(parsed.strainRaw);
-        if (!valid()) return;
-        parsed = { ...parsed, strainStandard: result.item || parsed.strainStandard };
-      }
-      const info = await applyParsedMessage(parsed, valid);
-      if (info) {
-        setNotice("");
-        feedback.info("预约消息已识别", recognitionNotice(info));
-      }
-    } catch (error) {
-      if (valid()) setNotice(error instanceof Error ? error.message : "本地识别失败，请重试。");
-    }
-  }
-
-  async function aiParseMessage() {
-    if (!requireRooms() || recognition.reading) return;
-    const request = recognition.begin();
-    if (!request) return;
-    const revision = draftRevision.current;
-    const valid = () => request.isCurrent() && revision === draftRevision.current;
-    try {
-      const response = await aiParseIntakeMessage(draft.rawMessage, roomNames, recognition.snapshot(), request.signal);
-      if (!valid()) return;
-      const evidence = response.recognition
-        ? { ...response.recognition, images: draft.recognition?.images }
-        : undefined;
-      const info = await applyParsedMessage(
-        { ...response.item, ...(evidence ? { recognition: evidence } : {}) },
-        valid,
-      );
-      if (!info) return;
-      const tokens = response.usage?.total_tokens;
-      const usageText = typeof tokens === "number" && tokens > 0 ? `，本次 AI 识别消耗 ${tokens} tokens` : "";
-      setNotice("");
-      feedback.info("预约消息已识别（AI）", `${usageText}${info.strainNote}，请核对批次信息。`);
-    } catch (error) {
-      if (valid()) setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
-    } finally {
-      request.finish();
-    }
-  }
-
-  function recognitionNotice(info: { batchNo: boolean; strainNote: string }) {
-    return info.batchNo
-      ? `预约消息已识别，请核对批次信息${info.strainNote}。`
-      : `未识别到完整批次号，请手动补充${info.strainNote}。`;
-  }
-
-  async function applyParsedMessage(parsed: Partial<IntakeBatch>, valid: () => boolean) {
-    const normalized = normalizeIntakeBatch(
-      { ...parsed, supplier: abbreviateSupplier(parsed.supplier || ""), rawMessage: draft.rawMessage },
-      roomNames,
-    );
-    const normalizedCode = String(parsed.iacuc || "")
-      .trim()
-      .toUpperCase();
-    let match: { project?: string; pi?: string; owner?: string } | undefined;
-    if (normalizedCode) {
-      const result = await queryClient.ensureQueryData({
-        queryKey: queryKeys.iacucSearch(normalizedCode, 1),
-        queryFn: ({ signal }) => fetchIacucSearch(normalizedCode, 1, signal),
-        staleTime: 5 * 60_000,
-      });
-      match = result.items.find(
-        (candidate) =>
-          String(candidate.iacuc || "")
-            .trim()
-            .toUpperCase() === normalizedCode,
-      );
-    }
-    if (!valid()) return null;
-    // Only an explicit edit from the saved-batch list retains the persisted batch ID.
-    const isEditingSavedBatch = mode === "batches" && editing;
-    replaceDraft(
-      normalizeIntakeBatch(
-        {
-          ...draft,
-          ...normalized,
-          husbandryMonths: normalized.husbandryMonths ?? null,
-          id: isEditingSavedBatch ? draft.id : String(normalized.id || draft.id),
-          receiverName: normalized.receiverName || (isEditingSavedBatch ? draft.receiverName : user.displayName),
-          vetPhone: normalized.vetPhone || (isEditingSavedBatch ? draft.vetPhone : user.phone),
-          project: match?.project || normalized.project,
-          ...intakePeople(draft, normalized, match),
-        },
-        roomNames,
-      ),
-    );
-    const strainRaw = String(normalized.strainRaw || "").trim();
-    const strainStandard = String(normalized.strainStandard || "").trim();
-    const strainNote =
-      strainRaw && strainStandard && strainRaw !== strainStandard ? `，品系已按 MGI 标准化为 ${strainStandard}` : "";
-    return { batchNo: Boolean(normalized.batchNo), strainNote };
   }
 
   async function submit(event: React.FormEvent) {
@@ -404,6 +330,7 @@ export function IntakeView({
 
   function edit(item: IntakeBatchListItem) {
     recognition.reset();
+    invalidateDraftConfirmation();
     setNotice("");
     editRead.begin(item);
     setEditing(true);
@@ -708,6 +635,7 @@ export function IntakeView({
       <div className="workspace-body intake-workspace-body">
         <section className="billing-layout quantity-billing-layout intake-layout">
           {roomFeedback}
+          {mode === "entry" ? mergeFeedback : null}
           {mode === "batches" && list.isError ? (
             <PageState
               title="待接收批次更新失败"
@@ -825,6 +753,7 @@ export function IntakeView({
             </div>
             <div className="modal-shell-body">
               {roomFeedback}
+              {mergeFeedback}
               {pendingEdit ? (
                 editRead.error ? (
                   <PageState title="批次详情加载失败" detail={editRead.error.message} retry={editRead.retry} />
@@ -924,6 +853,20 @@ export function IntakeView({
             job={pendingPrint}
             onClose={() => setPendingPrint(null)}
             onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
+          />
+        ) : null}
+      </ModalPresence>
+      <ModalPresence>
+        {merge.state?.result && merge.state.result.total > 0 ? (
+          <IntakeRecognitionMergeDialog
+            key={merge.state.result.items.map((candidate) => candidate.item.id).join(",")}
+            preview={merge.state.result}
+            pending={merge.state.saving || save.isPending}
+            error={merge.state.saveError}
+            blocked={merge.state.needsRefresh}
+            onClose={merge.close}
+            onConfirm={() => void merge.confirm()}
+            onRefresh={merge.retry}
           />
         ) : null}
       </ModalPresence>

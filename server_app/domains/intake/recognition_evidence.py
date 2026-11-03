@@ -64,6 +64,18 @@ def sanitize_evidence(raw):
             and isinstance(item.get("name"), str)
             and re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256") or ""))
         ]
+    supplements = raw.get("textSupplements")
+    if isinstance(supplements, list):
+        result["textSupplements"] = [
+            {
+                "rawMessage": str(entry.get("rawMessage") or "")[:20000],
+                "appliedFields": [
+                    key for key in entry.get("appliedFields", []) if key in FIELDS | {"project", "pi", "owner", "notes"}
+                ][:30],
+            }
+            for entry in supplements[-10:]
+            if isinstance(entry, dict) and isinstance(entry.get("appliedFields", []), list)
+        ]
     return result
 
 
@@ -86,8 +98,8 @@ def _nonnegative_integer(raw):
 
 def has_explicit_intake_date(evidence):
     date_source = evidence.get("fieldSources", {}).get("intakeDate", "")
-    return bool(re.search(r"接收|到货|收货|进驻|入驻", date_source)) and not (
-        "申请日期" in date_source and not re.search(r"(?:接收|到货|进驻|入驻)日期\s*[:：]", date_source)
+    return bool(re.search(r"接收|到货|收货|进驻|入驻|送货|送达", date_source)) and not (
+        "申请日期" in date_source and not re.search(r"(?:接收|到货|进驻|入驻|送货|送达|收货)日期\s*[:：]", date_source)
     )
 
 

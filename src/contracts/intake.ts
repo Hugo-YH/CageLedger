@@ -78,6 +78,7 @@ export interface IntakeRecognitionEvidence {
   /** IDs in this recognition's input order; images also contains older originals. */
   imageIds?: string[];
   inputImages?: Array<{ name: string; sha256: string }>;
+  textSupplements?: Array<{ rawMessage: string; appliedFields: string[] }>;
 }
 
 export interface IntakeAiParseResponse {
@@ -214,6 +215,28 @@ export interface IntakeDuplicateDetails {
   confirmationToken: string;
 }
 
+export interface IntakeRecognitionMergeCandidate {
+  item: IntakeBatch;
+  matchedFields: IntakeDuplicateMatchedField[];
+  classification: "same_pair" | "batch_only" | "purchase_only" | "association_conflict";
+  canMerge: boolean;
+  reason: string;
+  mergedItem: IntakeBatch | null;
+  changes: Array<{
+    field: string;
+    before: unknown;
+    incoming: unknown;
+    after: unknown;
+    source: "image" | "text" | "saved";
+  }>;
+  confirmationToken: string;
+}
+
+export interface IntakeRecognitionMergePreview {
+  items: IntakeRecognitionMergeCandidate[];
+  total: number;
+}
+
 export interface IntakeSaveRequest {
   item: IntakeBatch;
   exists: boolean;
@@ -223,6 +246,7 @@ export interface IntakeSaveRequest {
   duplicateConfirmation?: string;
   /** New local images, persisted alongside the successful batch transaction only. */
   recognitionImages?: IntakeRecognitionImageInput[];
+  recognitionMerge?: { incoming: Partial<IntakeBatch>; confirmationToken: string };
 }
 
 /** Read-only public projection; never expose the complete intake batch or account data. */

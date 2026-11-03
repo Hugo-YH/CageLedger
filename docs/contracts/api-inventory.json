@@ -286,11 +286,18 @@
       "transaction": "账号写入、原会话清理及审计同一事务；失败一起回滚",
       "audit": "user.deleted记录操作者和删除前公开字段；历史审计保留",
       "effects": "business_write"
+    },
+    "intake_recognition_edit": {
+      "version": "普通编辑保留可选expectedUpdatedAt；recognitionMerge要求精确版本和预览confirmationToken，过期409",
+      "idempotency": "普通编辑沿用原行为；合并token绑定原记录、文字和完整匹配集合，成功改变版本后旧token不能重放",
+      "transaction": "BEGIN IMMEDIATE内重读图片预约及全部编号匹配，服务端重算图片优先补充；原件引用、状态与单据主键保留",
+      "audit": "原intake_batch.updated；合并另记intake_batch.recognition_merged的来源文字与字段对照，审计失败整体回滚",
+      "effects": "business_write"
     }
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
-    "server_app/web/router_registry.py": "f23f1b6a565a830602f1978c1194fe47a2d063da34041c65c5a7a002b2ccab61",
+    "server_app/web/router_registry.py": "bb294930286617051da1c8cc054c698cfb73e112104be0575c5229e5cb78e4d4",
     "server_app/web/route_registration.py": "d05acfff6e18583855cdcdc896f44a8963b0653aac470bc8312806c3fee72009",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "0f2737bacd52aa9bb111c46c177d9972019ceb6fa9e8152de59dc0f8bbc4f776",
@@ -1198,9 +1205,9 @@
           "method": "PUT",
           "path": "/api/intake-batches/{id}",
           "purpose": "编辑批次",
-          "request": "{item,expectedUpdatedAt?,checkDuplicates?,duplicateConfirmation?}",
+          "request": "{item,expectedUpdatedAt?,checkDuplicates?,duplicateConfirmation?,recognitionMerge?:{incoming,confirmationToken}}；合并时版本必填",
           "response": "{item,placementTasks?,auditLogs?}；可选查重未确认时409含匹配记录和确认标识",
-          "protection": "compat_edit"
+          "protection": "intake_recognition_edit"
         },
         {
           "method": "DELETE",
@@ -1271,6 +1278,14 @@
       "clients": ["src/react/api/intake.ts"],
       "lifecycle": "supported",
       "endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/intake-batches/recognition-preview",
+          "purpose": "只读核对文字识别与已有图片预约，生成图片优先的合并预览及关联冲突提示",
+          "request": "{item:文字识别草稿,excludeId?:自身ID}；按采购单号或批次号匹配，不匹配说明性采购编号",
+          "response": "{items,total}；候选含原记录、分类、可合并性、字段对照、mergedItem和confirmationToken；不写业务与审计",
+          "protection": "read"
+        },
         {
           "method": "POST",
           "path": "/api/intake/ai-parse",

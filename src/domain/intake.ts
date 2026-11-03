@@ -308,7 +308,16 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
       ?.trim() || "";
   const quantity = numberOrNull(source.match(/数量\s*:?\s*(\d+)/)?.[1]);
   const roomName = matchField(raw, ["饲养房间", "房间"]).match(/\d{3,4}/)?.[0] || "";
-  const dateText = matchField(raw, ["进驻日期", "拟进驻日期", "预计进驻日期", "接收日期", "到货日期"]);
+  const dateText = matchField(raw, [
+    "进驻日期",
+    "拟进驻日期",
+    "预计进驻日期",
+    "接收日期",
+    "到货日期",
+    "送货日期",
+    "送达日期",
+    "收货日期",
+  ]);
   const periodText = matchField(raw, ["饲养周期（天）", "饲养周期(天)", "饲养周期", "周期"]);
   const monthMatch = periodText.match(/^(\d+|一|两|二|三|四|五|六|七|八|九|十)\s*个?\s*(?:自然月|月)(?!龄)/);
   const numerals: Record<string, number> = {
