@@ -16,6 +16,7 @@ Options:
   --base-image-name <name> Base image repo name. Default: cageledger-base
   --export-offline-images  Export dist/ offline image tar.gz after publish
   --skip-base-sync         Reuse current cageledger-base tags and skip public mirror sync
+  --defer-latest           Leave latest unchanged for the managed release verifier
 EOF
 }
 
@@ -26,6 +27,7 @@ IMAGE_NAME="${CAGELEDGER_IMAGE_NAME:-cageledger}"
 BASE_IMAGE_NAME="${CAGELEDGER_BASE_IMAGE_NAME:-cageledger-base}"
 EXPORT_OFFLINE_IMAGES=0
 SYNC_BASE_IMAGES=1
+DEFER_LATEST=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -51,6 +53,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --export-offline-images)
       EXPORT_OFFLINE_IMAGES=1
+      shift
+      ;;
+    --defer-latest)
+      DEFER_LATEST=1
       shift
       ;;
     --skip-base-sync)
@@ -167,12 +173,14 @@ verify_multi_arch_manifest() {
 
 verify_multi_arch_manifest "${IMAGE_REPO}:${IMAGE_TAG}"
 
-# latest is a moving alias of the newest successfully verified release manifest.
-docker buildx imagetools create \
-  -t "${IMAGE_REPO}:${LATEST_TAG}" \
-  "${IMAGE_REPO}:${IMAGE_TAG}" >/dev/null
+# Managed releases advance latest only after Git, Release and delivery verification.
+if [[ "${DEFER_LATEST}" -eq 0 ]]; then
+  docker buildx imagetools create \
+    -t "${IMAGE_REPO}:${LATEST_TAG}" \
+    "${IMAGE_REPO}:${IMAGE_TAG}" >/dev/null
 
-verify_multi_arch_manifest "${IMAGE_REPO}:${LATEST_TAG}"
+  verify_multi_arch_manifest "${IMAGE_REPO}:${LATEST_TAG}"
+fi
 
 if [[ "${EXPORT_OFFLINE_IMAGES}" -eq 1 ]]; then
   bash "${ROOT}/scripts/package_offline_image.sh" \
