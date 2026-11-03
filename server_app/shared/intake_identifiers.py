@@ -24,7 +24,7 @@ def intake_identifier_key(value, *, batch=False):
     return key
 
 
-def normalize_intake_order_identifiers(batch):
+def normalize_intake_order_identifiers(batch, *, preserve_missing=False):
     """Split an exact platform order into its purchase request and full order ID."""
     result = dict(batch)
     purchase = str(batch.get("purchaseOrderNo") or "").strip()
@@ -45,7 +45,11 @@ def normalize_intake_order_identifiers(batch):
         purchase = derived
     if re.fullmatch(r"C[0-9]{13}", purchase, re.IGNORECASE):
         purchase = purchase.upper()
-    result.update(purchaseOrderNo=purchase, orderNo=order)
+    for key, value in (("purchaseOrderNo", purchase), ("orderNo", order)):
+        # Storage must not manufacture empty fields in legacy snapshots/audit
+        # payloads. API projections can still request the complete string shape.
+        if not preserve_missing or key in batch or value:
+            result[key] = value
     return result
 
 

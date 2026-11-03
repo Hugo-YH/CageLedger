@@ -147,9 +147,9 @@ def normalize_intake_batches_for_state_write(old_state, state):
     for raw_batch in state.get("intakeBatches", []):
         old_item = old_batches.get(raw_batch.get("id"))
         batch = dict(raw_batch)
-        if old_item and "orderNo" not in batch:
-            batch["orderNo"] = old_item.get("orderNo", "")
-        batch = normalize_intake_order_identifiers(batch)
+        if old_item and "orderNo" in old_item and "orderNo" not in batch:
+            batch["orderNo"] = old_item["orderNo"]
+        batch = normalize_intake_order_identifiers(batch, preserve_missing=True)
         if old_item and is_direct_sampling(old_item) and "intakePurpose" not in batch:
             batch["intakePurpose"] = intake_purpose(old_item)
         if batch.get("intakePurpose", "housing") not in ("housing", "direct_sampling"):

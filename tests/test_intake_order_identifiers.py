@@ -44,6 +44,35 @@ class OrderNormalizationTests(unittest.TestCase):
                     self.assertEqual(actual["rawMessage"], "原文DC不截断")
                     self.assertEqual(actual, normalize_intake_order_identifiers(actual))
 
+    def test_storage_preserves_missing_keys_without_changing_api_projection(self):
+        for fields in (
+            {},
+            {"purchaseOrderNo": "PO-legacy"},
+            {"orderNo": "EXTERNAL-7"},
+            {"purchaseOrderNo": ""},
+            {"orderNo": ""},
+        ):
+            before = {"id": "legacy", "rawMessage": "original", **fields}
+            actual = normalize_intake_order_identifiers(before, preserve_missing=True)
+            self.assertEqual(actual, before)
+            self.assertIsNot(actual, before)
+            self.assertEqual(normalize_intake_order_identifiers(actual, preserve_missing=True), before)
+            projected = normalize_intake_order_identifiers(before)
+            self.assertIn("purchaseOrderNo", projected)
+            self.assertIn("orderNo", projected)
+
+    def test_storage_still_derives_real_identifiers_and_keeps_explicit_clear(self):
+        for fields in ({"purchaseOrderNo": ORDER}, {"orderNo": ORDER}):
+            self.assertEqual(
+                normalize_intake_order_identifiers(fields, preserve_missing=True),
+                {"purchaseOrderNo": PURCHASE, "orderNo": ORDER},
+            )
+        old = {"intakeBatches": [batch("old", purchaseOrderNo=PURCHASE, orderNo=ORDER)]}
+        incoming = batch("old", purchaseOrderNo=PURCHASE, orderNo="")
+        result = normalize_intake_batches_for_state_write(old, {"intakeBatches": [incoming]})
+        self.assertEqual(result["intakeBatches"][0]["orderNo"], "")
+        self.assertEqual(old["intakeBatches"][0]["orderNo"], ORDER)
+
     def test_unknown_and_description_values_are_not_guessed(self):
         for value in ("不走锐竞", "PO202610005", "DC123", "DC2026080333568", "DC2026080333568019"):
             actual = normalize_intake_order_identifiers({"purchaseOrderNo": value})
@@ -137,13 +166,50 @@ class OrderMigrationTests(unittest.TestCase):
         )
         event = conn.execute("SELECT * FROM audit_events WHERE action='intake_batch.identifiers_migrated'").fetchone()
         payload = json.loads(read_payload(conn, event["id"]))
-        self.assertEqual(payload["before"]["purchaseOrderNo"], ORDER)
+        self.assertEqual(
+            payload["before"], {key: before[key] for key in ("purchaseOrderNo", "orderNo") if key in before}
+        )
         self.assertEqual(payload["after"], {"purchaseOrderNo": PURCHASE, "orderNo": ORDER})
         changes = conn.total_changes
         with conn:
             ensure_intake_identifier_schema(conn)
         self.assertEqual(changes, conn.total_changes)
         self.assertEqual(conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], 1)
+
+    def test_missing_identifier_payload_bytes_and_audits_survive_schema_upgrade(self):
+        conn = self.database()
+        originals = {}
+        for index, fields in enumerate(({}, {"purchaseOrderNo": ""}, {"orderNo": ""}, {"purchaseOrderNo": "PO-old"})):
+            item = {"id": f"legacy-{index}", "batchNo": f"B-{index}", "updatedAt": "saved", **fields}
+            raw = json.dumps(item, ensure_ascii=False, indent=2)
+            originals[item["id"]] = raw
+            conn.execute(
+                "INSERT INTO intake_batches(id,batch_no,status,updated_at,payload) VALUES(?,?,?,?,?)",
+                (item["id"], item["batchNo"], "pending_receipt", "saved", raw),
+            )
+        conn.commit()
+        with conn:
+            ensure_intake_identifier_schema(conn)
+        for row in conn.execute("SELECT id,payload,order_no FROM intake_batches"):
+            self.assertEqual(row["payload"], originals[row["id"]])
+            self.assertEqual(row["order_no"], "")
+        self.assertEqual(conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], 0)
+        changes = conn.total_changes
+        with conn:
+            ensure_intake_identifier_schema(conn)
+        self.assertEqual(changes, conn.total_changes)
+
+    def test_upsert_preserves_absent_payload_fields_but_populates_lookup_columns(self):
+        from server_app.repositories.entities import upsert_intake_batch
+
+        conn = self.database()
+        with conn:
+            ensure_intake_identifier_schema(conn)
+            item = {"id": "legacy", "batchNo": "B-old", "updatedAt": "saved"}
+            upsert_intake_batch(conn, item)
+        row = conn.execute("SELECT payload,purchase_order_no,order_no FROM intake_batches").fetchone()
+        self.assertEqual(json.loads(row["payload"]), item)
+        self.assertEqual((row["purchase_order_no"], row["order_no"]), ("", ""))
 
     def test_audit_failure_rolls_back_columns_payload_and_lookup_values(self):
         conn = self.database()

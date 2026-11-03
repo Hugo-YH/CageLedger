@@ -78,7 +78,7 @@ def normalize_entity_payload(collection, payload, item_id, method, id_prefix, ne
             raise ValueError("Entity id is required")
         item["id"] = item_id
     if collection == "intakeBatches":
-        item = normalize_intake_order_identifiers(item)
+        item = normalize_intake_order_identifiers(item, preserve_missing=True)
         if "batchNo" in item:
             item["batchNo"] = normalize_intake_batch_no(item["batchNo"])
     validate_entity_payload(collection, item)

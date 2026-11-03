@@ -311,7 +311,7 @@ def write_normalized_state(
         )
 
     for batch in state.get("intakeBatches", []):
-        batch = normalize_intake_order_identifiers(batch)
+        batch = normalize_intake_order_identifiers(batch, preserve_missing=True)
         conn.execute(
             """
             INSERT INTO intake_batches (

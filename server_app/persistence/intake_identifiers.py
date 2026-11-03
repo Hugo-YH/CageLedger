@@ -68,7 +68,7 @@ def ensure_intake_identifier_schema(conn):
                     "slotIds": [],
                     "at": now,
                     "message": "拆分采购单号与订单编号，保留原始订单及预约来源",
-                    "before": {key: batch.get(key, "") for key in ("purchaseOrderNo", "orderNo")},
+                    "before": {key: batch[key] for key in ("purchaseOrderNo", "orderNo") if key in batch},
                     "after": {key: normalized[key] for key in ("purchaseOrderNo", "orderNo")},
                 }
             )

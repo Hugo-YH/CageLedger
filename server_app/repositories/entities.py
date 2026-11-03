@@ -274,7 +274,7 @@ def upsert_principal_identity(conn, pi_name, principal_type, updated_at, payload
 
 
 def upsert_intake_batch(conn, batch):
-    batch = normalize_intake_order_identifiers(batch)
+    batch = normalize_intake_order_identifiers(batch, preserve_missing=True)
     conn.execute(
         """
         INSERT INTO intake_batches (
