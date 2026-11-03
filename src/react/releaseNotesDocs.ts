@@ -3,6 +3,19 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.27.0",
+    build: "258",
+    releasedAt: "2026-11-03",
+    title: "批次编号与查询",
+    items: [
+      "只读解析批次编号中的 IACUC、实验需求审批日期和序号，保留完整编号及前导零；审批日期与接收日期独立，不自动重编号",
+      "待接收列表支持部分编号、编号内 IACUC、审批日期和序号的服务端查询，先筛选再分页，不受旧候选列表 500 项限制",
+      "支持中英文及混合括号搜索；不同日期的相同序号保留，非法日期和旧自由格式显示不可解析但不阻止原有操作",
+      "排除 macOS 自动附加的 AppleDouble 元数据，保留正常文件内容、权限和相对符号链接",
+      "浏览器验证默认单组运行，支持受资源约束的两组调度；保留交换空间与系统保护，并严格校验中断恢复凭据",
+    ],
+  },
+  {
     version: "1.26.2",
     build: "257",
     releasedAt: "2026-11-03",
