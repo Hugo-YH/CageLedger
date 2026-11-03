@@ -83,6 +83,14 @@ describe("IntakeBatchList render isolation", () => {
     counts.cells = 0;
     window.matchMedia = vi.fn().mockReturnValue({ matches: false, addListener: () => {}, removeListener: () => {} });
   });
+  it("shows a legacy DC value as separate purchase and full order IDs without changing the row", () => {
+    const original = { ...items[0], purchaseOrderNo: "DC202611022948607" };
+    render(<IntakeBatchList {...props} {...callbacks()} items={[original]} total={1} />);
+    expect(screen.getByText("C2026110229486")).toBeInTheDocument();
+    expect(screen.getByText("DC202611022948607")).toBeInTheDocument();
+    expect(original.purchaseOrderNo).toBe("DC202611022948607");
+    expect(original).not.toHaveProperty("orderNo");
+  });
   it("skips unrelated parent updates and uses the latest committed callbacks", () => {
     const oldEdit = vi.fn();
     const newEdit = vi.fn();

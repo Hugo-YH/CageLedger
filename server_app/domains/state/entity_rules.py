@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable
 
 from server_app.shared import as_int
+from server_app.shared.intake_identifiers import normalize_intake_batch_no, normalize_intake_order_identifiers
 
 
 def normalize_entity_batch(collection, items, method, normalize_payload: Callable):
@@ -76,6 +77,10 @@ def normalize_entity_payload(collection, payload, item_id, method, id_prefix, ne
         if not item_id:
             raise ValueError("Entity id is required")
         item["id"] = item_id
+    if collection == "intakeBatches":
+        item = normalize_intake_order_identifiers(item)
+        if "batchNo" in item:
+            item["batchNo"] = normalize_intake_batch_no(item["batchNo"])
     validate_entity_payload(collection, item)
     return item
 

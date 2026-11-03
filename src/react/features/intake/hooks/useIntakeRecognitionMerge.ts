@@ -35,7 +35,7 @@ export function useIntakeRecognitionMerge({
   const visible = state?.revision === revision.current ? state : null;
 
   async function preview(incoming: IntakeBatch, excludeId?: string) {
-    if (!incoming.batchNo.trim() && !incoming.purchaseOrderNo.trim()) {
+    if (!incoming.batchNo.trim() && !incoming.purchaseOrderNo.trim() && !incoming.orderNo?.trim()) {
       requests.invalidate();
       setState(null);
       return;

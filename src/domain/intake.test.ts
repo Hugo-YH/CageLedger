@@ -5,6 +5,8 @@ import {
   abbreviateSupplier,
   missingIntakeRequiredFields,
   normalizeIntakeBatch,
+  normalizeIntakeBatchNo,
+  normalizeIntakeOrderIdentifiers,
   parseIntakeMessage,
   speciesLabel,
   standardizeStrain,
@@ -14,6 +16,134 @@ import {
   normalizeIntakeSex,
   createIntakeDraft,
 } from "./intake";
+
+describe("intake purchase and order identifiers", () => {
+  it.each(["01", "07"])("derives the purchase ID without losing complete order suffix %s", (suffix) => {
+    const orderNo = `DC2026110229486${suffix}`;
+    expect(normalizeIntakeOrderIdentifiers({ orderNo })).toEqual({ purchaseOrderNo: "C2026110229486", orderNo });
+    expect(normalizeIntakeBatch({ orderNo })).toMatchObject({ purchaseOrderNo: "C2026110229486", orderNo });
+    expect(normalizeIntakeOrderIdentifiers({ purchaseOrderNo: orderNo })).toEqual({
+      purchaseOrderNo: "C2026110229486",
+      orderNo,
+    });
+  });
+
+  it("uppercases only exact known IDs and keeps explicit conflicting values for review", () => {
+    expect(
+      normalizeIntakeOrderIdentifiers({ purchaseOrderNo: " c2026110229486 ", orderNo: " dc202611022948607 " }),
+    ).toEqual({ purchaseOrderNo: "C2026110229486", orderNo: "DC202611022948607" });
+    expect(
+      normalizeIntakeOrderIdentifiers({ purchaseOrderNo: "C2026000000000", orderNo: "DC202611022948607" }),
+    ).toEqual({ purchaseOrderNo: "C2026000000000", orderNo: "DC202611022948607" });
+    expect(
+      normalizeIntakeOrderIdentifiers({ purchaseOrderNo: "DC202611022948601", orderNo: "DC202611022948607" }),
+    ).toEqual({ purchaseOrderNo: "DC202611022948601", orderNo: "DC202611022948607" });
+  });
+
+  it.each(["DC2026110229486", "DC2026110229486012", "DC2026110229486A1", "DC202611022948607-extra", "ABC 123"])(
+    "does not guess or truncate unknown order format %s",
+    (value) => {
+      expect(normalizeIntakeOrderIdentifiers({ orderNo: value })).toEqual({ purchaseOrderNo: "", orderNo: value });
+      expect(normalizeIntakeOrderIdentifiers({ purchaseOrderNo: value })).toEqual({ purchaseOrderNo: value });
+    },
+  );
+
+  it("preserves non-platform explanations, raw text and the original image evidence", () => {
+    expect(normalizeIntakeOrderIdentifiers({ purchaseOrderNo: " 不走锐竞 " })).toEqual({ purchaseOrderNo: "不走锐竞" });
+    expect(normalizeIntakeOrderIdentifiers({})).toEqual({ purchaseOrderNo: "" });
+    const rawMessage = "锐竞单号dc202611022948607，原图文字不可改写";
+    const recognition = {
+      extractedText: rawMessage,
+      warnings: [],
+      fieldSources: { purchaseOrderNo: "原图" },
+      images: [
+        {
+          id: "img",
+          name: "原图.png",
+          mime: "image/png",
+          size: 10,
+          sha256: "hash",
+          url: "/original",
+          createdAt: "now",
+        },
+      ],
+    };
+    const original = { purchaseOrderNo: "dc202611022948607", rawMessage, recognition };
+    const normalized = normalizeIntakeBatch(original);
+    expect(normalized).toMatchObject({ purchaseOrderNo: "C2026110229486", orderNo: "DC202611022948607", rawMessage });
+    expect(normalized.recognition).toBe(recognition);
+    expect(original.purchaseOrderNo).toBe("dc202611022948607");
+  });
+
+  it.each([
+    "采购申请单号C2026110229486\n订单编号DC202611022948607",
+    "锐竞单号DC202611022948607",
+    "订单编号：dc202611022948607",
+    "采购单号：DC202611022948607",
+  ])("parses both fields from %s", (text) => {
+    const result = parseIntakeMessage(text);
+    expect(result).toMatchObject({ purchaseOrderNo: "C2026110229486", orderNo: "DC202611022948607", rawMessage: text });
+  });
+
+  it("keeps an explicitly conflicting purchase ID instead of replacing it with the order-derived ID", () => {
+    expect(parseIntakeMessage("采购申请单号C2026000000000\n订单编号DC202611022948607")).toMatchObject({
+      purchaseOrderNo: "C2026000000000",
+      orderNo: "DC202611022948607",
+    });
+    expect(parseIntakeMessage("订单编号DC2026110229486072")).toMatchObject({
+      purchaseOrderNo: "",
+      orderNo: "DC2026110229486072",
+    });
+  });
+});
+
+describe("intake batch-number presentation", () => {
+  it.each([
+    ["(Z2025170)2026102902", "（Z2025170）2026102902"],
+    ["（Z2025170）2026102902", "（Z2025170）2026102902"],
+    ["(Z2025170）2026102902", "（Z2025170）2026102902"],
+    ["（Z2025170)2026102902", "（Z2025170）2026102902"],
+    [" ( z2025170 )  2026102902 ", "（Z2025170）2026102902"],
+    ["（zw2026001）\t\u30002026102902", "（ZW2026001）2026102902"],
+    ["ABC 123", "ABC 123"],
+    ["ABC123", "ABC123"],
+    ["( abc ) 123", "（abc） 123"],
+    ["(z2025170)2026 102902", "（z2025170）2026 102902"],
+    ["(Z2025170 2026102902", "(Z2025170 2026102902"],
+    ["Z2025170)2026102902", "Z2025170)2026102902"],
+  ])("uses the same batch-number format for %s and normalized drafts", (raw, expected) => {
+    expect(normalizeIntakeBatchNo(raw)).toBe(expected);
+    expect(normalizeIntakeBatch({ batchNo: raw }).batchNo).toBe(expected);
+  });
+
+  it.each([null, undefined, "", "  "])("handles an absent batch number (%s)", (value) => {
+    expect(normalizeIntakeBatchNo(value)).toBe("");
+  });
+
+  it("normalizes the editable number without changing source text or stored recognition image references", () => {
+    const rawMessage = "原图片预约：( z2025170 )  2026102902\n保留原始括号及空白";
+    const images = [
+      {
+        id: "original-image",
+        name: "预约.png",
+        url: "/original-image",
+        mime: "image/png",
+        size: 10,
+        sha256: "hash",
+        createdAt: "now",
+      },
+    ];
+    const recognition = { extractedText: rawMessage, warnings: [], fieldSources: { batchNo: "原图" }, images };
+    const original = { batchNo: "( z2025170 )  2026102902", rawMessage, recognition };
+    const normalized = normalizeIntakeBatch(original);
+    expect(normalized.batchNo).toBe("（Z2025170）2026102902");
+    expect(normalized.rawMessage).toBe(rawMessage);
+    expect(normalized.recognition).toBe(recognition);
+    expect(normalized.recognition?.images).toBe(images);
+    expect(original.batchNo).toBe("( z2025170 )  2026102902");
+    expect(normalizeIntakeBatchNo("ABC 123")).not.toBe(normalizeIntakeBatchNo("ABC123"));
+  });
+});
 
 describe("intake message parser", () => {
   it("resolves every maintained supplier name and alias from the shared catalog", () => {

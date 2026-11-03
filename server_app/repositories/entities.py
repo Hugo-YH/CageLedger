@@ -8,7 +8,13 @@ from server_app.repositories.person_names import (
     person_options,
     prepare_person_filters,
 )
-from server_app.shared.intake_identifiers import intake_identifier_values
+from server_app.shared.intake_identifiers import (
+    intake_identifier_key,
+    intake_identifier_values,
+    intake_order_identifier_values,
+    normalize_intake_batch_no,
+    normalize_intake_order_identifiers,
+)
 
 from .payload import cached_paginated_payloads, dump_json
 
@@ -18,7 +24,9 @@ INTAKE_BATCH_LIST_COLUMNS = {
         "expr": "COALESCE(json_extract(payload, '$.intakePurpose'), 'housing')",
         "order": "COALESCE(json_extract(payload, '$.intakePurpose'), 'housing')",
     },
-    "batchNo": {"expr": "batch_no", "order": "batch_no"},
+    "purchaseOrderNo": {"expr": "purchase_order_no", "order": "purchase_order_no"},
+    "orderNo": {"expr": "order_no", "order": "order_no"},
+    "batchNo": {"expr": "batch_no_key", "order": "batch_no"},
     "supplier": {"expr": "supplier", "order": "supplier"},
     "pi": {"expr": "pi", "order": "pi"},
     "owner": {"expr": "owner", "order": "owner"},
@@ -149,6 +157,8 @@ def intake_batch_where(filters, filtered_where, exclude_column="", conn=None):
         ]
         if not spec or not cleaned:
             continue
+        if key == "batchNo":
+            cleaned = [intake_identifier_key(value, batch=True) for value in cleaned]
         clause, values = column_predicate(filters, key, f"COALESCE({spec['expr']}, '')", cleaned)
         where_parts.append(clause)
         next_params.extend(values)
@@ -175,6 +185,8 @@ _INTAKE_STATUS_LABELS = {
 
 def _intake_filter_label(column, value):
     text = str(value or "")
+    if column == "batchNo":
+        return normalize_intake_batch_no(text) or "空白"
     if column == "status":
         return _INTAKE_STATUS_LABELS.get(text, text or "空白")
     return text or "空白"
@@ -262,14 +274,15 @@ def upsert_principal_identity(conn, pi_name, principal_type, updated_at, payload
 
 
 def upsert_intake_batch(conn, batch):
+    batch = normalize_intake_order_identifiers(batch)
     conn.execute(
         """
         INSERT INTO intake_batches (
             id, batch_no, iacuc, supplier, pi, owner, quantity, card_count,
             room_name, intake_date, status, updated_at, payload,
-            purchase_order_no, purchase_order_key, batch_no_key
+            purchase_order_no, purchase_order_key, batch_no_key, order_no, order_key
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             batch_no = excluded.batch_no,
             iacuc = excluded.iacuc,
@@ -285,7 +298,9 @@ def upsert_intake_batch(conn, batch):
             payload = excluded.payload,
             purchase_order_no = excluded.purchase_order_no,
             purchase_order_key = excluded.purchase_order_key,
-            batch_no_key = excluded.batch_no_key
+            batch_no_key = excluded.batch_no_key,
+            order_no = excluded.order_no,
+            order_key = excluded.order_key
         """,
         (
             batch.get("id"),
@@ -302,6 +317,7 @@ def upsert_intake_batch(conn, batch):
             batch.get("updatedAt", ""),
             dump_json(batch),
             *intake_identifier_values(batch),
+            *intake_order_identifier_values(batch),
         ),
     )
 

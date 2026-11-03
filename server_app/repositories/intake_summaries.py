@@ -9,6 +9,7 @@ FIELDS = (
     "id",
     "intakePurpose",
     "purchaseOrderNo",
+    "orderNo",
     "batchNo",
     "iacuc",
     "supplier",

@@ -1,10 +1,10 @@
 import { formatPersonNames } from "../../../../domain/personNames";
 import { Table, type TableProps } from "antd";
 
-import type { IntakeDuplicateDetails, IntakeDuplicateItem } from "../../../api/contracts";
+import type { IntakeDuplicateDetails, IntakeDuplicateItem, IntakeDuplicateMatchedField } from "../../../api/contracts";
 import { ActionButton } from "../../../components/ui";
 import { ModalShell } from "../../../components/WorkspaceUi";
-import { intakeStatusLabel } from "../../../../domain/intake";
+import { intakeStatusLabel, normalizeIntakeOrderIdentifiers } from "../../../../domain/intake";
 
 export function IntakeDuplicateConfirmDialog({
   details,
@@ -27,7 +27,18 @@ export function IntakeDuplicateConfirmDialog({
       width: 104,
       render: (fields: IntakeDuplicateItem["matchedFields"]) => fields.map(intakeDuplicateFieldLabel).join("、"),
     },
-    { title: "采购单号", dataIndex: "purchaseOrderNo", width: 140, render: (value: string) => value || "-" },
+    {
+      title: "采购单号",
+      dataIndex: "purchaseOrderNo",
+      width: 140,
+      render: (_value, item) => normalizeIntakeOrderIdentifiers(item).purchaseOrderNo || "-",
+    },
+    {
+      title: "订单编号",
+      dataIndex: "orderNo",
+      width: 168,
+      render: (_value, item) => normalizeIntakeOrderIdentifiers(item).orderNo || "-",
+    },
     { title: "批次号", dataIndex: "batchNo", width: 150, render: (value: string) => value || "-" },
     { title: "接收日期", dataIndex: "intakeDate", width: 108, render: (value: string) => value || "待定" },
     { title: "项目负责人", dataIndex: "pi", width: 108, render: (value: string) => formatPersonNames(value) || "-" },
@@ -59,8 +70,8 @@ export function IntakeDuplicateConfirmDialog({
         </ActionButton>
       </div>
       <div className="modal-shell-body">
-        <p>匹配采购单号或批次号的已有记录如下：</p>
-        <Table columns={columns} dataSource={items} pagination={false} rowKey="id" scroll={{ x: 800 }} size="small" />
+        <p>匹配采购单号、订单编号或批次号的已有记录如下：</p>
+        <Table columns={columns} dataSource={items} pagination={false} rowKey="id" scroll={{ x: 968 }} size="small" />
         {details.total > items.length ? <p>仅展示前 {items.length} 条匹配记录。</p> : null}
         {error ? <p role="alert">{error}</p> : null}
       </div>
@@ -76,6 +87,6 @@ export function IntakeDuplicateConfirmDialog({
   );
 }
 
-function intakeDuplicateFieldLabel(field: "purchaseOrderNo" | "batchNo") {
-  return field === "purchaseOrderNo" ? "采购单号" : "批次号";
+function intakeDuplicateFieldLabel(field: IntakeDuplicateMatchedField) {
+  return field === "purchaseOrderNo" ? "采购单号" : field === "orderNo" ? "订单编号" : "批次号";
 }

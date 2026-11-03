@@ -10,7 +10,8 @@ from .dates import sql_valid_date
 
 FIELDS = {
     "batchNo": "b.batch_no",
-    "purchaseOrderNo": "json_extract(b.payload,'$.purchaseOrderNo')",
+    "purchaseOrderNo": "b.purchase_order_no",
+    "orderNo": "b.order_no",
     "iacuc": "b.iacuc",
     "supplier": "b.supplier",
     "roomName": "b.room_name",

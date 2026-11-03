@@ -193,3 +193,14 @@ it("skips matching when neither identifier was recognized", async () => {
   expect(previewIntakeRecognitionMerge).not.toHaveBeenCalled();
   expect(result.current.state).toBeNull();
 });
+
+it("still previews an order-only source with no purchase ID or batch number", async () => {
+  const preview = previewResult();
+  preview.items[0].classification = "order_only";
+  preview.items[0].matchedFields = ["orderNo"];
+  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue(preview);
+  const { result } = setup();
+  const orderOnly = { ...incoming, batchNo: "", purchaseOrderNo: "", orderNo: "DC202611022948607" };
+  await act(() => result.current.preview(orderOnly));
+  expect(previewIntakeRecognitionMerge).toHaveBeenCalledExactlyOnceWith(orderOnly, undefined);
+});

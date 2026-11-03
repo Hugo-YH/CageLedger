@@ -85,7 +85,7 @@ class IntakeIdentifierMigrationTests(unittest.TestCase):
                 [("c20261021001", "C20261021001"), ("", ""), ("", "")],
             )
             indexes = list(conn.execute("PRAGMA index_list(intake_batches)"))
-            self.assertEqual(len(indexes), 2)
+            self.assertEqual(len(indexes), 3)
             self.assertTrue(all(not row["unique"] for row in indexes))
 
     def test_existing_lookup_keys_are_repaired_without_rewriting_business_data(self):
@@ -225,7 +225,7 @@ class IntakeDuplicateTests(unittest.TestCase):
         self.assertEqual(warning["total"], 1)
         self.assertEqual(warning["items"][0]["matchedFields"], ["purchaseOrderNo", "batchNo"])
         saved = self.save(item, checkDuplicates=True, duplicateConfirmation=warning["confirmationToken"])
-        self.assertEqual(saved["purchaseOrderNo"], item["purchaseOrderNo"])
+        self.assertEqual(saved["purchaseOrderNo"], item["purchaseOrderNo"].strip())
         self.assertEqual(self.counts(), (original_counts[0] + 1, original_counts[1] + 2))
         with self.connect() as conn:
             event = conn.execute(

@@ -10,10 +10,15 @@ from server_app.domains.intake.husbandry_period import calendar_month_end, norma
 from server_app.domains.intake.recognition_evidence import sanitize_evidence
 from server_app.domains.intake.repository import find_duplicate_identifiers, get_batch_payload
 from server_app.shared.concurrency import StaleWriteError, require_exact_version
-from server_app.shared.intake_identifiers import intake_identifier_values
+from server_app.shared.intake_identifiers import (
+    intake_identifier_values,
+    intake_order_identifier_values,
+    normalize_intake_order_identifiers,
+)
 
 TEXT_FIELDS = (
     "purchaseOrderNo",
+    "orderNo",
     "batchNo",
     "iacuc",
     "supplier",
@@ -55,14 +60,17 @@ def incoming_values(raw):
                     raise ValueError
             except ValueError as exc:
                 raise ValueError("本次文字识别的日期格式无效") from exc
-    return item
+    return normalize_intake_order_identifiers(item)
 
 
 def identifier_matches(conn, incoming):
     _, purchase, batch = intake_identifier_values(incoming)
     if purchase_order_is_description(purchase):
         purchase = ""
-    return find_duplicate_identifiers(conn, purchase, batch)
+    _, order = intake_order_identifier_values(incoming)
+    if purchase_order_is_description(order):
+        order = ""
+    return find_duplicate_identifiers(conn, purchase, batch, order_no_key=order)
 
 
 def match_classification(existing, incoming):
@@ -72,20 +80,29 @@ def match_classification(existing, incoming):
         old_purchase = ""
     if purchase_order_is_description(new_purchase):
         new_purchase = ""
-    matched = [
-        name
-        for name, a, b in (("purchaseOrderNo", old_purchase, new_purchase), ("batchNo", old_batch, new_batch))
-        if a and a == b
-    ]
-    conflict = any(a and b and a != b for a, b in ((old_purchase, new_purchase), (old_batch, new_batch)))
+    _, old_order = intake_order_identifier_values(existing)
+    _, new_order = intake_order_identifier_values(incoming)
+    if purchase_order_is_description(old_order):
+        old_order = ""
+    if purchase_order_is_description(new_order):
+        new_order = ""
+    pairs = (
+        ("purchaseOrderNo", old_purchase, new_purchase),
+        ("orderNo", old_order, new_order),
+        ("batchNo", old_batch, new_batch),
+    )
+    matched = [name for name, a, b in pairs if a and a == b]
+    conflict = any(a and b and a != b for _, a, b in pairs)
     kind = (
         "association_conflict"
         if conflict
         else "same_pair"
-        if len(matched) == 2
+        if "purchaseOrderNo" in matched and "batchNo" in matched
         else "batch_only"
         if "batchNo" in matched
         else "purchase_only"
+        if "purchaseOrderNo" in matched
+        else "order_only"
     )
     return kind, matched
 
@@ -179,7 +196,7 @@ def _candidate(existing, incoming, matches):
     if len(matches) != 1:
         reason = "匹配到多条已有预约，请先核对需求与采购单的对应关系，暂不能合并。"
     elif classification == "association_conflict":
-        reason = "饲养需求或采购单已对应其他编号，请核对原图和预约文字，暂不能合并。"
+        reason = "饲养需求、采购单或订单已对应其他编号，请核对原图和预约文字，暂不能合并。"
     elif not (existing.get("recognition") or {}).get("images"):
         reason = "已有预约未留存图片，请核对后从待接收列表编辑。"
     elif existing.get("status") == "received" or existing.get("receipts"):

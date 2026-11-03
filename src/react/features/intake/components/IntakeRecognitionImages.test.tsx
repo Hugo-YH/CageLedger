@@ -12,7 +12,7 @@ function Harness() {
       evidence={{
         extractedText: "识别原文",
         warnings: ["接收日期不明确"],
-        fieldSources: { quantity: "预约.png", finalCardCount: "预约.png" },
+        fieldSources: { quantity: "预约.png", finalCardCount: "预约.png", orderNo: "订单截图.png" },
         quantityCalculation: {
           baseQuantity: 27,
           giftQuantity: 3,
@@ -37,6 +37,7 @@ function Harness() {
             kind: "purchase",
             batchNo: "新采购批次",
             purchaseOrderNo: "PO-123",
+            orderNo: "DC202611022948607",
             quantity: 27,
             specification: "6-8周龄",
             quantityFacts: {
@@ -94,6 +95,8 @@ describe("intake image controls", () => {
       expect(screen.getByText("本批动物数量（只）：24")).toBeTruthy();
       expect(screen.getByText("采购信息（图片 2）")).toBeTruthy();
       expect(screen.getByText("采购单号：PO-123")).toBeTruthy();
+      expect(screen.getByText("订单编号：DC202611022948607")).toBeTruthy();
+      expect(screen.getByText("订单编号：订单截图.png")).toBeTruthy();
       expect(
         within(screen.getByRole("region", { name: "饲养需求，图片 1" })).getByText("批次编号：原饲养批次"),
       ).toBeTruthy();

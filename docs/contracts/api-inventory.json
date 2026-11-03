@@ -1180,7 +1180,7 @@
           "path": "/api/intake-batches",
           "purpose": "批次列表",
           "request": "列表筛选与分页；可选view=summary，省略保持旧完整响应；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
-          "response": "{items,page}",
+          "response": "{items,page}；item分别含purchaseOrderNo(C采购单号)、orderNo(完整DC订单编号)，均可独立筛选排序",
           "protection": "read",
           "permission": "login"
         },
@@ -1197,7 +1197,7 @@
           "method": "POST",
           "path": "/api/intake-batches",
           "purpose": "新建批次",
-          "request": "{item,checkDuplicates?,duplicateConfirmation?}",
+          "request": "{item,checkDuplicates?,duplicateConfirmation?}；item分别保存purchaseOrderNo和orderNo，严格DC+13位数字+2位后缀可推导C，显式对应冲突400；PUT省略orderNo保留已有值",
           "response": "{item,auditLogs,...}；可选查重未确认时409含匹配记录和确认标识",
           "protection": "entity_create"
         },
@@ -1205,7 +1205,7 @@
           "method": "PUT",
           "path": "/api/intake-batches/{id}",
           "purpose": "编辑批次",
-          "request": "{item,expectedUpdatedAt?,checkDuplicates?,duplicateConfirmation?,recognitionMerge?:{incoming,confirmationToken}}；合并时版本必填",
+          "request": "{item,expectedUpdatedAt?,checkDuplicates?,duplicateConfirmation?,recognitionMerge?:{incoming,confirmationToken}}；合并时版本必填；item分别保存purchaseOrderNo和orderNo，严格DC+13位数字+2位后缀可推导C，显式对应冲突400；PUT省略orderNo保留已有值",
           "response": "{item,placementTasks?,auditLogs?}；可选查重未确认时409含匹配记录和确认标识",
           "protection": "intake_recognition_edit"
         },
@@ -1282,7 +1282,7 @@
           "method": "POST",
           "path": "/api/intake-batches/recognition-preview",
           "purpose": "只读核对文字识别与已有图片预约，生成图片优先的合并预览及关联冲突提示",
-          "request": "{item:文字识别草稿,excludeId?:自身ID}；按采购单号或批次号匹配，不匹配说明性采购编号",
+          "request": "{item:文字识别草稿,excludeId?:自身ID}；按采购单号、完整订单编号或批次号匹配，不匹配说明性采购编号；同C不同DC后缀禁止直接合并",
           "response": "{items,total}；候选含原记录、分类、可合并性、字段对照、mergedItem和confirmationToken；不写业务与审计",
           "protection": "read"
         },
@@ -1291,7 +1291,7 @@
           "path": "/api/intake/ai-parse",
           "purpose": "解析文字及多图预约信息，按饲养需求和采购信息分别提取后核对合并",
           "request": "{rawMessage,roomNames,images?:[{name,dataUrl}]}；图片≤4张、单张≤5MiB、合计≤15MiB",
-          "response": "{item,usage,recognition?}；图片返回分类来源、提取文本、字段依据与核对提示",
+          "response": "{item,usage,recognition?}；图片返回分类来源、提取文本、字段依据与核对提示；item分别返回purchaseOrderNo与orderNo，完整保留DC后缀",
           "protection": "ai"
         },
         {

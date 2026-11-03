@@ -1,10 +1,13 @@
 import type { IntakeRecognitionEvidence, IntakeRecognitionSource } from "../../../contracts/intake";
+import { normalizeIntakeOrderIdentifiers } from "../../../domain/intake";
 
-type ReviewField = "strain" | "specification" | "quantity" | "supplier";
+type ReviewField = "purchaseOrderNo" | "orderNo" | "strain" | "specification" | "quantity" | "supplier";
 
 type Comparison = { key: string; label: string; husbandry: string; purchase: string };
 
 const fields: Array<{ key: ReviewField; label: string; pattern: RegExp }> = [
+  { key: "purchaseOrderNo", label: "采购单号", pattern: /采购(?:申请)?单号/ },
+  { key: "orderNo", label: "订单编号", pattern: /订单(?:编号|号)/ },
   { key: "strain", label: "品系/商品名", pattern: /品系|商品名|商品名称/ },
   { key: "specification", label: "体重/日龄（规格）", pattern: /规格|体重|日龄|周龄|月龄/ },
   { key: "quantity", label: "数量", pattern: /数量|只数/ },
@@ -12,6 +15,7 @@ const fields: Array<{ key: ReviewField; label: string; pattern: RegExp }> = [
 ];
 
 function valueFor(source: IntakeRecognitionSource, field: ReviewField): string {
+  if (field === "purchaseOrderNo" || field === "orderNo") return normalizeIntakeOrderIdentifiers(source)[field] ?? "";
   if (field === "strain") return (source.strainRaw || source.productName || "").trim();
   if (field === "specification") return (source.specification || "").trim();
   if (field === "supplier") return (source.supplier || "").trim();

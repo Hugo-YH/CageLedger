@@ -6,7 +6,11 @@ from server_app.domains.intake.husbandry_period import husbandry_month_values, p
 from server_app.domains.intake.recognition_quantity import merge_purchase_quantities, sanitize_quantity_facts
 from server_app.domains.intake.recognition_specification import is_missing_specification, normalize_specification
 from server_app.domains.intake.strain_standard import standardize_strain
-from server_app.shared.intake_identifiers import intake_identifier_key
+from server_app.shared.intake_identifiers import (
+    intake_identifier_key,
+    normalize_intake_batch_no,
+    normalize_intake_order_identifiers,
+)
 
 NUMBER_FIELDS = frozenset(
     (
@@ -28,6 +32,7 @@ TEXT_FIELDS = frozenset(
         "husbandryPeriodRaw",
         "roomName",
         "purchaseOrderNo",
+        "orderNo",
         "productName",
         "specification",
         "supplier",
@@ -41,6 +46,7 @@ LABELS = {
     "batchNo": "批次号",
     "iacuc": "伦理号",
     "purchaseOrderNo": "采购单号",
+    "orderNo": "订单编号",
     "supplier": "供应商",
     "strainRaw": "品系",
     "productName": "商品名称",
@@ -63,9 +69,7 @@ def integer(value):
 
 def image_batch_number(value):
     """Remove screenshot layout spaces only for the known ethics/serial format."""
-    text = str(value or "").strip()
-    match = re.fullmatch(r"[（(]\s*([A-Za-z]{1,6}\d{4,})\s*[）)]\s*(\d{6,})", text)
-    return f"（{match[1].upper()}）{match[2]}" if match else text
+    return normalize_intake_batch_no(value)
 
 
 def strain_key(value):
@@ -93,6 +97,7 @@ def sanitize_sources(raw):
         item.update(
             {key: value[:2000] for key, value in source.items() if key in TEXT_FIELDS and isinstance(value, str)}
         )
+        item = normalize_intake_order_identifiers(item)
         if item["kind"] == "husbandry":
             # Only the original review text can establish a calendar-month period.
             notes = item.get("reviewNotes", "")
@@ -136,7 +141,7 @@ def merge_sources(payload, evidence, sources):
                 continue
             key = (
                 intake_identifier_key(value, batch=field == "batchNo")
-                if field in ("batchNo", "iacuc", "purchaseOrderNo")
+                if field in ("batchNo", "iacuc", "purchaseOrderNo", "orderNo")
                 else specification_key(value)
                 if field == "specification"
                 else value
@@ -154,7 +159,7 @@ def merge_sources(payload, evidence, sources):
         value = one(sources, field)
         if value is not None:
             result[field] = value
-    for field in ("purchaseOrderNo", "supplier", "strainRaw"):
+    for field in ("purchaseOrderNo", "orderNo", "supplier", "strainRaw"):
         value = one(purchases, field)
         if field in conflicts:
             result[field] = ""

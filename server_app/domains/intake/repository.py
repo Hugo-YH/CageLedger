@@ -11,19 +11,22 @@ def get_batch_payload(conn, batch_id):
     return json.loads(row["payload"]) if row else None
 
 
-def find_duplicate_identifiers(conn, purchase_order_key, batch_no_key, exclude_id=""):
+def find_duplicate_identifiers(conn, purchase_order_key, batch_no_key, exclude_id="", *, order_no_key=""):
     """Return all matching identities so confirmation also covers off-page matches."""
     clauses, params = [], []
     if purchase_order_key:
         clauses.append("purchase_order_key = ?")
         params.append(purchase_order_key)
+    if order_no_key:
+        clauses.append("order_key = ?")
+        params.append(order_no_key)
     if batch_no_key:
         clauses.append("batch_no_key = ?")
         params.append(batch_no_key)
     if not clauses:
         return []
     rows = conn.execute(
-        f"""SELECT id, purchase_order_no, batch_no, purchase_order_key, batch_no_key,
+        f"""SELECT id, purchase_order_no, order_no, batch_no, purchase_order_key, order_key, batch_no_key,
                    intake_date, pi, owner, status, updated_at
             FROM intake_batches
             WHERE ({" OR ".join(clauses)}) AND id <> ?

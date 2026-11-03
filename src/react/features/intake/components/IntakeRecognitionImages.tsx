@@ -8,6 +8,7 @@ import type {
 } from "../../../api/contracts";
 import { HelpPopover } from "../../../components/ui";
 import { IntakeRecognitionReview } from "./IntakeRecognitionReview";
+import { normalizeIntakeOrderIdentifiers } from "../../../../domain/intake";
 
 type LocalImage = IntakeRecognitionImageInput & { key: string };
 
@@ -32,6 +33,7 @@ export function IntakeRecognitionHelp() {
 
 const FIELD_LABELS: Record<string, string> = {
   purchaseOrderNo: "采购单号",
+  orderNo: "订单编号",
   batchNo: "批次编号",
   iacuc: "IACUC 编号",
   supplier: "购买单位",
@@ -60,6 +62,8 @@ const FIELD_LABELS: Record<string, string> = {
 
 type SourceField = [keyof IntakeRecognitionSource, string];
 const HUSBANDRY_FIELDS: SourceField[] = [
+  ["purchaseOrderNo", "采购单号"],
+  ["orderNo", "订单编号"],
   ["iacuc", "IACUC 编号"],
   ["batchNo", "批次编号"],
   ["project", "项目"],
@@ -80,6 +84,7 @@ const HUSBANDRY_FIELDS: SourceField[] = [
 ];
 const PURCHASE_FIELDS: SourceField[] = [
   ["purchaseOrderNo", "采购单号"],
+  ["orderNo", "订单编号"],
   ["batchNo", "批次编号"],
   ["productName", "商品名称"],
   ["specification", "规格"],
@@ -151,7 +156,10 @@ function RecognitionSources({ sources, imageNames }: { sources: IntakeRecognitio
               {fields
                 .filter(([field], fieldIndex) => fields.findIndex(([key]) => key === field) === fieldIndex)
                 .map(([field, label]) => {
-                  const value = source[field];
+                  const value =
+                    field === "purchaseOrderNo" || field === "orderNo"
+                      ? normalizeIntakeOrderIdentifiers(source)[field]
+                      : source[field];
                   if (value === null || value === undefined || value === "") {
                     if (field !== "batchNo") return null;
                     return <li key={`${field}-${label}`}>{label}：未识别，需核对</li>;

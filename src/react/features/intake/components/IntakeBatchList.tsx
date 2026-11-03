@@ -13,6 +13,8 @@ import {
   intakePurposeLabel,
   isDirectSampling,
   canConfirmIntakeReceipt,
+  normalizeIntakeBatchNo,
+  normalizeIntakeOrderIdentifiers,
 } from "../../../../domain/intake";
 import { IntakeSummaryExport } from "./IntakeSummaryExport";
 import { IntakeStatistics } from "./IntakeStatistics";
@@ -131,6 +133,8 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
       [
         { key: "status", label: "状态", width: 82 },
         { key: "intakePurpose", label: "接收用途", width: 100 },
+        { key: "purchaseOrderNo", label: "采购单号", width: 168 },
+        { key: "orderNo", label: "订单编号", width: 180 },
         { key: "batchNo", label: "批次号", width: 140 },
         { key: "supplier", label: "购买单位", width: 128 },
         { key: "pi", label: "项目负责人", width: 110 },
@@ -162,15 +166,18 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
             <Tag color={isDirectSampling(item) ? "blue" : undefined}>{intakePurposeLabel(item.intakePurpose)}</Tag>
           );
         if (key === "cardCount") return isDirectSampling(item) ? "无需笼卡" : item.finalCardCount;
-        const value = item[key];
+        const value =
+          key === "purchaseOrderNo" || key === "orderNo" ? normalizeIntakeOrderIdentifiers(item)[key] : item[key];
         const text =
           value == null || value === ""
             ? key === "intakeDate"
               ? "待定"
               : "-"
-            : key === "pi" || key === "owner"
-              ? formatPersonNames(String(value))
-              : String(value);
+            : key === "batchNo"
+              ? normalizeIntakeBatchNo(value)
+              : key === "pi" || key === "owner"
+                ? formatPersonNames(String(value))
+                : String(value);
         if (key === "owner") {
           return <ProjectPeopleCopyButton item={item} disabled={loading} />;
         }
@@ -338,9 +345,13 @@ function IntakeColumnTitle({
         ? (intakeStatusLabel(option.value as IntakeBatchStatus) ?? option.label)
         : column === "intakePurpose"
           ? intakePurposeLabel(option.value)
-          : column === "intakeDate" && !option.value
-            ? "待定"
-            : option.label,
+          : column === "batchNo"
+            ? normalizeIntakeBatchNo(option.label)
+            : column === "purchaseOrderNo"
+              ? normalizeIntakeOrderIdentifiers({ purchaseOrderNo: option.label }).purchaseOrderNo
+              : column === "intakeDate" && !option.value
+                ? "待定"
+                : option.label,
   }));
 
   return (

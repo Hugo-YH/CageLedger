@@ -212,6 +212,37 @@ export function missingIntakeRequiredFields(item: IntakeBatch, { forPrint = fals
   return missing;
 }
 
+export function normalizeIntakeBatchNo(value: unknown): string {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/[（(]\s*([^()（）]+?)\s*[)）]/g, "（$1）");
+  const standard = normalized.match(/^（([A-Z]{1,6}\d{4,})）\s*(\d{6,})$/i);
+  return standard ? `（${standard[1].toUpperCase()}）${standard[2]}` : normalized;
+}
+
+export function normalizeIntakeOrderIdentifiers(input: { purchaseOrderNo?: unknown; orderNo?: unknown }): {
+  purchaseOrderNo: string;
+  orderNo?: string;
+} {
+  let purchaseOrderNo = String(input.purchaseOrderNo ?? "").trim();
+  let orderNo = String(input.orderNo ?? "").trim();
+  const legacyOrder = purchaseOrderNo.match(/^DC(\d{13})(\d{2})$/i);
+  if (legacyOrder && orderNo && orderNo.toUpperCase() !== purchaseOrderNo.toUpperCase()) {
+    return { purchaseOrderNo, orderNo };
+  }
+  if (legacyOrder) {
+    orderNo = purchaseOrderNo.toUpperCase();
+    purchaseOrderNo = `C${legacyOrder[1]}`;
+  }
+  const order = orderNo.match(/^DC(\d{13})(\d{2})$/i);
+  if (order) {
+    orderNo = orderNo.toUpperCase();
+    if (!purchaseOrderNo) purchaseOrderNo = `C${order[1]}`;
+  }
+  if (/^C\d{13}$/i.test(purchaseOrderNo)) purchaseOrderNo = purchaseOrderNo.toUpperCase();
+  return { purchaseOrderNo, ...(orderNo || "orderNo" in input ? { orderNo } : {}) };
+}
+
 export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: string[] = []): IntakeBatch {
   const directSampling = isDirectSampling(item);
   const species =
@@ -242,10 +273,8 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
     id: String(item.id || createClientId()),
     rawMessage: String(item.rawMessage || ""),
     ...(item.recognition ? { recognition: item.recognition } : {}),
-    purchaseOrderNo: String(item.purchaseOrderNo || "").trim(),
-    batchNo: String(item.batchNo || "")
-      .trim()
-      .replace(/[（(]\s*([^()（）]+?)\s*[)）]/g, "（$1）"),
+    ...normalizeIntakeOrderIdentifiers(item),
+    batchNo: normalizeIntakeBatchNo(item.batchNo),
     iacuc: String(item.iacuc || "")
       .trim()
       .toUpperCase(),
@@ -296,10 +325,18 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
     ? `（${batchMatch[1].toUpperCase()}）${batchMatch[2]}`
     : matchField(raw, ["饲养需求批次号", "批次号"]);
   const iacuc = batchMatch?.[1]?.toUpperCase() || "";
-  const purchaseOrderNo =
-    source.match(/锐[竞竟](?:采购)?(?:单号|订单编号|采购订单编号)?\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})/i)?.[1] ||
-    source.match(/(?:采购(?:申请)?单号|采购订单(?:编号|号))\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})/i)?.[1] ||
-    "";
+  const purchaseNumbers = [
+    ...source.matchAll(
+      /(?:锐[竞竟](?:采购)?(?:单号|订单编号|采购订单编号)?|采购(?:申请)?单号|采购订单(?:编号|号))\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})(?![A-Z0-9])/gi,
+    ),
+  ].map((match) => match[1]);
+  const orderNumber = source.match(
+    /(?<!采购)(?:订单编号|订单号)\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})(?![A-Z0-9])/i,
+  )?.[1];
+  const { purchaseOrderNo, orderNo } = normalizeIntakeOrderIdentifiers({
+    purchaseOrderNo: purchaseNumbers.find((number) => !/^DC/i.test(number)) || "",
+    orderNo: orderNumber || purchaseNumbers.find((number) => /^DC/i.test(number)) || "",
+  });
   const referenceYear = Number(
     batchMatch?.[2]?.slice(0, 4) || purchaseOrderNo.match(/20\d{2}/)?.[0] || new Date().getFullYear(),
   );
@@ -342,6 +379,7 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
       rawMessage: raw,
       intakePurpose: inferIntakePurpose(raw),
       purchaseOrderNo,
+      orderNo,
       batchNo,
       iacuc,
       supplier: abbreviateSupplier(supplier),

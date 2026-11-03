@@ -5,6 +5,7 @@ export interface ReceptionRecord {
   batchId: string;
   batchNo: string;
   purchaseOrderNo: string;
+  orderNo?: string;
   iacuc: string;
   pi: string;
   owner: string;
@@ -39,6 +40,7 @@ export interface ReceptionRecord {
 export type ReceptionFilterColumn =
   | "batchNo"
   | "purchaseOrderNo"
+  | "orderNo"
   | "iacuc"
   | "pi"
   | "owner"

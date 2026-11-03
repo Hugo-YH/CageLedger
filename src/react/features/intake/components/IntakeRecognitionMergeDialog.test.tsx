@@ -140,6 +140,39 @@ it("shows blocked and multiple matches without offering an update action", () =>
   expect(screen.queryByRole("button", { name: "确认更新原预约" })).not.toBeInTheDocument();
 });
 
+it("keeps distinct full order suffixes visible and follows the server's merge conflict", () => {
+  const preview = response();
+  preview.items[0].item.purchaseOrderNo = "C2026110229486";
+  preview.items[0].item.orderNo = "DC202611022948601";
+  preview.items[0].matchedFields = ["purchaseOrderNo", "orderNo"];
+  preview.items[0].classification = "association_conflict";
+  preview.items[0].canMerge = false;
+  preview.items[0].reason = "完整订单编号不一致，请核对";
+  preview.items[0].changes = [
+    {
+      field: "orderNo",
+      before: "DC202611022948601",
+      incoming: "DC202611022948607",
+      after: "DC202611022948601",
+      source: "image",
+    },
+  ];
+  render(
+    <IntakeRecognitionMergeDialog
+      preview={preview}
+      pending={false}
+      error=""
+      onClose={vi.fn()}
+      onConfirm={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+  expect(screen.getByText("订单编号：DC202611022948601")).toBeInTheDocument();
+  expect(screen.getByRole("cell", { name: "DC202611022948607" })).toBeInTheDocument();
+  expect(screen.getByRole("cell", { name: "订单编号" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "确认更新原预约" })).not.toBeInTheDocument();
+});
+
 it("blocks close and duplicate confirmation while a merge write is pending", () => {
   const onClose = vi.fn();
   const onConfirm = vi.fn();

@@ -23,7 +23,7 @@ import type {
   ReceptionSortKey,
 } from "../../../contracts/reception";
 import { formatPersonNames } from "../../../domain/personNames";
-import { abbreviateSupplier } from "../../../domain/intake";
+import { abbreviateSupplier, normalizeIntakeOrderIdentifiers } from "../../../domain/intake";
 import { queryKeys } from "../../api/queryKeys";
 import { useSession } from "../../api/session";
 import {
@@ -45,7 +45,8 @@ const selectionLimit = 200;
 const emptyFilterValues: string[] = [];
 const columnDefinitions: Array<{ key: ReceptionSortKey; label: string; width: number }> = [
   { key: "receiptDate", label: "接收日期", width: 150 },
-  { key: "purchaseOrderNo", label: "采购订单编号", width: 160 },
+  { key: "purchaseOrderNo", label: "采购单号", width: 160 },
+  { key: "orderNo", label: "订单编号", width: 180 },
   { key: "batchNo", label: "批次编号", width: 160 },
   { key: "iacuc", label: "IACUC编号", width: 160 },
   { key: "pi", label: "项目负责人", width: 120 },
@@ -185,7 +186,8 @@ export function ReceptionView() {
           ) : (
             item.receiptDates.join("、") || "—"
           );
-        const value = item[key];
+        const value =
+          key === "purchaseOrderNo" || key === "orderNo" ? normalizeIntakeOrderIdentifiers(item)[key] : item[key];
         const text =
           key === "supplier"
             ? abbreviateSupplier(String(value || ""))
@@ -194,7 +196,7 @@ export function ReceptionView() {
               : value;
         return (
           <span className="table-cell-text" title={String((key === "supplier" ? value : text) ?? "")}>
-            {text === "" || text == null ? "—" : text}
+            {text === "" || text == null ? (key === "purchaseOrderNo" || key === "orderNo" ? "-" : "—") : text}
           </span>
         );
       },
@@ -480,7 +482,11 @@ function ReceptionColumnTitle({
     <FilterableColumnTitle
       label={label}
       values={params.columnFilters[column] ?? emptyFilterValues}
-      options={options.data?.items ?? []}
+      options={(options.data?.items ?? []).map((option) =>
+        column === "purchaseOrderNo"
+          ? { ...option, label: normalizeIntakeOrderIdentifiers({ purchaseOrderNo: option.label }).purchaseOrderNo }
+          : option,
+      )}
       dateHierarchy={column === "receiptDate" ? "day" : undefined}
       filterable={filterable}
       loading={options.isFetching}

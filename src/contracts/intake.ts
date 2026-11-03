@@ -50,6 +50,7 @@ export interface IntakeRecognitionSource {
   intakePurpose?: IntakePurpose | "";
   finalCardCount?: number | null;
   purchaseOrderNo?: string;
+  orderNo?: string;
   productName?: string;
   specification?: string;
   supplier?: string;
@@ -110,6 +111,7 @@ export interface IntakeBatch {
   rawMessage: string;
   recognition?: IntakeRecognitionEvidence;
   purchaseOrderNo: string;
+  orderNo?: string;
   batchNo: string;
   iacuc: string;
   supplier: string;
@@ -160,6 +162,7 @@ export type IntakeBatchListItem = Pick<
   | "quarantineStatus"
   | "quarantineBatches"
   | "purchaseOrderNo"
+  | "orderNo"
   | "batchNo"
   | "iacuc"
   | "supplier"
@@ -196,11 +199,12 @@ export interface IntakeWriteResponse {
   auditLogs?: Record<string, unknown>[];
 }
 
-export type IntakeDuplicateMatchedField = "purchaseOrderNo" | "batchNo";
+export type IntakeDuplicateMatchedField = "purchaseOrderNo" | "orderNo" | "batchNo";
 
 export interface IntakeDuplicateItem {
   id: string;
   purchaseOrderNo: string;
+  orderNo?: string;
   batchNo: string;
   intakeDate: string;
   pi: string;
@@ -218,7 +222,7 @@ export interface IntakeDuplicateDetails {
 export interface IntakeRecognitionMergeCandidate {
   item: IntakeBatch;
   matchedFields: IntakeDuplicateMatchedField[];
-  classification: "same_pair" | "batch_only" | "purchase_only" | "association_conflict";
+  classification: "same_pair" | "batch_only" | "purchase_only" | "order_only" | "association_conflict";
   canMerge: boolean;
   reason: string;
   mergedItem: IntakeBatch | null;

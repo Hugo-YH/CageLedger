@@ -53,7 +53,7 @@ def generate(document):
         sheet.row_dimensions[index].height = body_height
         project = line["project"]
         values = [
-            line["purchaseOrderNo"],
+            line.get("orderNo") or line["purchaseOrderNo"],
             project["pi"],
             project["iacuc"],
             project["projectEndDate"],

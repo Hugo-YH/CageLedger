@@ -1,13 +1,14 @@
 import { Alert, Card, Flex, Image, Table, Tag, Typography, type TableProps } from "antd";
 
 import type { IntakeRecognitionMergeCandidate, IntakeRecognitionMergePreview } from "../../../../contracts/intake";
-import { intakeStatusLabel } from "../../../../domain/intake";
+import { intakeStatusLabel, normalizeIntakeOrderIdentifiers } from "../../../../domain/intake";
 import { ActionButton } from "../../../components/ui";
 import { ModalShell } from "../../../components/WorkspaceUi";
 
 const FIELD_LABELS: Record<string, string> = {
   rawMessage: "预约文字",
   purchaseOrderNo: "采购单号",
+  orderNo: "订单编号",
   batchNo: "批次号",
   iacuc: "IACUC",
   intakePurpose: "接收用途",
@@ -115,9 +116,12 @@ export function IntakeRecognitionMergeDialog({
             <Card
               key={match.item.id}
               size="small"
-              title={`${match.item.batchNo || "无批次号"} · ${match.item.purchaseOrderNo || "无采购单号"}`}
+              title={`${match.item.batchNo || "无批次号"} · ${normalizeIntakeOrderIdentifiers(match.item).purchaseOrderNo || "无采购单号"}`}
             >
               <Flex vertical gap={12}>
+                <Typography.Text>
+                  订单编号：{normalizeIntakeOrderIdentifiers(match.item).orderNo || "未填写"}
+                </Typography.Text>
                 <Typography.Text>
                   匹配：{match.matchedFields.map((field) => FIELD_LABELS[field]).join("、")}；状态：
                   {intakeStatusLabel(match.item.status)}

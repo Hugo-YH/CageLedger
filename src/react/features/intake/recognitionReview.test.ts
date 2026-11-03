@@ -33,6 +33,22 @@ const evidence: IntakeRecognitionEvidence = {
 };
 
 describe("buildRecognitionReview", () => {
+  it("compares purchase and complete order IDs under separate labels without changing source facts", () => {
+    const identifiers: IntakeRecognitionEvidence = {
+      extractedText: "",
+      fieldSources: {},
+      warnings: ["采购单号冲突，请核对。", "订单编号不一致，请核对。"],
+      sources: [
+        { imageIndex: 1, kind: "husbandry", purchaseOrderNo: "C2026000000000", orderNo: "DC202600000000001" },
+        { imageIndex: 2, kind: "purchase", purchaseOrderNo: "DC202611022948607" },
+      ],
+    };
+    expect(buildRecognitionReview(identifiers).comparisons).toEqual([
+      { key: "purchaseOrderNo", label: "采购单号", husbandry: "C2026000000000", purchase: "C2026110229486" },
+      { key: "orderNo", label: "订单编号", husbandry: "DC202600000000001", purchase: "DC202611022948607" },
+    ]);
+    expect(identifiers.sources?.[1].purchaseOrderNo).toBe("DC202611022948607");
+  });
   it("groups reported conflicts and preserves the original quantity and additional review instruction", () => {
     const result = buildRecognitionReview(evidence);
     expect(result.comparisons.map((row) => row.key)).toEqual(["strain", "specification", "quantity"]);

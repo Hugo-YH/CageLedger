@@ -288,6 +288,65 @@ class RecognitionMergeTests(unittest.TestCase):
         )
         self.assertEqual(saved["recognition"]["images"], original["recognition"]["images"])
 
+    def test_batch_brackets_are_canonical_on_save_and_legacy_source_is_preserved(self):
+        raw = "饲养需求批次号：(z2026001) 2026102101"
+        item = self.save(
+            batch(
+                "canonical",
+                batchNo="(z2026001) 2026102101",
+                rawMessage=raw,
+                recognition={"fieldSources": {"batchNo": raw}},
+            ),
+            recognitionImages=[image_input()],
+        )
+        self.assertEqual(item["batchNo"], "（Z2026001）2026102101")
+        self.assertEqual(item["rawMessage"], raw)
+        self.assertEqual(item["recognition"]["fieldSources"]["batchNo"], raw)
+        legacy = {**item, "batchNo": "(z2026001) 2026102101"}
+        with self.connect() as conn:
+            upsert_intake_batch(conn, legacy)
+        before = self.snapshot()
+        candidate = self.preview()["items"][0]
+        self.assertEqual(self.snapshot(), before)
+        saved = self.merge(candidate)
+        self.assertEqual(saved["batchNo"], "（Z2026001）2026102101")
+        self.assertIn(raw, saved["rawMessage"])
+        self.assertEqual(saved["recognition"]["images"], item["recognition"]["images"])
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT batch_no,batch_no_key,payload FROM intake_batches WHERE id=?", (saved["id"],)
+            ).fetchone()
+            self.assertEqual(row["batch_no"], "（Z2026001）2026102101")
+            self.assertEqual(row["batch_no_key"], "(Z2026001)2026102101")
+            self.assertEqual(json.loads(row["payload"])["batchNo"], row["batch_no"])
+
+    def test_batch_filter_groups_legacy_bracket_styles_and_accepts_either_style(self):
+        from server_app.repositories.entities import list_intake_batch_filter_options, list_intake_batches_page
+        from server_app.repositories.filter_options import filtered_where
+        from server_app.web.entity_contracts import ENTITY_ORDER_BY
+
+        first = self.original()
+        second = self.save(batch("another"))
+        with self.connect() as conn:
+            upsert_intake_batch(conn, {**first, "batchNo": "(Z2026001) 2026102101"})
+            upsert_intake_batch(conn, {**second, "batchNo": "（Z2026001）2026102101"})
+        before = self.snapshot()
+        with self.connect() as conn:
+            conn.execute("PRAGMA query_only=ON")
+            options = list_intake_batch_filter_options(conn, {}, filtered_where, "batchNo")["items"]
+            self.assertEqual(
+                options, [{"value": "(Z2026001)2026102101", "label": "（Z2026001）2026102101", "count": 2}]
+            )
+            for value in ("(Z2026001)2026102101", "（Z2026001） 2026102101"):
+                result = list_intake_batches_page(
+                    conn,
+                    {"limit": 20, "offset": 0, "view": "summary", "columnFilters": {"batchNo": [value]}},
+                    filtered_where,
+                    ENTITY_ORDER_BY,
+                )
+                self.assertEqual(result["page"]["total"], 2)
+        self.assertEqual(self.snapshot(), before)
+
     def test_read_adapter_requires_login_and_never_writes(self):
         handler = Mock()
         handler.current_user.return_value = None

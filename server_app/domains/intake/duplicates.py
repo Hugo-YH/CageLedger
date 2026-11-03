@@ -6,12 +6,12 @@ import re
 
 from server_app.domains.administration import audit_event
 from server_app.domains.intake.repository import find_duplicate_identifiers
-from server_app.shared.intake_identifiers import intake_identifier_values
+from server_app.shared.intake_identifiers import intake_identifier_values, intake_order_identifier_values
 
 
 class IntakeDuplicateConfirmationRequired(Exception):
     def __init__(self, details):
-        super().__init__("采购单号或批次号已存在，请核对后确认保存。")
+        super().__init__("采购单号、订单编号或批次号已存在，请核对后确认保存。")
         self.details = details
 
 
@@ -35,13 +35,17 @@ def confirm_duplicate_identifiers(conn, item, exclude_id, confirmation):
     _, purchase_key, batch_key = intake_identifier_values(item)
     if purchase_order_is_description(purchase_key):
         purchase_key = ""
-    rows = find_duplicate_identifiers(conn, purchase_key, batch_key, exclude_id)
+    _, order_key = intake_order_identifier_values(item)
+    if purchase_order_is_description(order_key):
+        order_key = ""
+    rows = find_duplicate_identifiers(conn, purchase_key, batch_key, exclude_id, order_no_key=order_key)
     if not rows:
         return None
     items = [
         {
             "id": row["id"],
             "purchaseOrderNo": row["purchase_order_no"],
+            "orderNo": row["order_no"],
             "batchNo": row["batch_no"],
             "intakeDate": row["intake_date"],
             "pi": row["pi"],
@@ -51,6 +55,7 @@ def confirm_duplicate_identifiers(conn, item, exclude_id, confirmation):
                 name
                 for name, key, actual in (
                     ("purchaseOrderNo", purchase_key, row["purchase_order_key"]),
+                    ("orderNo", order_key, row["order_key"]),
                     ("batchNo", batch_key, row["batch_no_key"]),
                 )
                 if key and key == actual
@@ -59,7 +64,7 @@ def confirm_duplicate_identifiers(conn, item, exclude_id, confirmation):
         for row in rows
     ]
     fingerprint = json.dumps(
-        [item["id"], exclude_id, purchase_key, batch_key, rows], sort_keys=True, ensure_ascii=False
+        [item["id"], exclude_id, purchase_key, order_key, batch_key, rows], sort_keys=True, ensure_ascii=False
     )
     token = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
     if not isinstance(confirmation, str) or confirmation != token:
@@ -68,6 +73,7 @@ def confirm_duplicate_identifiers(conn, item, exclude_id, confirmation):
         )
     return {
         "purchaseOrderNo": item.get("purchaseOrderNo", ""),
+        "orderNo": item.get("orderNo", ""),
         "batchNo": item.get("batchNo", ""),
         "matchCount": len(items),
         "matches": [{"id": item["id"], "matchedFields": item["matchedFields"]} for item in items],
@@ -80,7 +86,7 @@ def duplicate_confirmation_event(actor, item, confirmation, at):
         "intake_batch.duplicate_confirmed",
         "intake_batch",
         item["id"],
-        f"{actor['displayName']} 确认采购单号或批次号重复后仍然保存待接收批次 {item.get('batchNo', '')}",
+        f"{actor['displayName']} 确认采购单号、订单编号或批次号重复后仍然保存待接收批次 {item.get('batchNo', '')}",
         [],
         at,
         None,

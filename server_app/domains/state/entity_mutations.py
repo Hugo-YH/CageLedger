@@ -14,6 +14,7 @@ from server_app.domains.state.entity_rules import (
 )
 from server_app.domains.state.entity_rules import validate_entity_payload, validate_entity_references
 from server_app.shared import as_int, clean_text, new_id, now_iso
+from server_app.shared.intake_identifiers import normalize_intake_order_identifiers
 
 
 def normalize_entity_batch(collection, items, method):
@@ -146,6 +147,9 @@ def normalize_intake_batches_for_state_write(old_state, state):
     for raw_batch in state.get("intakeBatches", []):
         old_item = old_batches.get(raw_batch.get("id"))
         batch = dict(raw_batch)
+        if old_item and "orderNo" not in batch:
+            batch["orderNo"] = old_item.get("orderNo", "")
+        batch = normalize_intake_order_identifiers(batch)
         if old_item and is_direct_sampling(old_item) and "intakePurpose" not in batch:
             batch["intakePurpose"] = intake_purpose(old_item)
         if batch.get("intakePurpose", "housing") not in ("housing", "direct_sampling"):

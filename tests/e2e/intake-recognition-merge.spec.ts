@@ -1,5 +1,5 @@
 import type { IntakeBatch, IntakeRecognitionMergePreview } from "../../src/contracts/intake";
-import { ensureTestInfrastructure, expect, openIntakeEntry, test } from "./fixtures";
+import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAD0lEQVR4nGP4TwAwjAwFAIS1/wF0QtmAAAAAAElFTkSuQmCC";
@@ -201,7 +201,8 @@ test("standard batch-number spacing matches the saved image original through bot
   expect(room.ok(), await room.text()).toBe(true);
   await page.reload();
   await openIntakeEntry(page);
-  const originalBatchNo = "（Z2025170）  2026102902";
+  const originalBatchNo = "(Z2025170)  2026102902";
+  const savedBatchNo = "（Z2025170）2026102902";
   const purchaseOrderNo = "C2026110229486";
   const item = await original(page, `spacing-${Date.now()}`, {
     batchNo: originalBatchNo,
@@ -218,7 +219,7 @@ test("standard batch-number spacing matches the saved image original through bot
       fieldSources: { quantity: "原图6只", roomName: "原图8101" },
     },
   });
-  expect(item.batchNo).toBe(originalBatchNo);
+  expect(item.batchNo).toBe(savedBatchNo);
   const image = item.recognition!.images![0];
   const imageBefore = await (await page.request.get(image.url)).body();
 
@@ -235,7 +236,7 @@ test("standard batch-number spacing matches the saved image original through bot
   const batchOnlyPreview = (await batchOnly.json()) as IntakeRecognitionMergePreview;
   expect(batchOnlyPreview.total).toBe(1);
   expect(batchOnlyPreview.items[0]).toMatchObject({
-    item: { id: item.id, batchNo: originalBatchNo },
+    item: { id: item.id, batchNo: savedBatchNo },
     matchedFields: ["batchNo"],
     classification: "batch_only",
     canMerge: true,
@@ -270,7 +271,7 @@ test("standard batch-number spacing matches the saved image original through bot
   const updated = await saved(page, item.id);
   expect(updated).toMatchObject({
     id: item.id,
-    batchNo: originalBatchNo,
+    batchNo: savedBatchNo,
     purchaseOrderNo,
     quantity: 6,
     roomName: "8101",
@@ -287,4 +288,46 @@ test("standard batch-number spacing matches the saved image original through bot
   const afterPreview = (await matching.json()) as IntakeRecognitionMergePreview;
   expect(afterPreview.total).toBe(1);
   expect(afterPreview.items[0].item.id).toBe(item.id);
+});
+
+test("purchase requests and full orders are separately saved, visible and checked during image merge", async ({
+  page,
+}, info) => {
+  await setup(page);
+  const purchase = "C2026080333568";
+  const order = "DC202608033356801";
+  const item = await original(page, `separate-orders-${Date.now()}`, { purchaseOrderNo: order });
+  expect(item).toMatchObject({ purchaseOrderNo: purchase, orderNo: order });
+  const image = item.recognition!.images![0];
+  const imageBefore = await (await page.request.get(image.url)).body();
+  const text = message(item);
+  await page.getByLabel("预约消息", { exact: true }).fill(text);
+  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "核对已有图片预约", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(purchase);
+  await expect(dialog).toContainText(order);
+  await dialog.getByRole("button", { name: "确认更新原预约", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const updated = await saved(page, item.id);
+  expect(updated).toMatchObject({ id: item.id, purchaseOrderNo: purchase, orderNo: order, intakeDate: "2026-11-06" });
+  expect(updated.rawMessage).toContain(item.rawMessage);
+  expect(updated.recognition!.images).toEqual(item.recognition!.images);
+  expect(await (await page.request.get(image.url)).body()).toEqual(imageBefore);
+
+  await page.getByLabel("预约消息", { exact: true }).fill(`${text}\n订单编号：${order.slice(0, -2)}07`);
+  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("已对应其他编号");
+  await expect(dialog.getByRole("button", { name: "确认更新原预约", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "取消合并，保留草稿", exact: true }).click();
+
+  await openNavigationEntry(page, "笼卡管理", "待接收批次");
+  const row = page.getByRole("row").filter({ hasText: item.batchNo });
+  await expect(row).toContainText(purchase);
+  await expect(row).toContainText(order);
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.getByLabel("采购单号", { exact: true })).toHaveValue(purchase);
+  await expect(page.getByLabel("订单编号", { exact: true })).toHaveValue(order);
+  await page.screenshot({ path: info.outputPath("separate-purchase-and-order.png"), animations: "disabled" });
 });

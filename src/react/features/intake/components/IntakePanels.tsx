@@ -221,7 +221,7 @@ export function IntakeEntryPanel({
             )}
           </Row>
           <Row gutter={[16, 16]}>
-            <Col lg={8} md={12} xs={24}>
+            <Col lg={6} md={12} xs={24}>
               <Field
                 label="购买单位"
                 required
@@ -229,14 +229,17 @@ export function IntakeEntryPanel({
                 onChange={(value) => onUpdate("supplier", value)}
               />
             </Col>
-            <Col lg={8} md={12} xs={24}>
+            <Col lg={6} md={12} xs={24}>
               <Field
                 label="采购单号"
                 value={draft.purchaseOrderNo}
                 onChange={(value) => onUpdate("purchaseOrderNo", value)}
               />
             </Col>
-            <Col lg={8} md={12} xs={24}>
+            <Col lg={6} md={12} xs={24}>
+              <Field label="订单编号" value={draft.orderNo ?? ""} onChange={(value) => onUpdate("orderNo", value)} />
+            </Col>
+            <Col lg={6} md={12} xs={24}>
               <Field label="批次号" value={draft.batchNo} onChange={(value) => onUpdate("batchNo", value)} />
             </Col>
           </Row>

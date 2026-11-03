@@ -79,7 +79,16 @@ def record(row, source, *, complete=False):
     item.update(
         {
             key: text(batch.get(key))
-            for key in ("batchNo", "purchaseOrderNo", "iacuc", "sex", "roomName", "supplier", "specification")
+            for key in (
+                "batchNo",
+                "purchaseOrderNo",
+                "orderNo",
+                "iacuc",
+                "sex",
+                "roomName",
+                "supplier",
+                "specification",
+            )
         }
     )
     item.update(
@@ -199,6 +208,7 @@ def registration_lines(item, batch):
             },
             "source": item["source"],
             "purchaseOrderNo": item["purchaseOrderNo"],
+            "orderNo": item["orderNo"],
             "batchNo": item["batchNo"],
             "actualReceiptDate": (
                 item["receiptDates"][0]
@@ -253,6 +263,7 @@ def confirmed_lines(item, batch, saved):
                 },
                 "source": {**item["source"], "registrationUpdatedAt": saved["updatedAt"]},
                 "purchaseOrderNo": item["purchaseOrderNo"],
+                "orderNo": item["orderNo"],
                 "batchNo": item["batchNo"],
                 "actualReceiptDate": actual_date,
                 "originalReceiptDate": item["receiptDates"][0] if item["receiptDateSource"] == "original" else "",

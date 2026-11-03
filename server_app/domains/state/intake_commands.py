@@ -64,6 +64,8 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
             raw_item, merge_changes = confirmed_merge(
                 conn, existing, payload["recognitionMerge"], payload.get("expectedUpdatedAt")
             )
+        if method == "PUT" and existing and "orderNo" not in raw_item:
+            raw_item["orderNo"] = existing.get("orderNo", "")
         raw_item.pop("recognitionImages", None)
         # Only server-owned metadata may reference persisted images. Old clients
         # omitting provenance retain the existing record instead of removing it.
