@@ -12,6 +12,7 @@ export interface FilterableColumnTitleProps {
   values: string[];
   options: TableFilterOption[];
   dateHierarchy?: DateFilterHierarchy;
+  normalizeSearchText?: (text: string) => string;
   loading?: boolean;
   error?: string;
   onRetry?: () => void;
@@ -26,6 +27,7 @@ export function FilterableColumnTitle({
   values,
   options,
   dateHierarchy,
+  normalizeSearchText,
   loading = false,
   error,
   onRetry,
@@ -81,9 +83,12 @@ export function FilterableColumnTitle({
     );
   }
 
-  const visibleOptions = options.filter((option) =>
-    `${option.label} ${option.value}`.toLocaleLowerCase("zh-CN").includes(search.trim().toLocaleLowerCase("zh-CN")),
-  );
+  const searchText = search.trim();
+  const searchKey = (normalizeSearchText ? normalizeSearchText(searchText) : searchText).toLocaleLowerCase("zh-CN");
+  const visibleOptions = options.filter((option) => {
+    const text = `${option.label} ${option.value}`;
+    return (normalizeSearchText ? normalizeSearchText(text) : text).toLocaleLowerCase("zh-CN").includes(searchKey);
+  });
   function setPopoverOpen(next: boolean) {
     if (next) {
       setPending(values);

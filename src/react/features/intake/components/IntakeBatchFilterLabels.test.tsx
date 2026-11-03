@@ -66,7 +66,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("shows legacy batch-number filters with Chinese brackets while applying the original server values", async () => {
+it("searches batch numbers across bracket styles and applies the original complete server values", async () => {
   const onFilter = vi.fn();
   const params: IntakeListParams = { limit: 10, offset: 0 };
   render(
@@ -109,6 +109,28 @@ it("shows legacy batch-number filters with Chinese brackets while applying the o
     await waitFor(() => expect(within(panel).getByText(label, { exact: true })).toBeVisible());
   expect(within(panel).queryByText("(Z2025117)2026050808", { exact: true })).not.toBeInTheDocument();
   expect(within(panel).queryByText("(Z2026026)2026042806", { exact: true })).not.toBeInTheDocument();
+  const search = within(panel).getByRole("searchbox", { name: "搜索批次号筛选选项" });
+  for (const [code, suffix] of [
+    ["Z2025117", "2026050808"],
+    ["Z2025170", "2026102902"],
+  ]) {
+    for (const query of [
+      `（${code}）${suffix}`,
+      `(${code})${suffix}`,
+      `（${code})${suffix}`,
+      `(${code}）${suffix}`,
+      ` (${code.toLowerCase()}）${suffix} `,
+      code,
+      suffix,
+    ]) {
+      fireEvent.change(search, { target: { value: query } });
+      expect(within(panel).getAllByRole("checkbox")).toHaveLength(1);
+      expect(within(panel).getByText(`（${code}）${suffix}`, { exact: true })).toBeVisible();
+    }
+  }
+  fireEvent.change(search, { target: { value: "（Z2025117)2026050809" } });
+  expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument();
+  fireEvent.change(search, { target: { value: "" } });
   for (const checkbox of within(panel).getAllByRole("checkbox")) fireEvent.click(checkbox);
   expect(onFilter).not.toHaveBeenCalled();
   fireEvent.click(within(panel).getByRole("button", { name: "应用" }));

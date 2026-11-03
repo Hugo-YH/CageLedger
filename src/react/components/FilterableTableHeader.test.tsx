@@ -68,6 +68,27 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("keeps bracket styles distinct when no search normalization is requested", async () => {
+    renderFilter(
+      <FilterableColumnTitle
+        label="购买单位"
+        values={[]}
+        options={[
+          { value: "cn", label: "供应商（分部）", count: 1 },
+          { value: "en", label: "供应商(分部)", count: 1 },
+        ]}
+        onSort={vi.fn()}
+        onFilter={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "筛选购买单位" }));
+    const panel = await screen.findByRole("group", { name: "筛选购买单位选项" });
+    fireEvent.change(within(panel).getByRole("searchbox"), { target: { value: "(分部)" } });
+    expect(within(panel).getAllByRole("checkbox")).toHaveLength(1);
+    await waitFor(() => expect(within(panel).getByText("供应商(分部)", { exact: true })).toBeVisible());
+    expect(within(panel).queryByText("供应商（分部）", { exact: true })).not.toBeInTheDocument();
+  });
+
   it("distinguishes a search miss and discards unconfirmed edits on Escape", async () => {
     const onFilter = vi.fn();
     renderFilter(

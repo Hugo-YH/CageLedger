@@ -321,6 +321,10 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
   );
 });
 
+function normalizeBatchNumberSearch(text: string) {
+  return text.replace(/（/g, "(").replace(/）/g, ")");
+}
+
 function IntakeColumnTitle({
   column,
   label,
@@ -358,6 +362,7 @@ function IntakeColumnTitle({
     <FilterableColumnTitle
       label={label}
       dateHierarchy={column === "intakeDate" ? "day" : undefined}
+      normalizeSearchText={column === "batchNo" ? normalizeBatchNumberSearch : undefined}
       loading={options.isFetching}
       error={options.isError ? "无法读取筛选选项，请重试" : undefined}
       onRetry={() => void options.refetch()}
