@@ -1,6 +1,7 @@
 """Backfill lookup keys and split exact legacy orders without changing business versions."""
 
 import json
+import re
 from datetime import UTC, datetime
 
 from server_app.repositories.audit import insert_audit_events
@@ -39,8 +40,10 @@ def ensure_intake_identifier_schema(conn):
         )
         # Preserve bytes of unrelated old payloads. The complete DC value moves
         # to orderNo, while its request C value becomes purchaseOrderNo.
-        split_payload = bool(normalized["orderNo"]) and any(
-            normalized[key] != batch.get(key, "") for key in ("purchaseOrderNo", "orderNo")
+        split_payload = (
+            bool(re.fullmatch(r"DC[0-9]{15}", str(batch.get("purchaseOrderNo") or "").strip(), re.IGNORECASE))
+            and bool(normalized["orderNo"])
+            and any(normalized[key] != batch.get(key, "") for key in ("purchaseOrderNo", "orderNo"))
         )
         if changed or old_values != values or split_payload:
             payload = (

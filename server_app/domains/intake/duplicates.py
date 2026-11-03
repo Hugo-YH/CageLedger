@@ -6,7 +6,11 @@ import re
 
 from server_app.domains.administration import audit_event
 from server_app.domains.intake.repository import find_duplicate_identifiers
-from server_app.shared.intake_identifiers import intake_identifier_values, intake_order_identifier_values
+from server_app.shared.intake_identifiers import (
+    intake_identifier_member_keys,
+    intake_identifier_values,
+    intake_order_identifier_values,
+)
 
 
 class IntakeDuplicateConfirmationRequired(Exception):
@@ -38,7 +42,12 @@ def confirm_duplicate_identifiers(conn, item, exclude_id, confirmation):
     _, order_key = intake_order_identifier_values(item)
     if purchase_order_is_description(order_key):
         order_key = ""
-    rows = find_duplicate_identifiers(conn, purchase_key, batch_key, exclude_id, order_no_key=order_key)
+    keys = intake_identifier_member_keys(item)
+    for kind in ("purchaseOrderNo", "orderNo"):
+        keys[kind] = [key for key in keys[kind] if not purchase_order_is_description(key)]
+    rows = find_duplicate_identifiers(
+        conn, purchase_key, batch_key, exclude_id, order_no_key=order_key, member_keys=keys
+    )
     if not rows:
         return None
     items = [
@@ -51,15 +60,7 @@ def confirm_duplicate_identifiers(conn, item, exclude_id, confirmation):
             "pi": row["pi"],
             "owner": row["owner"],
             "status": row["status"],
-            "matchedFields": [
-                name
-                for name, key, actual in (
-                    ("purchaseOrderNo", purchase_key, row["purchase_order_key"]),
-                    ("orderNo", order_key, row["order_key"]),
-                    ("batchNo", batch_key, row["batch_no_key"]),
-                )
-                if key and key == actual
-            ],
+            "matchedFields": row["matchedFields"],
         }
         for row in rows
     ]

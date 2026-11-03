@@ -262,6 +262,10 @@ class ImageRecognitionTests(unittest.TestCase):
         item, _, _ = ai_parse_intake_images("到货日期2026-10-26", [], [image_input()])
         self.assertEqual(item["endDate"], "2026-11-23")
         result["imageSources"][1]["batchNo"] = "（Z2026108）2026102701"
+        grouped, _, evidence = ai_parse_intake_images("", [], [image_input(), image_input("blue")])
+        self.assertEqual(len(grouped["identifiers"]["batchNos"]), 2)
+        self.assertTrue(any("多个" in warning for warning in evidence["warnings"]))
+        result["imageSources"][1]["batchNo"] = "（Z2026109）2026102701"
         with self.assertRaisesRegex(ValueError, "不一致"):
             ai_parse_intake_images("", [], [image_input(), image_input("blue")])
 

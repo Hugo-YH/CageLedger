@@ -4,7 +4,11 @@ import re
 from collections.abc import Callable
 
 from server_app.shared import as_int
-from server_app.shared.intake_identifiers import normalize_intake_batch_no, normalize_intake_order_identifiers
+from server_app.shared.intake_identifiers import (
+    identifier_iacucs,
+    normalize_intake_batch_no,
+    normalize_intake_order_identifiers,
+)
 
 
 def normalize_entity_batch(collection, items, method, normalize_payload: Callable):
@@ -118,6 +122,8 @@ def validate_entity_payload(collection, item):
     elif collection == "placementTasks" and item.get("status") not in ("pending", "reserved", "active", "cancelled"):
         raise ValueError("待进驻状态只能是 pending、reserved、active 或 cancelled")
     elif collection == "intakeBatches":
+        if len(identifier_iacucs(item)) > 1:
+            raise ValueError("不同IACUC的饲养需求请分开登记")
         quantity_value = item.get("quantity")
         purpose = item.get("intakePurpose", "housing")
         if purpose not in ("housing", "direct_sampling"):

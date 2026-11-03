@@ -16,6 +16,11 @@ from server_app.domains.intake.husbandry_period import (
     normalize_husbandry_months,
     parse_husbandry_months,
 )
+from server_app.domains.intake.identifier_recognition import (
+    identifier_candidates,
+    normalize_recognized_identifiers,
+    recognized_identifiers,
+)
 from server_app.domains.intake.recognition_evidence import (
     has_explicit_intake_date,
     normalize_image_result,
@@ -25,9 +30,9 @@ from server_app.domains.intake.recognition_images import decode_images
 from server_app.domains.intake.strain_standard import abbreviate_supplier, standardize_strain
 from server_app.services.ai import deepseek_chat_json
 from server_app.shared import clean_text
-from server_app.shared.intake_identifiers import normalize_intake_batch_no, normalize_intake_order_identifiers
+from server_app.shared.intake_identifiers import batch_identifiers_in_text, identifier_iacucs, normalize_intake_batch_no
 
-SYSTEM_RULES = """采购单号(C)与订单编号(DC)分别提取，不互相覆盖，DC完整保留两位后缀。未知格式不截断、不猜测。
+SYSTEM_RULES = """采购单号(C)与订单编号(DC)按编号本身分别提取，不被“订单号”等标题混淆，不互相覆盖，DC完整保留两位后缀。未知格式不截断、不猜测。同一预约可含多个采购单、订单和饲养需求，各字段保留全部编号以顿号分隔；不推断两两配对，不按编号数量乘动物数量。不同IACUC应分开预约。
 你是实验动物接收预约消息解析器。请从用户粘贴的预约接收文本中提取以下字段，并输出严格的 JSON 对象（不要输出 JSON 外的任何内容）：
 {
   "purchaseOrderNo": "采购申请单号，如 C2026043035083",
@@ -201,7 +206,7 @@ def _normalize_payload(payload: dict[str, Any], *, month_evidence: str = "") -> 
         result["husbandryMonths"] = months
     if intake_purpose == "direct_sampling":
         result.update({"roomName": "", "endDate": "", "husbandryDays": None})
-    return normalize_intake_order_identifiers(result)
+    return normalize_recognized_identifiers(result)
 
 
 def ai_parse_intake_message(raw_message: str, room_names: list[str] | None = None) -> dict[str, Any]:
@@ -213,6 +218,17 @@ def ai_parse_intake_message(raw_message: str, room_names: list[str] | None = Non
         user_prompt += f"\n\n可选饲养房间号：{', '.join(sorted(room_names))}"
     payload, usage = deepseek_chat_json(SYSTEM_RULES, user_prompt)
     payload = dict(payload)
+    candidates = identifier_candidates(text)
+    if any(candidates.values()):
+        payload.update(recognized_identifiers(text))
+    batches = batch_identifiers_in_text(text)
+    if batches:
+        payload["batchNo"] = "、".join(batches)
+        ethics = identifier_iacucs(payload)
+        if len(ethics) > 1:
+            raise ValueError("不同IACUC的饲养需求请分开登记，不能自动选取其中一个项目")
+        if ethics:
+            payload["iacuc"] = next(iter(ethics))
     if not _stated_husbandry_date(payload.get("intakeDate"), text):
         payload["intakeDate"] = ""
         if not _stated_husbandry_date(payload.get("endDate"), text, end=True):
@@ -301,6 +317,12 @@ def ai_parse_intake_images(raw_message, room_names, images):
     )
     if not payload:
         raise ValueError("图片未识别出预约字段，请更换清晰截图或补充文字后重试。")
+    # Correct only fresh model output. Historical source evidence is left intact.
+    if isinstance(payload.get("imageSources"), list):
+        payload["imageSources"] = [
+            normalize_recognized_identifiers(source) if isinstance(source, dict) else source
+            for source in payload["imageSources"][:4]
+        ]
     payload = structure_image_sources(payload)
     month_source = payload.get("recognition", {}).get("fieldSources", {}).get("husbandryMonths", "")
     if month_source and not has_explicit_intake_date(payload.get("recognition", {})):

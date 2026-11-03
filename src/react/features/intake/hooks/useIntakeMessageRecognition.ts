@@ -4,7 +4,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { IntakeBatch } from "../../../../contracts/intake";
 import type { SessionUser } from "../../../../contracts/session";
 import { intakePeople } from "../../../../domain/intakePeople";
-import { abbreviateSupplier, normalizeIntakeBatch, parseIntakeMessage } from "../../../../domain/intake";
+import {
+  abbreviateSupplier,
+  intakeBatchIacucs,
+  intakeIdentifierLimitMessage,
+  normalizeIntakeBatch,
+  parseIntakeMessage,
+  parseIntakeOrderIdentifiers,
+} from "../../../../domain/intake";
 import { aiParseIntakeMessage, standardizeIntakeStrain } from "../../../api/intake";
 import { fetchIacucSearch } from "../../../api/iacuc";
 import { queryKeys } from "../../../api/queryKeys";
@@ -46,7 +53,10 @@ export function useIntakeMessageRecognition({
       { ...parsed, supplier: abbreviateSupplier(parsed.supplier || ""), rawMessage: draft.rawMessage },
       roomNames,
     );
-    const normalizedCode = String(parsed.iacuc || "")
+    const limitMessage = intakeIdentifierLimitMessage(normalized);
+    if (limitMessage) throw new Error(limitMessage);
+    const multipleIacucs = intakeBatchIacucs(normalized.batchNo).length > 1;
+    const normalizedCode = String(multipleIacucs ? "" : parsed.iacuc || "")
       .trim()
       .toUpperCase();
     let match: { project?: string; pi?: string; owner?: string } | undefined;
@@ -69,11 +79,12 @@ export function useIntakeMessageRecognition({
       {
         ...draft,
         ...normalized,
+        ...(multipleIacucs ? { iacuc: "", project: "" } : {}),
         husbandryMonths: normalized.husbandryMonths ?? null,
         id: isEditingSavedBatch ? draft.id : String(normalized.id || draft.id),
         receiverName: normalized.receiverName || (isEditingSavedBatch ? draft.receiverName : user.displayName),
         vetPhone: normalized.vetPhone || (isEditingSavedBatch ? draft.vetPhone : user.phone),
-        project: match?.project || normalized.project,
+        project: multipleIacucs ? "" : match?.project || normalized.project,
         ...intakePeople(draft, normalized, match),
       },
       roomNames,
@@ -88,11 +99,18 @@ export function useIntakeMessageRecognition({
       batchNo: Boolean(normalized.batchNo),
       strainNote,
       excludeId: isEditingSavedBatch ? draft.id : undefined,
+      multipleIacucs,
+      multipleIdentifiers: Boolean(item.identifiers),
     };
   }
 
   async function parseMessage() {
     if (!requireRooms()) return;
+    if (parseIntakeOrderIdentifiers(draft.rawMessage).hasConflict) {
+      requests.invalidate();
+      feedback.warning("采购与订单编号需核对", "采购单号与订单编号不对应，请核对后再识别。");
+      return;
+    }
     const startedRevision = revision.current;
     const isCurrentRequest = requests.begin();
     const valid = () => isCurrentRequest() && startedRevision === revision.current;
@@ -106,12 +124,20 @@ export function useIntakeMessageRecognition({
       }
       const info = await applyParsedMessage(parsed, valid);
       if (!info) return;
+      if (info.multipleIacucs) {
+        const message = "已保留全部编号，但包含不同 IACUC，请按项目拆分预约后保存。";
+        setNotice(message);
+        feedback.warning("请核对预约项目", message);
+        return;
+      }
       setNotice("");
       feedback.info(
         "预约消息已识别",
-        info.batchNo
-          ? `预约消息已识别，请核对批次信息${info.strainNote}。`
-          : `未识别到完整批次号，请手动补充${info.strainNote}。`,
+        info.multipleIdentifiers
+          ? `已识别同一预约的多个编号，总数量只记录一次，请核对后保存${info.strainNote}。`
+          : info.batchNo
+            ? `预约消息已识别，请核对批次信息${info.strainNote}。`
+            : `未识别到完整批次号，请手动补充${info.strainNote}。`,
       );
       if (!hasNewImages) void onTextRecognized(info.item, info.excludeId);
     } catch (error) {
@@ -138,10 +164,21 @@ export function useIntakeMessageRecognition({
         valid,
       );
       if (!info) return;
+      if (info.multipleIacucs) {
+        const message = "已保留全部编号，但包含不同 IACUC，请按项目拆分预约后保存。";
+        setNotice(message);
+        feedback.warning("请核对预约项目", message);
+        return;
+      }
       const tokens = response.usage?.total_tokens;
       const usageText = typeof tokens === "number" && tokens > 0 ? `，本次 AI 识别消耗 ${tokens} tokens` : "";
       setNotice("");
-      feedback.info("预约消息已识别（AI）", `${usageText}${info.strainNote}，请核对批次信息。`);
+      feedback.info(
+        "预约消息已识别（AI）",
+        info.multipleIdentifiers
+          ? `已识别同一预约的多个编号，总数量只记录一次，请核对后保存${usageText}${info.strainNote}。`
+          : `${usageText}${info.strainNote}，请核对批次信息。`,
+      );
       if (!images.length) void onTextRecognized(info.item, info.excludeId);
     } catch (error) {
       if (valid()) setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");

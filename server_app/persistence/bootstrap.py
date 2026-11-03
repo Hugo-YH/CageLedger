@@ -32,6 +32,8 @@ from server_app.persistence import SchemaRegistry, SchemaStep, backfills
 from server_app.persistence.base_schema import initialize_base_schema
 from server_app.persistence.data_quality import ensure_schema as ensure_data_quality_schema
 from server_app.persistence.indexes import create_performance_indexes
+from server_app.persistence.intake_identifier_backfill import backfill_intake_identifiers
+from server_app.persistence.intake_identifier_groups import ensure_intake_identifier_groups
 from server_app.persistence.intake_identifiers import ensure_intake_identifier_schema
 from server_app.persistence.legacy_migrations import (
     backfill_occupancy_structured_columns as backfill_occupancy_structured_columns_migration,
@@ -78,6 +80,8 @@ def initialize_schema(conn):
     registry = SchemaRegistry(
         [
             SchemaStep("legacy-schema", initialize_legacy_schema),
+            SchemaStep("intake-identifier-source-backfill", backfill_intake_identifiers),
+            SchemaStep("intake-identifier-groups", ensure_intake_identifier_groups),
             SchemaStep("system-feature-settings", ensure_system_features),
             SchemaStep("data-quality-registry", ensure_data_quality_schema),
             SchemaStep("quantity-transfer-links", initialize_quantity_transfer_links),

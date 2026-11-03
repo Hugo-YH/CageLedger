@@ -2,6 +2,7 @@ import json
 import re
 
 from server_app.cache import cache_generation, cache_get, cache_set
+from server_app.repositories.intake_identifiers import member_filter, members_available, sync_members
 from server_app.repositories.person_names import (
     column_predicate,
     individual_mode,
@@ -168,6 +169,15 @@ def intake_batch_where(filters, filtered_where, exclude_column="", conn=None):
             continue
         if not spec:
             continue
+        if key in ("purchaseOrderNo", "orderNo", "batchNo") and conn is not None and members_available(conn):
+            member_clause, member_values = member_filter(key, cleaned)
+            whole = [intake_identifier_key(value, batch=key == "batchNo") for value in cleaned]
+            expression = {"purchaseOrderNo": "purchase_order_key", "orderNo": "order_key", "batchNo": "batch_no_key"}[
+                key
+            ]
+            where_parts.append(f"({expression} IN ({','.join('?' for _ in whole)}) OR {member_clause})")
+            next_params.extend([*whole, *member_values])
+            continue
         if key == "batchNo":
             cleaned = [intake_identifier_key(value, batch=True) for value in cleaned]
         clause, values = column_predicate(filters, key, f"COALESCE({spec['expr']}, '')", cleaned)
@@ -210,6 +220,19 @@ def list_intake_batch_filter_options(conn, filters, filtered_where, column):
     where, params = intake_batch_where(filters, filtered_where, exclude_column=column, conn=conn)
     where_clause = f" WHERE {where}" if where else ""
     limit = "" if column == "intakeDate" or individual_mode(filters, column) else "LIMIT 500"
+    if column in ("purchaseOrderNo", "orderNo", "batchNo") and members_available(conn):
+        rows = conn.execute(
+            f"SELECT COALESCE(im.value_key,'') AS value,COUNT(DISTINCT intake_batches.id) AS count FROM intake_batches "
+            f"LEFT JOIN intake_identifier_members im ON im.batch_id=intake_batches.id AND im.kind=? "
+            f"{where_clause} GROUP BY value ORDER BY value COLLATE NOCASE LIMIT 500",
+            (column, *params),
+        ).fetchall()
+        return {
+            "items": [
+                {"value": row["value"], "label": _intake_filter_label(column, row["value"]), "count": row["count"]}
+                for row in rows
+            ]
+        }
     rows = conn.execute(
         f"""
         SELECT COALESCE({spec["expr"]}, '') AS value, COUNT(*) AS count
@@ -331,9 +354,12 @@ def upsert_intake_batch(conn, batch):
             *intake_order_identifier_values(batch),
         ),
     )
+    sync_members(conn, batch)
 
 
 def delete_intake_batch(conn, batch_id):
+    if members_available(conn):
+        conn.execute("DELETE FROM intake_identifier_members WHERE batch_id=?", (batch_id,))
     conn.execute("DELETE FROM intake_batches WHERE id = ?", (batch_id,))
 
 

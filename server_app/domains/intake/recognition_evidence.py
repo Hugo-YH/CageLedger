@@ -5,7 +5,7 @@ import re
 from server_app.domains.intake.recognition_quantity import sanitize_calculation
 from server_app.domains.intake.recognition_sources import merge_sources, sanitize_sources
 from server_app.domains.intake.recognition_specification import normalize_specification
-from server_app.shared.intake_identifiers import intake_identifier_values, intake_order_identifier_values
+from server_app.shared.intake_identifiers import identifier_iacucs
 
 FIELDS = frozenset(
     (
@@ -82,7 +82,7 @@ def sanitize_evidence(raw):
 
 def structure_image_sources(payload):
     evidence = sanitize_evidence(payload.get("recognition") or {})
-    sources = sanitize_sources(payload.get("imageSources") or evidence.get("sources"))
+    sources = sanitize_sources(payload.get("imageSources") or evidence.get("sources"), normalize_identifiers=True)
     _check_image_identifiers(sources)
     return merge_sources(payload, evidence, sources)
 
@@ -176,19 +176,12 @@ def normalize_image_result(payload, item, model):
 
 
 def _check_image_identifiers(sources):
-    identifiers = {"purchaseOrderNo": set(), "orderNo": set(), "batchNo": set(), "iacuc": set()}
+    ethics = set()
     for source in sources[:4]:
         if not isinstance(source, dict):
             continue
-        _, purchase, batch = intake_identifier_values(source)
-        _, order = intake_order_identifier_values(source)
-        for field, value in (
-            ("purchaseOrderNo", purchase),
-            ("orderNo", order),
-            ("batchNo", batch),
-            ("iacuc", str(source.get("iacuc") or "").strip().upper()),
-        ):
-            if value:
-                identifiers[field].add(value)
-    if any(len(values) > 1 for values in identifiers.values()):
-        raise ValueError("图片中的采购单号、订单编号、批次号或伦理号不一致，请拆分不同预约后重新识别。")
+        ethics.update(identifier_iacucs(source))
+        if source.get("iacuc"):
+            ethics.add(str(source["iacuc"]).strip().upper())
+    if len(ethics) > 1:
+        raise ValueError("图片中的伦理号不一致，请拆分不同IACUC预约后重新识别。")

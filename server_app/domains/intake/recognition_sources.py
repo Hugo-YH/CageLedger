@@ -8,8 +8,10 @@ from server_app.domains.intake.recognition_specification import is_missing_speci
 from server_app.domains.intake.strain_standard import standardize_strain
 from server_app.shared.intake_identifiers import (
     intake_identifier_key,
+    intake_identifier_member_keys,
     normalize_intake_batch_no,
     normalize_intake_order_identifiers,
+    split_intake_identifiers,
 )
 
 NUMBER_FIELDS = frozenset(
@@ -82,7 +84,7 @@ def specification_key(value):
     return normalize_specification(value)[0]
 
 
-def sanitize_sources(raw):
+def sanitize_sources(raw, *, normalize_identifiers=False):
     if not isinstance(raw, list):
         return []
     result = []
@@ -97,7 +99,8 @@ def sanitize_sources(raw):
         item.update(
             {key: value[:2000] for key, value in source.items() if key in TEXT_FIELDS and isinstance(value, str)}
         )
-        item = normalize_intake_order_identifiers(item)
+        if normalize_identifiers:
+            item = normalize_intake_order_identifiers(item)
         if item["kind"] == "husbandry":
             # Only the original review text can establish a calendar-month period.
             notes = item.get("reviewNotes", "")
@@ -109,7 +112,7 @@ def sanitize_sources(raw):
                 item.pop("husbandryPeriodRaw", None)
         else:
             item.pop("husbandryPeriodRaw", None)
-        if item.get("batchNo"):
+        if normalize_identifiers and item.get("batchNo"):
             item["batchNo"] = image_batch_number(item["batchNo"])
         item.update({key: integer(value) for key, value in source.items() if key in NUMBER_FIELDS})
         if source.get("intakePurpose") in ("housing", "direct_sampling"):
@@ -134,6 +137,15 @@ def merge_sources(payload, evidence, sources):
     purchases = [source for source in sources if source["kind"] == "purchase"]
 
     def one(rows, field):
+        if field in ("purchaseOrderNo", "orderNo", "batchNo"):
+            members = list(
+                dict.fromkeys(
+                    value
+                    for row in rows
+                    for value in split_intake_identifiers(row.get(field), batch=field == "batchNo")
+                )
+            )
+            return "、".join(members) or None
         values = {}
         for row in rows:
             value = row.get(field)
@@ -160,7 +172,7 @@ def merge_sources(payload, evidence, sources):
         if value is not None:
             result[field] = value
     for field in ("purchaseOrderNo", "orderNo", "supplier", "strainRaw"):
-        value = one(purchases, field)
+        value = one(sources if field in ("purchaseOrderNo", "orderNo") else purchases, field)
         if field in conflicts:
             result[field] = ""
             if field == "strainRaw":
@@ -266,6 +278,21 @@ def merge_sources(payload, evidence, sources):
         result["quantity"] = None
     elif husbandry_quantity is not None:
         result["quantity"] = husbandry_quantity
+    result = normalize_intake_order_identifiers(result)
+    if result.get("identifiers"):
+        notices.append(
+            "本次含多个采购单、订单或饲养需求，编号按同一预约分组；请核对总数量，不自动推断对应关系或数量分摊。"
+        )
+    for rows, fields in ((purchases, ("purchaseOrderNo", "orderNo")), (husbandry, ("batchNo",))):
+        identities = {
+            tuple((field, tuple(intake_identifier_member_keys(row)[field])) for field in fields) for row in rows
+        }
+        if len(identities) > 1:
+            result["quantity"] = None
+            evidence.pop("quantityCalculation", None)
+            evidence["fieldSources"]["quantity"] = "多张不同采购或需求图片的本次总数量待人工核对，不自动累加或分摊。"
+            notices.append("多张不同采购或饲养需求图片的数量未自动累加，请核对并填写本次实际动物总数量。")
+            break
     result["recognition"] = evidence
     result["imageSources"] = sources
     return result

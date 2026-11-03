@@ -8,10 +8,12 @@ import {
   normalizeIntakeBatchNo,
   normalizeIntakeOrderIdentifiers,
   parseIntakeMessage,
+  parseIntakeOrderIdentifiers,
   speciesLabel,
   standardizeStrain,
   updateIntakeDraft,
   inferIntakePurpose,
+  intakeIdentifierLimitMessage,
   canConfirmIntakeReceipt,
   normalizeIntakeSex,
   createIntakeDraft,
@@ -37,7 +39,15 @@ describe("intake purchase and order identifiers", () => {
     ).toEqual({ purchaseOrderNo: "C2026000000000", orderNo: "DC202611022948607" });
     expect(
       normalizeIntakeOrderIdentifiers({ purchaseOrderNo: "DC202611022948601", orderNo: "DC202611022948607" }),
-    ).toEqual({ purchaseOrderNo: "DC202611022948601", orderNo: "DC202611022948607" });
+    ).toEqual({
+      purchaseOrderNo: "C2026110229486",
+      orderNo: "DC202611022948601、DC202611022948607",
+      identifiers: {
+        purchaseOrderNos: ["C2026110229486"],
+        orderNos: ["DC202611022948601", "DC202611022948607"],
+        batchNos: [],
+      },
+    });
   });
 
   it.each(["DC2026110229486", "DC2026110229486012", "DC2026110229486A1", "DC202611022948607-extra", "ABC 123"])(
@@ -94,6 +104,219 @@ describe("intake purchase and order identifiers", () => {
       purchaseOrderNo: "",
       orderNo: "DC2026110229486072",
     });
+  });
+
+  it.each([
+    ["锐竞订单号：C2026060147925，", "C2026060147925"],
+    ["申请单号为C2026072329400，", "C2026072329400"],
+    ["锐竞采购申请号：C2026092927340", "C2026092927340"],
+    ["C2026050819252，", "C2026050819252"],
+    ["锐竞采购申请单号为C2026100925690", "C2026100925690"],
+    ["订单编号：ｃ２０２６１１０２２９４８６", "C2026110229486"],
+  ])("classifies the complete C identifier itself in %s", (text, purchaseOrderNo) => {
+    expect(parseIntakeMessage(text)).toMatchObject({ purchaseOrderNo, orderNo: "", rawMessage: text });
+  });
+
+  it.each(["采购申请单号：DC202611022948607", "锐竞订单号：DC202611022948607", "ｄｃ２０２６１１０２２９４８６０７，"])(
+    "classifies and derives a complete DC identifier in %s",
+    (text) => {
+      expect(parseIntakeMessage(text)).toMatchObject({
+        purchaseOrderNo: "C2026110229486",
+        orderNo: "DC202611022948607",
+        rawMessage: text,
+      });
+    },
+  );
+
+  it.each([
+    "采购单号：C20261009 25690",
+    "采购单号：Ｃ２０２６１００９　２５６９０",
+    "C202611022948",
+    "C20261102294860",
+    "AC2026110229486",
+    "采购单号：C2026110229486A",
+    "DC20261102294860",
+    "DC2026110229486072",
+    "订单编号：DC202611022948607A",
+    "ADC202611022948607",
+    "2026110229486",
+  ])("leaves unlabelled, embedded or split identifier %s in the raw text instead of truncating it", (text) => {
+    expect(parseIntakeMessage(text)).toMatchObject({ purchaseOrderNo: "", orderNo: "", rawMessage: text });
+  });
+
+  it.each([
+    ["采购单号：C202611022948", "C202611022948", ""],
+    ["采购单号：C20261102294860", "C20261102294860", ""],
+    ["采购单号：AC2026110229486", "AC2026110229486", ""],
+    ["采购单号：2026110229486", "2026110229486", ""],
+    ["订单编号：DC20261102294860", "", "DC20261102294860"],
+    ["订单编号：DC2026110229486072", "", "DC2026110229486072"],
+    ["订单编号：ADC202611022948607", "", "ADC202611022948607"],
+    ["锐竞单号dc2026110229486072", "", "dc2026110229486072"],
+  ])("preserves the complete labelled nonstandard identifier in %s", (text, purchaseOrderNo, orderNo) => {
+    expect(parseIntakeMessage(text)).toMatchObject({ purchaseOrderNo, orderNo, rawMessage: text });
+    expect(parseIntakeOrderIdentifiers(text).hasConflict).toBe(false);
+  });
+
+  it("prioritizes canonical classification over labelled nonstandard candidates", () => {
+    const text = "采购单号：AC2026110229486\n订单编号：C2026110229486";
+    expect(parseIntakeMessage(text)).toMatchObject({ purchaseOrderNo: "C2026110229486", orderNo: "" });
+    expect(parseIntakeOrderIdentifiers(text).hasConflict).toBe(false);
+  });
+
+  it.each([
+    "采购单号：C202611022948\n采购单号：C202611022949",
+    "订单编号：DC2026110229486072\n订单编号：DC2026110229486073",
+    "采购单号：DC2026110229486072\n订单编号：DC2026110229486073",
+  ])("retains all labelled nonstandard identifiers in the same appointment in %s", (text) => {
+    const result = parseIntakeOrderIdentifiers(text);
+    expect(result.hasConflict).toBe(false);
+    expect(result.identifiers).toBeDefined();
+    expect(parseIntakeMessage(text)).toMatchObject({
+      purchaseOrderNo: result.purchaseOrderNo,
+      orderNo: result.orderNo,
+      rawMessage: text,
+    });
+  });
+
+  it("deduplicates repeated nonstandard identifiers without deriving a purchase ID", () => {
+    const text = "订单编号：dc2026110229486072\n订单编号：DC2026110229486072";
+    expect(parseIntakeOrderIdentifiers(text)).toEqual({
+      purchaseOrderNo: "",
+      orderNo: "dc2026110229486072",
+      hasConflict: false,
+    });
+  });
+
+  it.each([
+    "采购单号：C2026110229486\n原单号：C2026100925690",
+    "C2026110229486，C2026100925690，DC202611022948607",
+    "订单编号：DC202611022948601\n订单编号：DC202611022948607",
+    "C2026110229486，DC202611022948607，DC202610092569001",
+  ])("preserves multiple complete identifiers together in %s", (text) => {
+    const result = parseIntakeMessage(text);
+    expect(result.identifiers).toBeDefined();
+    expect(parseIntakeOrderIdentifiers(text).hasConflict).toBe(false);
+    const values = [...result.identifiers!.purchaseOrderNos, ...result.identifiers!.orderNos];
+    for (const number of text.match(/(?:DC\d{15}|C\d{13})/g) ?? []) expect(values).toContain(number);
+    expect(result.rawMessage).toBe(text);
+  });
+
+  it("deduplicates the same identifiers after width and case normalization", () => {
+    const text = "C2026110229486，ｃ２０２６１１０２２９４８６\nDC202611022948607，ｄｃ２０２６１１０２２９４８６０７";
+    expect(parseIntakeMessage(text)).toMatchObject({
+      purchaseOrderNo: "C2026110229486",
+      orderNo: "DC202611022948607",
+      rawMessage: text,
+    });
+  });
+
+  it.each(["C2026100925690，DC202611022948607"])("reports an isolated C/DC mismatch in %s", (text) => {
+    expect(parseIntakeOrderIdentifiers(text).hasConflict).toBe(true);
+    expect(parseIntakeMessage(text)).not.toHaveProperty("hasConflict");
+  });
+
+  it.each([
+    "无采购编号的预约原文",
+    "C2026110229486",
+    "DC202611022948607",
+    "C2026110229486，DC202611022948607",
+    "C2026110229486，ｃ２０２６１１０２２９４８６",
+    "C2026110229486，C2026100925690",
+    "DC202611022948601，DC202611022948607",
+    "C2026100925690，DC202611022948607，DC202609212926501",
+  ])("does not report a conflict for %s", (text) => {
+    expect(parseIntakeOrderIdentifiers(text).hasConflict).toBe(false);
+  });
+
+  it("keeps the real grouped appointment's two orders and demands while counting 60 animals once", () => {
+    const text =
+      "订单编号：DC202609212926501、DC202609212923401\n饲养需求批次号：（Z2025034）2025090302、（Z2025034）2025090313\n数量：60只";
+    expect(parseIntakeMessage(text)).toMatchObject({
+      purchaseOrderNo: "C2026092129265、C2026092129234",
+      orderNo: "DC202609212926501、DC202609212923401",
+      batchNo: "（Z2025034）2025090302、（Z2025034）2025090313",
+      identifiers: {
+        purchaseOrderNos: ["C2026092129265", "C2026092129234"],
+        orderNos: ["DC202609212926501", "DC202609212923401"],
+        batchNos: ["（Z2025034）2025090302", "（Z2025034）2025090313"],
+      },
+      quantity: 60,
+      iacuc: "Z2025034",
+    });
+  });
+
+  it("retains cross-IACUC demand numbers without selecting an arbitrary project's IACUC", () => {
+    expect(
+      parseIntakeMessage("饲养需求批次号：（Z2025034）2025090302、（Z2025035）2025090313\n数量：60只"),
+    ).toMatchObject({
+      batchNo: "（Z2025034）2025090302、（Z2025035）2025090313",
+      iacuc: "",
+      quantity: 60,
+    });
+  });
+
+  it("normalizes separator input and only adds collection metadata for multiple identifiers", () => {
+    const item = normalizeIntakeBatch({
+      purchaseOrderNo: "c2026092129265，C2026092129234;C2026092129265",
+      orderNo: "DC202609212926501\nDC202609212923401",
+      batchNo: "(z2025034)2025090302；（Z2025034）2025090313",
+      quantity: 60,
+    });
+    expect(item.purchaseOrderNo).toBe("C2026092129265、C2026092129234");
+    expect(item.batchNo).toBe("（Z2025034）2025090302、（Z2025034）2025090313");
+    expect(item.identifiers?.orderNos).toHaveLength(2);
+    expect(item.quantity).toBe(60);
+    expect(normalizeIntakeBatch({ orderNo: "DC202609212926501" })).not.toHaveProperty("identifiers");
+  });
+
+  it("preserves manually entered fullwidth order text without deriving a purchase identifier", () => {
+    const orderNo = "ｄｃ２０２６０９２１２９２６５０１";
+    expect(normalizeIntakeOrderIdentifiers({ orderNo })).toEqual({ purchaseOrderNo: "", orderNo });
+    expect(normalizeIntakeBatch({ orderNo })).toMatchObject({ purchaseOrderNo: "", orderNo });
+  });
+
+  it("keeps separator keystrokes and pasted newlines available while editing identifier lists", () => {
+    let draft = normalizeIntakeBatch({});
+    draft = updateIntakeDraft(draft, "orderNo", "DC202609212926501\n");
+    expect(draft.orderNo).toBe("DC202609212926501\n");
+    draft = updateIntakeDraft(draft, "orderNo", "DC202609212926501\nDC202609212923401");
+    expect(draft.orderNo).toBe("DC202609212926501\nDC202609212923401");
+    expect(draft.identifiers?.orderNos).toEqual(["DC202609212926501", "DC202609212923401"]);
+    expect(normalizeIntakeBatch(draft).orderNo).toBe("DC202609212926501、DC202609212923401");
+    draft = updateIntakeDraft(draft, "batchNo", "（Z2025034）2025090302、");
+    expect(draft.batchNo).toBe("（Z2025034）2025090302、");
+  });
+
+  it("reads array-only identifiers but gives explicit edits and clears priority over stale arrays", () => {
+    const identifiers = {
+      purchaseOrderNos: ["C2026092129265", "C2026092129234"],
+      orderNos: ["DC202609212926501", "DC202609212923401"],
+      batchNos: ["（Z2025034）2025090302", "（Z2025034）2025090313"],
+    };
+    const saved = normalizeIntakeBatch({ identifiers });
+    expect(saved.orderNo).toBe("DC202609212926501、DC202609212923401");
+    const edited = normalizeIntakeBatch({ ...saved, orderNo: "人工订单", purchaseOrderNo: "", batchNo: "" });
+    expect(edited).toMatchObject({ purchaseOrderNo: "", orderNo: "人工订单", batchNo: "" });
+    expect(edited).not.toHaveProperty("identifiers");
+    const clearedOrder = updateIntakeDraft(saved, "orderNo", "");
+    expect(clearedOrder.orderNo).toBe("");
+    expect(clearedOrder.identifiers?.orderNos).toEqual([]);
+  });
+
+  it("reports collection size and member length limits without silently truncating identifiers", () => {
+    const purchaseOrderNos = Array.from({ length: 50 }, (_, index) => `manual-${index}`);
+    expect(intakeIdentifierLimitMessage({ identifiers: { purchaseOrderNos } })).toBe("");
+    expect(
+      intakeIdentifierLimitMessage({ identifiers: { purchaseOrderNos: [...purchaseOrderNos, "extra"] } }),
+    ).toContain("最多50个");
+    expect(intakeIdentifierLimitMessage({ orderNo: "x".repeat(200) })).toBe("");
+    expect(intakeIdentifierLimitMessage({ orderNo: "x".repeat(201) })).toContain("最多200个字符");
+    expect(
+      normalizeIntakeBatch({
+        identifiers: { purchaseOrderNos: [...purchaseOrderNos, "extra"], orderNos: [], batchNos: [] },
+      }).identifiers?.purchaseOrderNos,
+    ).toHaveLength(51);
   });
 });
 

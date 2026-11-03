@@ -1,5 +1,19 @@
 import type { IntakeBatch, IntakeBatchStatus, IntakePurpose } from "../contracts/intake";
 import { createClientId } from "./id";
+import {
+  intakeBatchIacucs,
+  normalizeIntakeIdentifiers,
+  parseIntakeBatchNumbers,
+  parseIntakeOrderIdentifiers,
+} from "./intakeIdentifiers";
+
+export {
+  intakeBatchIacucs,
+  intakeIdentifierLimitMessage,
+  normalizeIntakeBatchNo,
+  normalizeIntakeOrderIdentifiers,
+  parseIntakeOrderIdentifiers,
+} from "./intakeIdentifiers";
 // Single source of truth shared with the Python backend: the curated MGI
 // strain alias table lives in server_app/resources/intake and both runtimes
 // read the same file so local and AI recognition resolve identical names.
@@ -212,35 +226,9 @@ export function missingIntakeRequiredFields(item: IntakeBatch, { forPrint = fals
   return missing;
 }
 
-export function normalizeIntakeBatchNo(value: unknown): string {
-  const normalized = String(value ?? "")
-    .trim()
-    .replace(/[（(]\s*([^()（）]+?)\s*[)）]/g, "（$1）");
-  const standard = normalized.match(/^（([A-Z]{1,6}\d{4,})）\s*(\d{6,})$/i);
-  return standard ? `（${standard[1].toUpperCase()}）${standard[2]}` : normalized;
-}
-
-export function normalizeIntakeOrderIdentifiers(input: { purchaseOrderNo?: unknown; orderNo?: unknown }): {
-  purchaseOrderNo: string;
-  orderNo?: string;
-} {
-  let purchaseOrderNo = String(input.purchaseOrderNo ?? "").trim();
-  let orderNo = String(input.orderNo ?? "").trim();
-  const legacyOrder = purchaseOrderNo.match(/^DC(\d{13})(\d{2})$/i);
-  if (legacyOrder && orderNo && orderNo.toUpperCase() !== purchaseOrderNo.toUpperCase()) {
-    return { purchaseOrderNo, orderNo };
-  }
-  if (legacyOrder) {
-    orderNo = purchaseOrderNo.toUpperCase();
-    purchaseOrderNo = `C${legacyOrder[1]}`;
-  }
-  const order = orderNo.match(/^DC(\d{13})(\d{2})$/i);
-  if (order) {
-    orderNo = orderNo.toUpperCase();
-    if (!purchaseOrderNo) purchaseOrderNo = `C${order[1]}`;
-  }
-  if (/^C\d{13}$/i.test(purchaseOrderNo)) purchaseOrderNo = purchaseOrderNo.toUpperCase();
-  return { purchaseOrderNo, ...(orderNo || "orderNo" in input ? { orderNo } : {}) };
+function normalizedIdentifiers(item: Partial<IntakeBatch>) {
+  const { purchaseOrderNo, orderNo, batchNo, identifiers } = normalizeIntakeIdentifiers(item);
+  return { purchaseOrderNo, orderNo, batchNo, ...(identifiers ? { identifiers } : {}) };
 }
 
 export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: string[] = []): IntakeBatch {
@@ -273,8 +261,7 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
     id: String(item.id || createClientId()),
     rawMessage: String(item.rawMessage || ""),
     ...(item.recognition ? { recognition: item.recognition } : {}),
-    ...normalizeIntakeOrderIdentifiers(item),
-    batchNo: normalizeIntakeBatchNo(item.batchNo),
+    ...normalizedIdentifiers(item),
     iacuc: String(item.iacuc || "")
       .trim()
       .toUpperCase(),
@@ -320,23 +307,11 @@ export function normalizeIntakeBatch(item: Partial<IntakeBatch>, roomNames: stri
 export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNames: string[] = []) {
   const raw = rawMessage.trim();
   const source = raw.replace(/[：]/g, ":").replace(/[（]/g, "(").replace(/[）]/g, ")");
-  const batchMatch = source.match(/饲养需求批次号\s*(?:为)?\s*:?\s*\(\s*([A-Z]{1,6}\d{4,})\s*\)\s*(\d{6,})/i);
-  const batchNo = batchMatch
-    ? `（${batchMatch[1].toUpperCase()}）${batchMatch[2]}`
-    : matchField(raw, ["饲养需求批次号", "批次号"]);
-  const iacuc = batchMatch?.[1]?.toUpperCase() || "";
-  const purchaseNumbers = [
-    ...source.matchAll(
-      /(?:锐[竞竟](?:采购)?(?:单号|订单编号|采购订单编号)?|采购(?:申请)?单号|采购订单(?:编号|号))\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})(?![A-Z0-9])/gi,
-    ),
-  ].map((match) => match[1]);
-  const orderNumber = source.match(
-    /(?<!采购)(?:订单编号|订单号)\s*(?:为)?\s*:?\s*([A-Z]{0,3}\d{8,})(?![A-Z0-9])/i,
-  )?.[1];
-  const { purchaseOrderNo, orderNo } = normalizeIntakeOrderIdentifiers({
-    purchaseOrderNo: purchaseNumbers.find((number) => !/^DC/i.test(number)) || "",
-    orderNo: orderNumber || purchaseNumbers.find((number) => /^DC/i.test(number)) || "",
-  });
+  const batchNumbers = parseIntakeBatchNumbers(raw);
+  const batchNo = batchNumbers.length ? batchNumbers.join("、") : matchField(raw, ["饲养需求批次号", "批次号"]);
+  const iacucs = intakeBatchIacucs(batchNo);
+  const iacuc = iacucs.length === 1 ? iacucs[0] : "";
+  const { purchaseOrderNo, orderNo } = parseIntakeOrderIdentifiers(raw);
   const referenceYear = Number(purchaseOrderNo.match(/20\d{2}/)?.[0] || new Date().getFullYear());
   const supplier = matchField(raw, ["供应商", "购买单位"]).split(/\s+(?:品系|数量|饲养房间)/)[0];
   const strainRaw =
@@ -423,7 +398,12 @@ export function updateIntakeDraft<K extends keyof IntakeBatch>(
     if (next.husbandryDays !== null) next.endDate = addDays(next.intakeDate, next.husbandryDays);
     else next.husbandryDays = daysBetween(next.intakeDate, next.endDate);
   }
-  return normalizeIntakeBatch(next, roomNames);
+  const normalized = normalizeIntakeBatch(next, roomNames);
+  // Keep separator keystrokes and pasted newlines editable; collection metadata
+  // already follows the current input, and saving normalizes its projection.
+  return key === "purchaseOrderNo" || key === "orderNo" || key === "batchNo"
+    ? { ...normalized, [key]: value }
+    : normalized;
 }
 
 /** Calendar addition clamps the target day at month end rather than rolling into another month. */

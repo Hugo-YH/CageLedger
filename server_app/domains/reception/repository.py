@@ -3,6 +3,7 @@ import json
 
 from server_app.config import IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH
 from server_app.repositories.iacuc import read_iacuc_index
+from server_app.repositories.intake_identifiers import member_filter, members_available
 from server_app.repositories.person_names import person_options, split_person_names
 from server_app.runtime_logging import log_stage
 
@@ -76,7 +77,7 @@ def context(conn):
     return {"json": content, "version": version, "updatedAt": index.get("updatedAt"), "source": index.get("source")}
 
 
-def clause(filters, *, exclude=""):
+def clause(filters, *, exclude="", conn=None):
     parts, values = ["b.status='received'"], []
     for key, selected in filters.items():
         if key == exclude or not selected:
@@ -99,6 +100,14 @@ def clause(filters, *, exclude=""):
                 f"EXISTS (SELECT 1 FROM json_each(a.application,'$._{key}People') p "
                 f"WHERE p.value IN ({','.join('?' for _ in selected)}))"
             )
+        elif key in ("purchaseOrderNo", "orderNo", "batchNo") and conn is not None and members_available(conn):
+            member_clause, member_values = member_filter(key, selected, alias="b")
+            parts.append(
+                f"(CAST(coalesce({FIELDS[key]},'') AS TEXT) IN ({','.join('?' for _ in selected)}) OR {member_clause})"
+            )
+            values.extend(selected)
+            values.extend(member_values)
+            continue
         else:
             parts.append(f"CAST(coalesce({FIELDS[key]},'') AS TEXT) IN ({','.join('?' for _ in selected)})")
         values.extend(selected)
@@ -106,7 +115,7 @@ def clause(filters, *, exclude=""):
 
 
 def page(conn, source, params):
-    where, values = clause(params["columnFilters"])
+    where, values = clause(params["columnFilters"], conn=conn)
     with log_stage("reception_read", "count", component="reception"):
         count = conn.execute(BASE + "SELECT count(*)" + JOIN + " WHERE " + where, [source["json"], *values]).fetchone()[
             0
@@ -130,11 +139,16 @@ def page(conn, source, params):
 
 
 def filter_options(conn, source, column, filters):
-    where, values = clause(filters, exclude=column)
+    where, values = clause(filters, exclude=column, conn=conn)
     if column == "receiptDate":
         sql = BASE + "SELECT r.value value,count(DISTINCT b.id) count" + JOIN
         sql += " LEFT JOIN json_each(d.dates) r"
         sql += f" WHERE {where} GROUP BY value ORDER BY value"
+    elif column in ("purchaseOrderNo", "orderNo", "batchNo") and members_available(conn):
+        sql = BASE + "SELECT coalesce(im.value,'') value,count(DISTINCT b.id) count" + JOIN
+        sql += " LEFT JOIN intake_identifier_members im ON im.batch_id=b.id AND im.kind=?"
+        sql += f" WHERE {where} GROUP BY value ORDER BY value"
+        values = [column, *values]
     else:
         sql = BASE + f"SELECT coalesce({FIELDS[column]},'') value,count(*) count" + JOIN
         sql += f" WHERE {where} GROUP BY value ORDER BY value"

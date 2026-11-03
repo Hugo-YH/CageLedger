@@ -18,6 +18,7 @@ const statuses: Array<[IntakeBatchStatus, string]> = [
   ["received", "已接收"],
   ["draft", "草稿"],
 ];
+const identifierHelp = "多个编号属于同一预约，可用顿号、逗号、分号或换行分隔；总数量只记录一次。";
 
 export function IntakeEntryPanel({
   editing,
@@ -230,17 +231,37 @@ export function IntakeEntryPanel({
               />
             </Col>
             <Col lg={6} md={12} xs={24}>
-              <Field
-                label="采购单号"
-                value={draft.purchaseOrderNo}
-                onChange={(value) => onUpdate("purchaseOrderNo", value)}
-              />
+              <Form.Item label="采购单号" tooltip={identifierHelp}>
+                <Input.TextArea
+                  aria-label="采购单号"
+                  aria-description={identifierHelp}
+                  autoSize={{ minRows: 1, maxRows: 3 }}
+                  value={draft.purchaseOrderNo}
+                  onChange={(event) => onUpdate("purchaseOrderNo", event.target.value)}
+                />
+              </Form.Item>
             </Col>
             <Col lg={6} md={12} xs={24}>
-              <Field label="订单编号" value={draft.orderNo ?? ""} onChange={(value) => onUpdate("orderNo", value)} />
+              <Form.Item label="订单编号" tooltip={identifierHelp}>
+                <Input.TextArea
+                  aria-label="订单编号"
+                  aria-description={identifierHelp}
+                  autoSize={{ minRows: 1, maxRows: 3 }}
+                  value={draft.orderNo ?? ""}
+                  onChange={(event) => onUpdate("orderNo", event.target.value)}
+                />
+              </Form.Item>
             </Col>
             <Col lg={6} md={12} xs={24}>
-              <Field label="批次号" value={draft.batchNo} onChange={(value) => onUpdate("batchNo", value)} />
+              <Form.Item label="批次号" tooltip={identifierHelp}>
+                <Input.TextArea
+                  aria-label="批次号"
+                  aria-description={identifierHelp}
+                  autoSize={{ minRows: 1, maxRows: 3 }}
+                  value={draft.batchNo}
+                  onChange={(event) => onUpdate("batchNo", event.target.value)}
+                />
+              </Form.Item>
             </Col>
           </Row>
           <Row gutter={[16, 16]}>

@@ -86,12 +86,11 @@ class OrderNormalizationTests(unittest.TestCase):
         for item in (
             {"purchaseOrderNo": "C2026080333569", "orderNo": ORDER},
             {"purchaseOrderNo": "不走锐竞", "orderNo": ORDER},
-            {"purchaseOrderNo": ORDER, "orderNo": ORDER[:-2] + "07"},
         ):
             with self.subTest(item=item), self.assertRaisesRegex(ValueError, "核对"):
                 normalize_intake_order_identifiers(item)
 
-    def test_ai_and_per_image_sources_link_c_and_dc_but_reject_different_full_orders(self):
+    def test_ai_and_per_image_sources_link_c_and_dc_and_group_full_orders(self):
         self.assertEqual(_normalize_payload({"purchaseOrderNo": ORDER})["orderNo"], ORDER)
         result = structure_image_sources(
             {
@@ -102,15 +101,16 @@ class OrderNormalizationTests(unittest.TestCase):
             }
         )
         self.assertEqual((result["purchaseOrderNo"], result["orderNo"]), (PURCHASE, ORDER))
-        with self.assertRaisesRegex(ValueError, "不一致"):
-            structure_image_sources(
-                {
-                    "imageSources": [
-                        {"kind": "purchase", "imageIndex": 1, "orderNo": ORDER},
-                        {"kind": "purchase", "imageIndex": 2, "orderNo": ORDER[:-2] + "07"},
-                    ]
-                }
-            )
+        grouped = structure_image_sources(
+            {
+                "imageSources": [
+                    {"kind": "purchase", "imageIndex": 1, "orderNo": ORDER},
+                    {"kind": "purchase", "imageIndex": 2, "orderNo": ORDER[:-2] + "07"},
+                ]
+            }
+        )
+        self.assertEqual(grouped["identifiers"]["orderNos"], [ORDER, ORDER[:-2] + "07"])
+        self.assertIsNone(grouped["quantity"])
 
     def test_legacy_full_state_omission_retains_order_and_conflicts_reject_before_write(self):
         old = {"intakeBatches": [batch("old", purchaseOrderNo=PURCHASE, orderNo=ORDER)]}

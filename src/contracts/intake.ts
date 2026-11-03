@@ -1,6 +1,13 @@
 export type IntakeBatchStatus = "draft" | "pending_print" | "pending_receipt" | "printed" | "received";
 export type IntakePurpose = "housing" | "direct_sampling";
 
+/** Identifiers grouped within one appointment; does not assign pairs or quantities. */
+export interface IntakeIdentifiers {
+  purchaseOrderNos: string[];
+  orderNos: string[];
+  batchNos: string[];
+}
+
 /** Temporary request bytes; never stored in a batch payload or audit record. */
 export interface IntakeRecognitionImageInput {
   name: string;
@@ -113,6 +120,7 @@ export interface IntakeBatch {
   purchaseOrderNo: string;
   orderNo?: string;
   batchNo: string;
+  identifiers?: IntakeIdentifiers;
   iacuc: string;
   supplier: string;
   species: string;

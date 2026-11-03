@@ -16,7 +16,7 @@ vi.mock("../../../../domain/intake", async (load) => ({
   ...(await load<typeof IntakeDomain>()),
   parseIntakeMessage: vi.fn(),
 }));
-const feedback = vi.hoisted(() => ({ info: vi.fn() }));
+const feedback = vi.hoisted(() => ({ info: vi.fn(), warning: vi.fn() }));
 vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => feedback }));
 const user = { id: "admin", role: "admin", displayName: "录入人", phone: "13800000000" } as SessionUser;
 let client: QueryClient;
@@ -100,6 +100,149 @@ it("preserves the explicit edited ID and excludes it from text matching", async 
   await act(() => result.current.aiParseMessage());
   expect(replaceDraft.mock.calls[0][0]).toMatchObject({ id: "current-draft", receiverName: "旧接收人" });
   expect(onTextRecognized).toHaveBeenCalledWith(expect.objectContaining({ id: "current-draft" }), "current-draft");
+});
+
+it.each(["C2026100925690，DC202611022948607"])(
+  "preserves the edited draft and stops before parsing or IACUC lookup for conflicting %s",
+  async (rawMessage) => {
+    const { result, draft, replaceDraft, onTextRecognized, setNotice, revision } = setup("batches", true);
+    Object.assign(draft, { rawMessage, purchaseOrderNo: "人工采购编号", orderNo: "人工订单编号", owner: "人工预约人" });
+    const before = { ...draft };
+    const lookup = vi.spyOn(client, "ensureQueryData");
+    await act(() => result.current.parseMessage());
+    expect(draft).toEqual(before);
+    expect(revision.current).toBe(1);
+    expect(replaceDraft).not.toHaveBeenCalled();
+    expect(parseIntakeMessage).not.toHaveBeenCalled();
+    expect(standardizeIntakeStrain).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
+    expect(onTextRecognized).not.toHaveBeenCalled();
+    expect(setNotice).not.toHaveBeenCalled();
+    expect(feedback.warning).toHaveBeenCalledOnce();
+    expect(feedback.info).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["local", "ai"])(
+  "applies grouped %s identifiers without multiplying the appointment quantity",
+  async (kind) => {
+    const actual = await vi.importActual<typeof IntakeDomain>("../../../../domain/intake");
+    const rawMessage =
+      "订单编号：DC202609212926501、DC202609212923401\n饲养需求批次号：（Z2025034）2025090302、（Z2025034）2025090313\n数量：60只";
+    const parsed = actual.parseIntakeMessage(rawMessage);
+    vi.mocked(parseIntakeMessage).mockReturnValue(parsed);
+    vi.mocked(aiParseIntakeMessage).mockResolvedValue({ item: parsed });
+    const { result, draft, replaceDraft, onTextRecognized } = setup();
+    draft.rawMessage = rawMessage;
+    const lookup = vi
+      .spyOn(client, "ensureQueryData")
+      .mockResolvedValue({ items: [{ iacuc: "Z2025034", project: "项目" }] });
+    await act(() => (kind === "local" ? result.current.parseMessage() : result.current.aiParseMessage()));
+    expect(replaceDraft).toHaveBeenCalledOnce();
+    const applied = replaceDraft.mock.calls[0][0];
+    expect(applied).toMatchObject({
+      quantity: 60,
+      iacuc: "Z2025034",
+      project: "项目",
+      identifiers: {
+        purchaseOrderNos: ["C2026092129265", "C2026092129234"],
+        orderNos: ["DC202609212926501", "DC202609212923401"],
+        batchNos: ["（Z2025034）2025090302", "（Z2025034）2025090313"],
+      },
+    });
+    expect(lookup).toHaveBeenCalledOnce();
+    expect(onTextRecognized).toHaveBeenCalledExactlyOnceWith(applied, undefined);
+    expect(feedback.warning).not.toHaveBeenCalled();
+    expect(feedback.info.mock.calls[0][1]).toContain("总数量只记录一次");
+  },
+);
+
+it.each(["local", "ai"])(
+  "preserves cross-IACUC %s drafts and asks for project review without arbitrary matching",
+  async (kind) => {
+    const actual = await vi.importActual<typeof IntakeDomain>("../../../../domain/intake");
+    const parsed = actual.parseIntakeMessage(
+      "饲养需求批次号：（Z2025034）2025090302、（Z2025035）2025090313\n数量：60只",
+    );
+    vi.mocked(parseIntakeMessage).mockReturnValue(parsed);
+    vi.mocked(aiParseIntakeMessage).mockResolvedValue({
+      item: { ...parsed, iacuc: "Z2025034", project: "不得自动采用" },
+    });
+    const { result, replaceDraft, onTextRecognized, setNotice } = setup();
+    const lookup = vi.spyOn(client, "ensureQueryData");
+    await act(() => (kind === "local" ? result.current.parseMessage() : result.current.aiParseMessage()));
+    expect(replaceDraft.mock.calls[0][0]).toMatchObject({
+      batchNo: "（Z2025034）2025090302、（Z2025035）2025090313",
+      quantity: 60,
+      iacuc: "",
+      project: "",
+    });
+    expect(lookup).not.toHaveBeenCalled();
+    expect(onTextRecognized).not.toHaveBeenCalled();
+    expect(setNotice).toHaveBeenCalledWith(expect.stringContaining("按项目拆分预约"));
+    expect(feedback.warning).toHaveBeenCalledOnce();
+  },
+);
+
+it("does not let stale draft arrays overwrite a newly recognized single identifier", async () => {
+  const { result, draft, replaceDraft } = setup();
+  draft.identifiers = {
+    purchaseOrderNos: ["C2026092129265", "C2026092129234"],
+    orderNos: ["DC202609212926501", "DC202609212923401"],
+    batchNos: ["（Z2025034）2025090302", "（Z2025034）2025090313"],
+  };
+  await act(() => result.current.aiParseMessage());
+  const applied = replaceDraft.mock.calls[0][0];
+  expect(applied).toMatchObject({ purchaseOrderNo: "P-1", orderNo: "", batchNo: "B-1" });
+  expect(applied).not.toHaveProperty("identifiers");
+});
+
+it("keeps the current draft when recognition exceeds the grouped identifier limit", async () => {
+  const identifiers = {
+    purchaseOrderNos: Array.from({ length: 51 }, (_, index) => `manual-${index}`),
+    orderNos: [],
+    batchNos: [],
+  };
+  vi.mocked(aiParseIntakeMessage).mockResolvedValue({ item: { identifiers, quantity: 60 } });
+  const { result, replaceDraft, onTextRecognized, setNotice } = setup();
+  await act(() => result.current.aiParseMessage());
+  expect(replaceDraft).not.toHaveBeenCalled();
+  expect(onTextRecognized).not.toHaveBeenCalled();
+  expect(setNotice).toHaveBeenCalledWith(expect.stringContaining("最多50个"));
+});
+
+it("continues local recognition for one consistent purchase and order pair", async () => {
+  const { result, draft, replaceDraft, onTextRecognized } = setup();
+  draft.rawMessage = "C2026110229486，DC202611022948607";
+  await act(() => result.current.parseMessage());
+  expect(parseIntakeMessage).toHaveBeenCalledExactlyOnceWith(draft.rawMessage, user.displayName, ["8014"]);
+  expect(replaceDraft).toHaveBeenCalledOnce();
+  expect(onTextRecognized).toHaveBeenCalledOnce();
+  expect(feedback.warning).not.toHaveBeenCalled();
+});
+
+it("invalidates an earlier pending result when the operator rejects conflicting source identifiers", async () => {
+  let finish!: (value: IntakeAiParseResponse) => void;
+  vi.mocked(aiParseIntakeMessage).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { result, draft, replaceDraft, onTextRecognized } = setup("batches", true);
+  draft.rawMessage = "C2026100925690，DC202611022948607";
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.aiParseMessage();
+  });
+  await act(() => result.current.parseMessage());
+  expect(feedback.warning).toHaveBeenCalledOnce();
+  await act(async () => {
+    finish({ item: { batchNo: "B-1", purchaseOrderNo: "C2026110229486" } });
+    await pending;
+  });
+  expect(replaceDraft).not.toHaveBeenCalled();
+  expect(onTextRecognized).not.toHaveBeenCalled();
 });
 
 it.each(["local", "ai"])("does not match text when new images accompany %s recognition", async (kind) => {

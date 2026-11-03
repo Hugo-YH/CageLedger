@@ -11,6 +11,7 @@ from server_app.domains.intake.recognition_evidence import sanitize_evidence
 from server_app.domains.intake.repository import find_duplicate_identifiers, get_batch_payload
 from server_app.shared.concurrency import StaleWriteError, require_exact_version
 from server_app.shared.intake_identifiers import (
+    intake_identifier_member_keys,
     intake_identifier_values,
     intake_order_identifier_values,
     normalize_intake_order_identifiers,
@@ -70,10 +71,14 @@ def identifier_matches(conn, incoming):
     _, order = intake_order_identifier_values(incoming)
     if purchase_order_is_description(order):
         order = ""
-    return find_duplicate_identifiers(conn, purchase, batch, order_no_key=order)
+    keys = intake_identifier_member_keys(incoming)
+    for kind in ("purchaseOrderNo", "orderNo"):
+        keys[kind] = [value for value in keys[kind] if not purchase_order_is_description(value)]
+    return find_duplicate_identifiers(conn, purchase, batch, order_no_key=order, member_keys=keys)
 
 
 def match_classification(existing, incoming):
+    old_members, new_members = intake_identifier_member_keys(existing), intake_identifier_member_keys(incoming)
     _, old_purchase, old_batch = intake_identifier_values(existing)
     _, new_purchase, new_batch = intake_identifier_values(incoming)
     if purchase_order_is_description(old_purchase):
@@ -91,8 +96,8 @@ def match_classification(existing, incoming):
         ("orderNo", old_order, new_order),
         ("batchNo", old_batch, new_batch),
     )
-    matched = [name for name, a, b in pairs if a and a == b]
-    conflict = any(a and b and a != b for _, a, b in pairs)
+    matched = [name for name, a, b in pairs if a and b and set(old_members[name]) & set(new_members[name])]
+    conflict = any(a and b and set(old_members[name]) != set(new_members[name]) for name, a, b in pairs)
     kind = (
         "association_conflict"
         if conflict
@@ -195,6 +200,12 @@ def _candidate(existing, incoming, matches):
     reason = ""
     if len(matches) != 1:
         reason = "匹配到多条已有预约，请先核对需求与采购单的对应关系，暂不能合并。"
+    elif (
+        existing.get("iacuc")
+        and incoming.get("iacuc")
+        and str(existing["iacuc"]).strip().upper() != str(incoming["iacuc"]).strip().upper()
+    ):
+        reason = "已有预约与本次识别的IACUC不一致，请分开核对，暂不能自动合并。"
     elif classification == "association_conflict":
         reason = "饲养需求、采购单或订单已对应其他编号，请核对原图和预约文字，暂不能合并。"
     elif not (existing.get("recognition") or {}).get("images"):

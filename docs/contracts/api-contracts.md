@@ -250,6 +250,8 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 
 ## 笼卡与待进驻
 
+批次详情及写入可选 `identifiers:{purchaseOrderNos:string[],orderNos:string[],batchNos:string[]}`，表示同一预约的编号集合，不声明任意两两对应关系或数量分摊。兼容 `purchaseOrderNo`、`orderNo`、`batchNo` 字符串以顿号投影；显式提供字符串（含空值）优先于旧集合，省略时可从集合读取。每类最多50个、每个最多200字符；跨IACUC需求分开保存。标准DC保留后缀并推导对应C，多编号不再视为冲突。列表编号候选及筛选支持单个成员，旧完整字符串筛选仍兼容；重复提醒按任意成员命中，确认后仍可保存。独立接收列表及Excel不按成员展开或重复合计动物数量。现有自动文字补充合并继续要求唯一匹配且完整集合相符，不据成员交集覆盖另一预约。
+
 日期列筛选保持 `filter-options` 的 `{items:[{value,label,count}]}` 与 `columnFilters` 原始值数组契约。前端年/月/日仅为显示分组，时间列的一日节点保留并提交该日所有原始时间戳，不能以截断后的日期代替精确值。日期/月候选查询返回当前范围完整候选，不使用普通文本列的500项上限；原权限、其他列筛选及排除本列条件的聚合口径不变。候选包含空白时，`intakeDate`、`month`、`updatedAt` 的数组筛选允许显式 `""`，非日期列的空值清洗规则不变。
 
 待接收批次 POST/PUT 允许 `item.intakeDate` 为空字符串，表示日期待定；沿用原字段，不增加状态或数据库迁移。后续完整 PUT 补填日期时保留批次 ID、笼卡 ID 与二维码，自然月周期按原 `husbandryMonths` 计算，创建及编辑均写入原审计链路。列表日期筛选继续使用空字符串值，前端展示为“待定”。兼容单条分次接收接口仍要求 `actualReceiptDate`，现有批量状态标记规则不变。
@@ -293,7 +295,9 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 发现重复且未经确认时返回 `409`、`code: INTAKE_DUPLICATE_CONFIRMATION_REQUIRED` 和 `details: {items,total,confirmationToken}`，不写业务记录或审计。`items` 最多20条，含 `id`、`purchaseOrderNo`、`batchNo`、`intakeDate`、`pi`、`owner`、`status` 及 `matchedFields`；`total` 为全部匹配条数。用户确认后以同一草稿、原 `expectedUpdatedAt` 和 `duplicateConfirmation: confirmationToken` 重试。确认标识绑定草稿ID、编号、编辑排除ID及完整匹配集合；事务内重新核对，匹配记录变化时重新提醒，过期编辑仍返回原版本冲突。成功保存时在原审计之外增加 `intake_batch.duplicate_confirmed`，记录操作者、编号和全部匹配记录ID；确认审计与业务写入一起提交或回滚。
 
-采购单号继续保留于原 `payload.purchaseOrderNo`，同时投影为 `purchase_order_no`；`purchase_order_key`、`batch_no_key` 保存规范化查询键并建立普通索引。字段创建、回填和索引纳入同一写事务，由调用方提交，失败回滚后可重试。幂等迁移从旧记录回填，只增加查询列，不修改原payload、版本或审计；局部保存和旧全量状态保存均同步投影，历史缺失编号不推断补造。
+采购单号继续保留于原 `payload.purchaseOrderNo`，同时投影为 `purchase_order_no`；`purchase_order_key`、`batch_no_key` 保存规范化查询键并建立普通索引。字段创建、回填和索引纳入同一写事务，由调用方提交，失败回滚后可重试。原查询投影迁移从旧记录回填，不修改原payload、版本或审计；局部保存和旧全量状态保存均同步投影，无明确来源的历史缺失编号不推断补造。
+
+另有一次性原文编号补填：仅在唯一完整 C13／DC15 来源与已有人工值相容时补齐空白编号，更新版本并记录前后值审计；多编号、字段冲突及明确人工清空保持原值并留档。执行标记为 `intakeIdentifierBackfillV1`，数据、查询键、版本、审计与标记在同一事务内提交，重复启动不补第二次。其余业务字段和历史审计保持原值。具体边界见[写入安全](write-safety.md#接收编号兼容)。接口响应和版本参数的可选兼容策略保持不变。
 
 接收汇总与待接收列表沿用相同登录读取权限，按预约接收日期包含起止当天的全部批次和状态，不受分页、表头筛选或勾选限制；无预约日期的记录排除。无效日期、逆序区间或空区间返回 `400`，不生成空文档。响应为鉴权 `.docx` 附件，`Cache-Control: no-store`。汇总保留当前批次状态、原始品系和已填写的预约备注，不输出预约原文或签收等空栏；导出不写入批次、接收记录、待进驻任务或审计，不推进打印或接收状态。
 
