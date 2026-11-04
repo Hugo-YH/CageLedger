@@ -93,13 +93,13 @@ Mac mini 发布前的基础质量检查：
 npm run check
 ```
 
-完整发布验证的串行兼容入口：
+完整验证的受管串行入口（仅发布前或明确要求全量时使用）：
 
 ```bash
 npm run verify:full
 ```
 
-Mac mini（M4 16GB）发布优先采用 [测试策略](docs/contracts/testing-strategy.md) 中的受管并行配置，保持完整检查集合、每个测试库单worker及独立报告。现有 `verify:full` 不会自动分片；并行任务的端口、资源上限、报告汇总及结果复用统一按该契约执行。
+Mac mini（M4 16GB）固定单组浏览器和单 worker；`check`、`verify:full` 与发布共用跨检出的宿主机锁和内存压力保护。日常使用 `test:target`、`test:related`、`test:python:target` 指定目标，纯文字/间距不跑无关业务测试。具体命令、影响分析与用例治理见 [测试策略](docs/contracts/testing-strategy.md)。
 
 `npm run dev`、`npm run check`、`npm run test:e2e` 和 Python 质量工具统一解析项目 `.venv`。`CAGELEDGER_PYTHON_BIN` 可覆盖为其他 Python 3.13 可执行文件。
 
@@ -125,3 +125,5 @@ MacBook 默认完成修改、针对性验证、提交并推送到 Gitea。Mac mi
 4. 检查 commit、`vX.Y.Z` tag、Gitea Release 和容器镜像。
 
 版本号由 `package.json` 管理，`scripts/set_version.mjs` 同步其他文件。已有 tag 保持不可变。
+
+发布前可运行 `npm run release:doctor -- --online` 汇总环境问题。Git 默认不签名，显式 `--sign` 启用；开发目录工具缓存、状态查询与故障恢复见 [发布工程](docs/contracts/release-engineering.md)。

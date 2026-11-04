@@ -13,6 +13,7 @@ export default defineConfig({
   // E2E uses one ephemeral SQLite database. A single worker keeps shared
   // infrastructure fixtures deterministic across every local and CI run.
   workers: 1,
+  globalTimeout: 60 * 60 * 1000,
   timeout: process.env.CI ? 60_000 : 30_000,
   expect: {
     timeout: process.env.CI ? 15_000 : 5_000,

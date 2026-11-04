@@ -7,7 +7,16 @@ import ts from "typescript";
 const root = process.cwd();
 const enforce = process.argv.includes("--enforce");
 const sourceExtensions = new Set([".ts", ".tsx", ".py", ".css"]);
-const ignoredParts = new Set([".venv", "node_modules", "web-dist", "dist", "data", "docs", "src/vendor"]);
+const ignoredParts = new Set([
+  ".venv",
+  "node_modules",
+  "web-dist",
+  "dist",
+  "data",
+  "docs",
+  "src/vendor",
+  ".codex-run/release-tools",
+]);
 const hardLimitMultiplier = 1.2;
 const sizePolicies = [
   { label: "release notes", pattern: /^src\/react\/releaseNotes(?:Current|History|Archive|Docs)?\.ts$/, budget: 3000 },

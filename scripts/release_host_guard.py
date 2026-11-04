@@ -88,6 +88,9 @@ class Policy:
         fresh = keys - self.seen
         self.seen.update(keys)
         reasons = []
+        if sample["pressure_level"] != 1:
+            self.reason = self.reason or "macOS memory pressure warning/critical"
+            return False, len(fresh)
         if fresh:
             reasons.append("new Jetsam/low-swap events")
         current = sample["services"]
@@ -105,13 +108,13 @@ class Policy:
             or (admission and changed)
         ):
             reasons.append("critical service PID turnover")
-        self.high_load = self.high_load + 1 if sample["load1"] > self.cpus * 2 else 0
-        if sample["load1"] > self.cpus * 4 or self.high_load >= 3:
+        self.high_load = self.high_load + 1 if sample["load1"] > self.cpus * 1.5 else 0
+        if sample["load1"] > self.cpus * 3 or self.high_load >= 3:
             reasons.append("abnormal sustained system load")
-        self.low = self.low + 1 if sample["free_percent"] < 25 else 0
+        self.low = self.low + 1 if sample["free_percent"] < 30 else 0
         if self.baseline_swap is None:
             self.baseline_swap = sample["swap_mib"]
-        if self.low >= 3 or sample["swap_mib"] - self.baseline_swap > 2048:
+        if sample["free_percent"] < 20 or self.low >= 2 or sample["swap_mib"] - self.baseline_swap > 512:
             reasons.append("memory/swap resource guard")
         if admission and (sample["free_percent"] < 35 or sample["load1"] > self.cpus):
             reasons.append("host not ready for admission")
@@ -153,6 +156,16 @@ class HostGuard:
         if sys.platform != "darwin":
             raise RuntimeError("Unsupported host telemetry")
         now = self.monotonic()
+        pressure = int(execute(["sysctl", "-n", "kern.memorystatus_vm_pressure_level"]).strip())
+        if pressure not in (1, 2, 4):
+            raise ValueError("Unknown memory pressure level")
+        if pressure != 1:
+            # Stop before slower queries; uncollected metrics remain absent rather
+            # than inventing free-memory, swap or service readings.
+            return {
+                "at": datetime.now(UTC).isoformat(),
+                "pressure_level": pressure,
+            }, set()
         rows = process_rows(execute(["ps", "-axo", "pid=,ppid=,pgid=,rss=,%cpu=,lstart=,comm="]))
         services = service_rows(execute(["launchctl", "list"]))
         free = re.search(r"System-wide memory free percentage:\s*(\d+)%", execute(["memory_pressure", "-Q"]))
@@ -170,6 +183,7 @@ class HostGuard:
         return {
             "at": datetime.now(UTC).isoformat(),
             "load1": os.getloadavg()[0],
+            "pressure_level": pressure,
             "free_percent": int(free[1]),
             "swap_mib": float(swap[1]) * {"K": 1 / 1024, "M": 1, "G": 1024}[swap[2]],
             "services": services,
@@ -188,12 +202,15 @@ class HostGuard:
                 self._write_permit(False, self.reason)
                 return False
             sample, keys = self.collector(admission)
-            required = ("load1", "free_percent", "swap_mib", "services")
-            if any(key not in sample for key in required) or set(sample["services"]) != set(SERVICES):
-                raise ValueError("Incomplete sample")
-            metrics = (sample["load1"], sample["free_percent"], sample["swap_mib"])
-            if any(not math.isfinite(value) or value < 0 for value in metrics) or sample["free_percent"] > 100:
-                raise ValueError("Invalid resource metric")
+            if sample["pressure_level"] not in (1, 2, 4):
+                raise ValueError("Invalid pressure metric")
+            if sample["pressure_level"] == 1:
+                required = ("load1", "free_percent", "swap_mib", "services")
+                if any(key not in sample for key in required) or set(sample["services"]) != set(SERVICES):
+                    raise ValueError("Incomplete sample")
+                metrics = (sample["load1"], sample["free_percent"], sample["swap_mib"])
+                if any(not math.isfinite(value) or value < 0 for value in metrics) or sample["free_percent"] > 100:
+                    raise ValueError("Invalid resource metric")
             safe, count = self.policy.assess(sample, keys, now, admission)
             self.reason = self.policy.reason
             self.last_check = self.monotonic()

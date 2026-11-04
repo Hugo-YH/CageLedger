@@ -44,3 +44,6 @@ test-results
 .vitepress/
 wiki/.vitepress/
 tmp/
+
+# Developer-local release converters and verified installation media.
+/.codex-run/release-tools/

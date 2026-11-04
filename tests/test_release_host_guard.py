@@ -16,6 +16,7 @@ def healthy():
     return {
         "load1": 2.0,
         "free_percent": 70,
+        "pressure_level": 1,
         "swap_mib": 1000,
         "services": dict(zip(guard.SERVICES, (10, 20, 30), strict=True)),
         "background_cpu": 0,
@@ -52,18 +53,27 @@ class HostPolicyTests(unittest.TestCase):
         sample = healthy()
         sample["free_percent"] = 24
         self.assertTrue(policy.assess(sample, set(), 0)[0])
-        self.assertTrue(policy.assess(sample, set(), 10)[0])
         self.assertTrue(policy.assess(healthy(), set(), 20)[0])
         self.assertTrue(policy.assess(sample, set(), 30)[0])
-        self.assertTrue(policy.assess(sample, set(), 40)[0])
-        self.assertFalse(policy.assess(sample, set(), 50)[0])
+        self.assertFalse(policy.assess(sample, set(), 40)[0])
 
     def test_swap_growth_blocks_even_with_good_free_memory(self):
         policy = guard.Policy(10)
         self.assertTrue(policy.assess(healthy(), set(), 0)[0])
         sample = healthy()
-        sample["swap_mib"] += 2049
+        sample["swap_mib"] += 513
         self.assertFalse(policy.assess(sample, set(), 10)[0])
+
+    def test_pressure_warning_and_critical_stop_immediately_and_latch(self):
+        for level in (2, 4):
+            policy = guard.Policy(10)
+            self.assertTrue(policy.assess(healthy(), set(), 0)[0])
+            self.assertFalse(policy.assess({**healthy(), "pressure_level": level}, set(), 5)[0])
+            self.assertFalse(policy.assess(healthy(), set(), 10)[0])
+
+    def test_very_low_memory_stops_on_first_sample(self):
+        policy = guard.Policy(10)
+        self.assertFalse(policy.assess({**healthy(), "free_percent": 19}, set(), 0)[0])
 
     def test_load_spike_and_sustained_load(self):
         for load, count in ((41, 1), (21, 3)):
@@ -199,6 +209,14 @@ class HostGuardTests(unittest.TestCase):
 
 
 class TelemetryParsingTests(unittest.TestCase):
+    def test_pressure_fast_path_does_not_wait_for_slow_system_logs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = guard.HostGuard(directory)
+            with patch.object(guard.sys, "platform", "darwin"), patch.object(guard, "execute", return_value="2") as run:
+                self.assertFalse(monitor.check())
+            run.assert_called_once_with(["sysctl", "-n", "kern.memorystatus_vm_pressure_level"])
+            self.assertIn("memory pressure", monitor.reason)
+
     def test_processes_keep_basename_and_identity_without_arguments(self):
         rows = guard.process_rows("17 1 17 1024 99.0 Tue Nov 3 14:00:00 2026 /System/Library/Media Analysis")
         self.assertEqual(rows[0]["name"], "Media Analysis")
@@ -232,6 +250,8 @@ class TelemetryParsingTests(unittest.TestCase):
 
         def execute(args):
             calls.append(args)
+            if args == ["sysctl", "-n", "kern.memorystatus_vm_pressure_level"]:
+                return "1"
             return {
                 "ps": rows,
                 "launchctl": services,
@@ -251,7 +271,8 @@ class TelemetryParsingTests(unittest.TestCase):
             self.assertEqual(monitor.sample["swap_mib"], 1536)
             self.assertEqual(monitor.sample["background_cpu"], 99)
             self.assertTrue(monitor.sample["background_cpu_advisory"])
-        self.assertEqual(calls[0], ["ps", "-axo", "pid=,ppid=,pgid=,rss=,%cpu=,lstart=,comm="])
+        self.assertEqual(calls[0], ["sysctl", "-n", "kern.memorystatus_vm_pressure_level"])
+        self.assertEqual(calls[1], ["ps", "-axo", "pid=,ppid=,pgid=,rss=,%cpu=,lstart=,comm="])
         self.assertIn("--start", calls[-1])
 
 

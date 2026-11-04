@@ -9,6 +9,7 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   {
     ignores: [
+      ".codex-run/release-tools/**",
       "data/**",
       "dist/**",
       "docs/archives/**",

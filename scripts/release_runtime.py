@@ -25,6 +25,8 @@ from functools import lru_cache
 from pathlib import Path
 from uuid import uuid4
 
+from release_reporting import progress
+
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_FILES = {
     "package.json",
@@ -113,20 +115,27 @@ def converter_identity():
     return {"executable": str(path), "bundle": str(bundle), "bundle_sha256": hashed(tree(bundle)), "version": version}
 
 
+def browser_installations(repo):
+    # Resolve exactly the locked Playwright executables, including the headless
+    # shell actually used by tests and ffmpeg used by traces/video. Do not hash
+    # unrelated historical installations or overlook a missing headless shell.
+    script = """
+const {registry} = require('playwright-core/lib/coreBundle').registry;
+console.log(JSON.stringify(['chromium','chromium-headless-shell','firefox','webkit','ffmpeg'].map(name => {
+  const item = registry.findExecutable(name);
+  return {name, executable: item.executablePathOrDie('javascript'), directory: item.directory};
+})));
+"""
+    paths = json.loads(command(["node", "-e", script], repo, env=isolation_environment()))
+    require(len(paths) == 5, "Incomplete locked Playwright runtime")
+    for item in paths:
+        require(Path(item["executable"]).is_file() and os.access(item["executable"], os.X_OK), "Browser unavailable")
+    return sorted({Path(item["directory"]) for item in paths})
+
+
 def runtime_fingerprint(repo):
-    script = "import {chromium,firefox,webkit} from 'playwright'; console.log(JSON.stringify([chromium,firefox,webkit].map(b=>b.executablePath())))"
-    paths = json.loads(command(["node", "--input-type=module", "-e", script], repo, env=isolation_environment()))
     # Hash browser bundles, not merely a version string or executable pathname.
-    installations = set()
-    for executable in paths:
-        bundle = next(
-            (p for p in Path(executable).parents if re.fullmatch(r"(?:chromium|firefox|webkit)-[0-9]+", p.name)), None
-        )
-        require(bundle is not None, "Unsupported browser installation layout")
-        installations.add(bundle)
-        if bundle.name.startswith("chromium-"):
-            installations.update(bundle.parent.glob("chromium_headless_shell-*"))
-    browsers = {str(p): tree(p) for p in sorted(installations)}
+    browsers = {str(p): tree(p) for p in browser_installations(repo)}
     return hashed(
         {
             "python": digest(Path(sys.executable).resolve()),
@@ -207,6 +216,9 @@ class Journal:
             }
             self.data["stages"][name] = entry
             self.save()
+            print(
+                f"[release] 开始 {name} · 日志 {self.directory / name / entry['attempt'] / 'command.log'}", flush=True
+            )
             return self.directory / name / entry["attempt"]
 
     def end(self, name, status, outputs=(), **details):
@@ -220,6 +232,7 @@ class Journal:
                 **details,
             )
             self.save()
+            print(f"[release] {name}: {status} · {details['elapsed_seconds']:.1f}s", flush=True)
 
 
 def specs(suites):
@@ -278,6 +291,7 @@ def isolation_environment():
         CAGELEDGER_E2E_DEEPSEEK_API_KEY="",
         CAGELEDGER_E2E_GITEA_TOKEN="",
         DEEPSEEK_API_KEY="",
+        NODE_OPTIONS="--max-old-space-size=3072",
     )
     if converter is not None:
         env["CAGELEDGER_LIBREOFFICE_BIN"] = str(converter)
@@ -347,12 +361,12 @@ class OwnedProcesses:
             except ProcessLookupError:
                 pass
 
-    def close(self):
+    def close(self, grace_seconds=160):
         self.refresh()
         if not self.live:
             return
         self.signal(signal.SIGTERM)
-        deadline = time.monotonic() + 160
+        deadline = time.monotonic() + grace_seconds
         while self.live and time.monotonic() < deadline:
             self.process.poll()
             time.sleep(0.2)
@@ -382,7 +396,7 @@ class Runner:
                 self.stopping.set()
                 raise RuntimeError(self.guard.reason)
 
-    def run(self, args, output, env=None, probe=None):
+    def run(self, args, output, env=None, probe=None, timeout_seconds=3600):
         self.healthy()
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("x") as log:
@@ -397,16 +411,23 @@ class Runner:
                 process.wait(timeout=20)
                 raise
             process.release_ownership = ownership
+            started = last_progress = time.monotonic()
             try:
                 while process.poll() is None:
+                    require(
+                        time.monotonic() - started < timeout_seconds, f"Stage exceeded {timeout_seconds}s; see {output}"
+                    )
                     self.healthy()
                     ownership.refresh()
                     if probe:
                         probe(process)
+                    if time.monotonic() - last_progress >= 30:
+                        progress(output, started)
+                        last_progress = time.monotonic()
                     time.sleep(1)
                 require(process.returncode == 0, f"Command failed; see {output}")
             finally:
-                ownership.close()
+                ownership.close(grace_seconds=10 if self.guard.reason else 160)
 
 
 def ports_available(port):

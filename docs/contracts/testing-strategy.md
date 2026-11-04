@@ -31,6 +31,57 @@ Playwright 默认启动隔离服务；`CAGELEDGER_E2E_REUSE=1` 会复用已有�
 
 不为低风险文字改动或可逆的展示调整新增只匹配措辞、复述实现的测试。测试应验证可观察的行为或业务约束，复用已有回归覆盖。小修正由主代理完成，不为例行验证启动多代理审查，也不为单点改动新建临时工作树或安装一套依赖；仅在现有环境确有冲突、数据隔离或依赖验证需要时采用这些措施。
 
+## 日常验证与升级规则
+
+先看本次 diff、暂存区和未跟踪文件，再选择验证；任务交付用一句话说明“影响范围 → 实际运行的检查 → 未覆盖项”。文案、CSS 小改或提交/推送指令本身不能触发全量检查。不要将“谨慎”解释为每次都跑全部测试。
+
+| 阶段           | 运行范围                                                        | 升级条件                                                         |
+| -------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 编辑与本地修复 | 修改文件的静态检查；必要的单元、组件、领域/API 用例；受影响页面 | 发现调用链、共享状态或业务规则影响时扩到相关模块                 |
+| 提交与推送     | 复用上述同一代码状态的结果；核对新增 diff                       | 不额外运行全量；公共基础设施变更按消费者扩大范围并说明理由       |
+| 发布前         | Mac mini 受管完整门禁，复用同一最终输入的有效证据               | 发布授权或明确要求全量验证；不能把日常 targeted 结果冒充完整门禁 |
+
+日常快速反馈以静态检查及选定单元测试约 2 分钟、涉及隔离 API/浏览器的单模块反馈约 10 分钟为优化目标，不是放宽断言或强制杀死合理用例的阈值。超过目标先查看慢用例、fixture、启动和资源消耗，不能靠增加并发或超时解决。高风险权限、金额、迁移、审计、跨房间转移继续覆盖受影响的前端、API、SQLite 和审计链路，不扩到无关领域。
+
+针对性命令必须带明确目标：
+
+```bash
+# 指定测试文件；同一轮修改后集中执行
+npm run test:target -- src/domain/intake.test.ts
+# 按前端静态 import 关系选择关联测试
+npm run test:related -- src/domain/intake.ts
+# 指定 Python 模块、类或方法
+npm run test:python:target -- tests.test_intake_order_identifiers
+# 只有需要实际浏览器链路时才运行对应 spec，可追加 --grep 选场景
+npm run test:e2e -- tests/e2e/intake.spec.ts
+# 只查看将执行的命令，不启动测试或资源准入
+npm run test:python:target -- tests.test_release_host_guard --dry-run
+```
+
+上述文件名按实际改动替换。`test:target`、`test:related`、`test:python:target` 未提供目标直接报错，不退回全量；未匹配用例也不能声称测试通过。`test:related` 只理解静态依赖，后端路由、动态加载、共享 fixture、全局配置和跨语言契约须补充明确目标。新增用例、此前失败的相关用例一起纳入。影响判断不清时先扩到可解释的模块集合；需要全量时先说明具体风险并使用受管入口，不能静默放大。
+
+`npm test`、`npm run test:python` 不带目标仍表示明确运行该层全量，用于确实需要的场景；不作为代理默认开发动作。`npm run check:steps` 是受管控制器的内部串行步骤，禁止直接调用来绕过主机保护。直接执行 Vitest/Playwright 或批量 unittest 也不构成资源保护的替代；轻量脚本单测可直接指定模块进行诊断，但不能同时启动其他重任务。
+
+## 测试用例的价值与数量
+
+测试数量和覆盖率不是完成指标，不设每个改动必须新增几条测试的配额。新增或维护用例时，说明独特的行为/风险、最轻且足够的验证层、数据隔离和维护归属：
+
+- 算法、字段映射、校验和边界组合优先放单元测试；事务、权限、缓存与持久化组合放领域/API 集成测试。
+- E2E 保留关键用户旅程、真实浏览器交互、跨页与打印行为。已在 API 层覆盖的几十种边界不再逐条复制成 E2E；跨浏览器专项只覆盖兼容风险，不复制全部业务组合。
+- 纯文字、间距和提示位置调整通常复查页面即可，不新增只搜索源码字符串、逐字复制实现的测试。
+- 发现重复/缓慢用例，先建立“风险 → 现有覆盖 → 替代覆盖”对照，确认等价后再合并或下移。不能为减少数字批量删测，也不把业务覆盖改成 mock 自证。
+- 发布报告用于查看慢 spec、setup/teardown、重试和资源中止。失败须区分产品缺陷、数据隔离、基础设施和 flaky；禁止重跑直到变绿、自动加重试或默认更新快照。当前发布仍要求零 unexpected/flaky/skipped 的完整覆盖。
+
+## 官方实践与本项目采用方式
+
+以下为 2026-11-04 查阅的官方资料；采用原则，不照搬大公司集群规模或固定比例：
+
+- [Google：Just Say No to More End-to-End Tests](https://testing.googleblog.com/2015/04/just-say-no-to-more-end-to-end-tests.html)：优先快速、稳定的小范围测试，少量 E2E 验证整体旅程。文中的比例是示例，不作为本项目配额。
+- [Microsoft：Shift testing left](https://learn.microsoft.com/en-us/devops/develop/shift-left-make-testing-fast-reliable)：在足够低的层验证、保证隔离并持续治理慢和不可靠的测试。本项目用针对性单元/API 反馈替代日常全量浏览器运行。
+- [Microsoft：Test Impact Analysis](https://learn.microsoft.com/en-us/azure/devops/pipelines/test/test-impact-analysis?view=azure-devops)：按改动关联选择用例，包含新增及历史失败用例，保留完整回归兜底。这里只采用选择原则，未接入其针对特定平台的 TIA 产品。
+- [GitHub：Concurrency](https://docs.github.com/en/actions/concepts/workflows-and-actions/concurrency)：限制竞争同一资源的任务，避免过期验证重复消耗。CageLedger 对同一用户的宿主机使用互斥锁，不自动取消正在上传的发布；后续 CI 如接入，应按改动条件选择 job，发布任务串行。
+- [Playwright：CI workers 与 global timeout](https://playwright.dev/docs/ci)：优先单 worker 和有界运行，分片不等于应在同一小内存机器同时启动。16GB Mac mini 固定一组浏览器，每个测试库仍单 worker。
+
 ## 分层
 
 | 层级        | 工具                                | 重点                                             |
@@ -93,9 +144,9 @@ npm run check
 
 ## 完整门禁
 
-完整发布门禁包含基础质量检查、React 应用与 VitePress 文档站生产构建、Chromium 完整 Playwright，以及 Firefox／WebKit 桌面兼容专项。E2E 使用临时 SQLite，测试数据不会写入正式数据库。当前 `npm run verify:full` 仍按上述顺序串行执行，作为兼容和低资源回退入口；Mac mini 的 `release:local` 由 `scripts/release_pipeline.py` 按下方配置自动编排并保存可恢复证据。
+完整发布门禁包含基础质量检查、React 应用与 VitePress 文档站生产构建、Chromium 完整 Playwright，以及 Firefox／WebKit 桌面兼容专项。E2E 使用临时 SQLite，测试数据不会写入正式数据库。`npm run verify:full` 按上述顺序串行执行，并与发布共用宿主机锁、资源准入与运行时保护；Mac mini 的 `release:local` 由 `scripts/release_pipeline.py` 按下方配置自动编排并保存可恢复证据。
 
-发布前必须提供已有、可验证的 LibreOffice Writer 转换器。macOS 使用 `CAGELEDGER_LIBREOFFICE_BIN` 指向完整应用包中的 `Contents/MacOS/soffice`；发布流程不会自动下载安装、挂载镜像或修改安全设置。预检先核实可执行文件、完整应用签名、公证和版本，再在资源准入后用临时文档与独立 Writer profile 实际生成 PDF。缺失、拒绝、超时或无法识别的响应均阻断发布。隔离环境只保留这一明确的工具路径，不继承生产数据库、服务或凭据配置；源码和运行时指纹包含转换器路径、版本及完整应用包内容。转换器或资源变化后，旧验证结果不可复用。只读镜像由操作者核实来源后挂载，并在本次验证和交付完成后卸载。
+发布前必须提供可验证的 LibreOffice Writer 转换器。入口支持显式路径、已安装正式应用或开发目录中经 SHA256 核对的只读 DMG 缓存；签名、公证、版本与实际 PDF 冒烟仍保留。工具获取顺序、挂载所有权、Git 可选签名与诊断/续跑命令见 [发布工程](release-engineering.md)。源码和运行时指纹包含转换器路径、版本及完整应用内容；工具变化后不复用旧证据。
 
 桌面专项通过 `npm run test:e2e:compat` 单独运行；首次使用执行 `npx playwright install firefox webkit` 安装当前锁定 Playwright 配套的浏览器，不升级依赖。专项串行启动两个独立临时服务及数据库，单 worker、零重试，不允许复用开发服务。默认端口为 5193/5194/5195 与 5203/5204/5205，`CAGELEDGER_COMPAT_PORT` 可调整起始端口；`CAGELEDGER_COMPAT_OUTPUT_DIR` 指定日志报告、截图及样式证据目录，默认位于 `test-results/desktop-compat`。
 
@@ -105,20 +156,33 @@ Chromium 设置 `failOnFlakyTests`，重试通过仍使完整门禁失败，避�
 
 VitePress 文档使用 `wiki/` 作为唯一源目录。`npm run release:notes:sync` 从 `wiki/更新日志.md` 生成系统“关于”页使用的更新记录；发布脚本同时校验 Markdown 版本条目和生成结果。
 
-### M4 16GB 发布并行配置
+### M4 16GB 宿主机资源上限
 
 此配置适用于 Apple M4、10核CPU（4个性能核＋6个能效核）、16GB内存的 Mac mini。并发单位是一组浏览器测试及其 Vite、Python API、文档服务，不是操作系统线程数，也不是代理数量。
 
-默认保留 **3个Chromium分片＋Firefox、WebKit两个独立结果**，默认串行运行（`--browser-slots 1`）；可显式指定 `--browser-slots 2`，最多同时运行2组浏览器任务。第二组仅在可用内存比例至少45%、负载不高于逻辑核数、交换空间相对准入基线增长不超过256 MiB时启动；预算降低后本轮不再提高。空槽调度后续任务，WebKit仍在Firefox成功后启动。每组保持 `workers=1`、`fullyParallel=false`；通过独立服务与数据库并行，不能直接在同一测试库上增加worker。4个Chromium分片再加兼容链会达到5组，不能仅根据10个逻辑核心就设为默认；提高上限前需测量资源和整个门禁耗时，并连续两次完整通过且没有不稳定用例。
+默认保留 **3 个 Chromium 分片＋Firefox、WebKit 两个独立结果**，在 16GB 主机上固定顺序执行，只允许 `--browser-slots 1`。`--browser-slots 2` 仅供至少 24GiB 的主机显式选择，仍需资源预算允许；不能根据 CPU 核数在 16GB 主机提高上限。每组保持 `workers=1`、`fullyParallel=false`，五组使用独立数据库与端口。Vitest 默认一个 worker，Python unittest 顺序执行。
+
+发布以及 `check`、`verify:full`、单层全量和浏览器命令共用 `~/Library/Caches/CageLedger/verification.lock`，跨 clone/worktree 生效。同一用户同时只能有一个受管验证/发布任务；冲突立即说明并退出，不排队启动第二套，也不杀已有任务。针对性命令同样取得锁并检查资源，但只做一次准入采样；全量和浏览器观察至少 60 秒稳定状态。普通开发服务不自动停止。
+
+| 保护项                            | 准入/运行规则                                                    |
+| --------------------------------- | ---------------------------------------------------------------- |
+| macOS 内存压力                    | 必须为 normal；warning/critical 立即停止本次任务，遥测缺失也停止 |
+| 可用内存指标                      | 准入至少 35%；运行中低于 30% 连续两次或低于 20% 一次停止         |
+| 交换空间                          | 准入 60 秒波动不得超过 64 MiB；运行相对基线增长超过 512 MiB 停止 |
+| 系统负载                          | 准入不高于逻辑核数；运行超过 1.5 倍连续三次或超过 3 倍一次停止   |
+| Jetsam/low-swap、关键服务异常重启 | 保留既有停止条件，不能等系统杀进程后再无限重试                   |
+| 单阶段时长                        | 最长 60 分钟；浏览器也设置全局上限，超限保留报告并失败           |
+
+运行时约每 5 秒检查资源。因资源保护中止时，只对核实归属的本次子进程先发 TERM，最多等 10 秒再处理残留；正常结束仍保留 PDF 渲染器的宽限回收时间。不会使用 `killall`、结束用户应用、修改系统 swap 或强制卸载他人资源。受管验证将 Node 单进程堆上限设为 3GiB；这不是整机 RSS 的硬上限，互斥与压力保护仍然必需。发布中的隔离检查使用相同 Node 堆上限。
 
 v1.14.0的历史报告包含266项Chromium用例：两片实测约12.0、13.8分钟；Firefox和WebKit串行合计约7.7分钟。用同一批历史时长映射到Playwright实际默认分组，3片为94／85／87项，累计测试时长约8.0／8.1／9.7分钟；4片的最长组仍约8.1分钟。它们是历史估算，未计入新并发下的启动和资源争用，不能承诺等比例加速；首次采用3片时记录实际墙钟、峰值内存压力及交换空间增量后再校准。
 
 #### 阶段与资源预算
 
 - 先在隔离发布检出中确定版本、更新记录和依赖，再执行基础检查与生产构建。同一检出中的 `npm run check`、`npm run build` 和离线打包不能相互重叠：它们会复用文档构建目录，构建还会生成更新记录及应用产物。
-- 浏览器阶段按配置的1或2组上限调度三片Chromium和兼容引擎；不同时启动Docker镜像构建、另一次完整门禁或本地大模型推理。常驻服务不应被擅自停止，资源不足时降低测试并发。
-- 依赖预热可作为单独的受管任务运行 `npm run prewarm:container:local`，只构建前端与两种架构的运行依赖阶段，不生成或推送发布镜像。与浏览器测试并行时需计入资源预算并监测内存、交换空间及构建器磁盘，压力持续升高时停止预热；未经完整门禁和资源验证，不自动启用或减少测试覆盖。预热失败或缓存被回收时，正式构建仍按正常流程执行。
-- 至少给系统和日常应用预留约4GB资源预算；这不是并行任务的内存用量保证。若系统内存压力持续进入警告／严重状态、交换空间持续增长或桌面响应明显变慢，停止启动新任务并保留已完成证据，排查后在稳定主机上续跑。保留已完成结果并在报告中记录降级原因，不通过增大超时掩盖资源争用。
+- 16GB 主机的浏览器阶段一次只启动一组；不同时启动Docker镜像构建、另一次完整门禁或本地大模型推理。常驻服务不应被擅自停止，资源不足时降低测试并发。
+- 容器依赖预热只在验证结束后单独执行；16GB 主机禁止和浏览器、全量单测、构建或本地大模型推理重叠。预热不属于必须门禁，失败不能通过增加并发补偿。
+- 至少给系统和日常应用预留约 4GB 资源预算；这不是并行任务的内存用量保证。若系统内存压力持续进入警告／严重状态、交换空间持续增长或桌面响应明显变慢，停止启动新任务并保留已完成证据，排查后在稳定主机上续跑。保留已完成结果并在报告中记录降级原因，不通过增大超时掩盖资源争用。
 - 只有全部必需检查成功，才进入发布提交、标签、镜像与Release上传；Git写入及同一标签的发布操作保持串行。
 
 并发配置参与浏览器凭据指纹；配置、源码、依赖或转换器变化会使对应旧凭据失效。失败或中断阶段必须重新运行；只有输入指纹相同且报告、隔离记录和输出完整的已成功阶段可以复用。调度预算不能替代或关闭原有交换空间、Jetsam、系统服务及内存保护。单组运行仍保留五个独立数据库和端口组。
@@ -137,7 +201,7 @@ v1.14.0的历史报告包含266项Chromium用例：两片实测约12.0、13.8分
 
 每片必须独立设置 `CAGELEDGER_E2E_PORT`、`CAGELEDGER_E2E_API_PORT`、`CAGELEDGER_DOCS_PORT`、`CAGELEDGER_E2E_OUTPUT_DIR`，并使用 `CAGELEDGER_E2E_REUSE=0`。Playwright读取的是 `E2E_*` 端口变量，再传给开发服务；只设置 `CAGELEDGER_DEV_*` 会落回默认测试端口，造成分片冲突。启动后核对health中的数据库路径，确认各片都是不同的临时库；不得使用原始数据库、附件或普通开发实例。
 
-以下命令仅供诊断理解，不替代正式入口的证据、资源保护和阶段记录，不能直接启动四组任务。`release_evidence_dir` 由调用方设置为本次运行独立的绝对证据目录，不是现有发布脚本的配置开关。
+以下命令仅供理解内部子步骤，禁止直接执行以绕过入口的证据、资源保护和阶段记录，不能同时启动多组任务。`release_evidence_dir` 由调用方设置为本次运行独立的绝对证据目录，不是现有发布脚本的配置开关。
 
 ```bash
 # Chromium 1/3；其余两片按表替换端口、目录和 --shard。
@@ -146,7 +210,7 @@ CAGELEDGER_E2E_PORT=5613 CAGELEDGER_E2E_API_PORT=5614 CAGELEDGER_DOCS_PORT=5615 
   CAGELEDGER_E2E_REUSE=0 CAGELEDGER_E2E_OUTPUT_DIR="$release_evidence_dir/chromium-1-of-3" \
   npx playwright test --shard=1/3 --workers=1 --retries=0
 
-# 与Chromium分片并行，脚本内部仍依次执行Firefox和WebKit。
+# Chromium 分片完成后依次执行 Firefox 和 WebKit，16GB 主机不重叠。
 CAGELEDGER_COMPAT_PORT=5643 CAGELEDGER_COMPAT_OUTPUT_DIR="$release_evidence_dir/compat" \
   npm run test:e2e:compat -- --retries=0
 ```
@@ -167,7 +231,7 @@ CAGELEDGER_COMPAT_PORT=5643 CAGELEDGER_COMPAT_OUTPUT_DIR="$release_evidence_dir/
 - 准入至少观察60秒。新增Jetsam／low-swap、关键服务快速重启、持续异常负载、内存／交换空间恶化或遥测不可用会阻断。后台媒体分析／备份CPU仅记录提示，不单独判定主机不稳定；不停止系统服务。
 - 入口要求Node >=22.12 <23；可用 `CAGELEDGER_NODE_BIN` 指定已有运行时。默认Node不符时尝试本机已有的 `~/.local/share/cageledger-node22/bin/node`，不安装软件或修改系统设置。
 - 隔离检出使用 `CAGELEDGER_PYTHON_BIN` 指向已有虚拟环境，不创建会被Git识别为未跟踪文件的 `.venv` 符号链接。文件白名单使用NUL分隔路径，不依赖中文文件名显示设置。镜像缺失仅接受与目标镜像完全匹配的Docker错误；认证、网络、超时及模糊响应仍停止。
-- 预检检查分支引用、版本冲突、环境隔离、Docker、签名配置、Gitea权限和镜像占用；签名实际有效性仍在提交及标签后核验。应用／工具修改必须先提交，发布只允许暂存已知版本与更新记录文件。
+- 预检检查分支引用、版本冲突、环境隔离、Docker、Gitea权限和镜像占用；Git 默认不签名，显式 `--sign` 时先在临时仓库实测签名，并在正式提交及标签后验证。应用／工具修改必须先提交，发布只允许暂存已知版本与更新记录文件。
 - 续发先核对Git引用；远端冲突不覆盖。已经完成且SHA一致的Release可恢复；上传结果不明、草稿／附件部分完成、镜像部分推送时暂停人工核查，不盲目再次POST或覆盖版本镜像。不存在自动回滚远端发布的保证。
 - 同版本镜像、Git引用、Release、Wiki、双架构隔离冒烟和离线包验证完成后才移动`latest`；若期间其他发布者移动分支或`latest`，暂停而不覆盖。跨Git／Gitea／Registry不是原子事务。
 - `--verify-only` 完成准备与门禁后停在提交／标签之前；`--dry-run` 只展示步骤。未实现跳过容器或离线镜像的旁路参数，交付物仍完整保留。

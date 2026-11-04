@@ -52,7 +52,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     // Bound CPU-heavy Ant Design/JSDOM tests on the M4 16GB release host.
-    maxWorkers: 2,
+    maxWorkers: 1,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     coverage: {

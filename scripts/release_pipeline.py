@@ -5,15 +5,12 @@ Interrupted mutations are reconciled, never blindly retried. Evidence is local,
 not a signature or a substitute for a trusted checkout/host.
 """
 
-import argparse
 import hashlib
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
-import tarfile
 import threading
 import time
 from collections import Counter
@@ -21,9 +18,9 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from uuid import uuid4
 
+from release_credentials import config, record_signing, verify_signing
 from release_runtime import (
     RELEASE_FILES,
-    ROOT,
     Journal,
     Runner,
     atomic_json,
@@ -39,22 +36,23 @@ from release_runtime import (
     official_origin,
     ports_available,
     reconcile_ref,
-    release_lock,
     remote_ref,
     require,
     runtime_fingerprint,
     source_fingerprint,
     tree,
-    validate_build,
 )
+from release_runtime import ROOT as ROOT
 
 
 class Pipeline:
-    def __init__(self, repo, version, directory, guard, browser_slots=1):
+    def __init__(self, repo, version, directory, guard, browser_slots=1, sign=False):
         require(type(browser_slots) is int and browser_slots in (1, 2), "Browser slots must be 1 or 2")
         self.browser_slots = browser_slots
         self.repo, self.version = repo, version
         self.journal = Journal(directory, {"repo": str(repo.resolve()), "version": version})
+        self.sign = sign
+        record_signing(self.journal, sign)
         self.runner = Runner(repo, guard)
         self.environment = isolation_environment()
         self.input = None
@@ -119,11 +117,14 @@ class Pipeline:
         command(["docker", "buildx", "version"], self.repo)
         command(["node", "scripts/check_python_runtime.mjs"], self.repo)
         command(["node", "scripts/release_notes_payload.mjs", "--version", self.version, "--check"], self.repo)
-        for key in ("commit.gpgsign", "tag.gpgsign"):
-            require(
-                command(["git", "config", "--get", key], self.repo).lower() == "true", f"Enable {key} before release"
-            )
-        command(["git", "config", "--get", "user.signingkey"], self.repo)
+        require(
+            config(self.repo, "user.name") and config(self.repo, "user.email"),
+            "Configure Git user.name and user.email before release",
+        )
+        if self.sign:
+            self.journal.data["signing_probe"] = verify_signing(self.repo)
+            self.journal.save()
+            self.environment = isolation_environment()
         if branch in {"main", "rc"}:
             command(
                 ["bash", "scripts/check_stable_release_ready.sh" if branch == "main" else "scripts/check_rc_merged.sh"],
@@ -353,7 +354,7 @@ class Pipeline:
                 changed_paths(self.repo) <= RELEASE_FILES,
                 "Unexpected modified source before commit",
             )
-            # Persist the intended tree before commit; interrupted signed commits can be reconciled.
+            # Persist the intended tree before commit; interrupted commits can be reconciled.
             command(["git", "add", "--", *sorted(RELEASE_FILES)], self.repo)
             expected_tree = command(["git", "write-tree"], self.repo)
             previous = self.journal.data.get("commit_intent")
@@ -370,18 +371,46 @@ class Pipeline:
                     "parent": command(["git", "rev-parse", "HEAD"], self.repo),
                 }
                 self.journal.save()
-                command(["git", "commit", "-S", "-m", f"Release v{self.version}"], self.repo)
-            command(["git", "verify-commit", "HEAD"], self.repo)
+                command(
+                    [
+                        "git",
+                        "-c",
+                        f"commit.gpgsign={str(self.sign).lower()}",
+                        "commit",
+                        "-S" if self.sign else "--no-gpg-sign",
+                        "-m",
+                        f"Release v{self.version}",
+                    ],
+                    self.repo,
+                )
             self.journal.data["commit"] = command(["git", "rev-parse", "HEAD"], self.repo)
             self.journal.save()
-        command(["git", "verify-commit", "HEAD"], self.repo)
+        require(command(["git", "rev-parse", "HEAD"], self.repo) == self.journal.data["commit"], "Release HEAD changed")
+        if self.sign:
+            command(["git", "verify-commit", "HEAD"], self.repo)
         tag = f"v{self.version}"
         exists = subprocess.run(
             ["git", "show-ref", "--verify", "--quiet", f"refs/tags/{tag}"], cwd=self.repo, check=False
         )
         if exists.returncode != 0:
-            command(["git", "tag", "-s", tag, "-m", tag], self.repo)
-        command(["git", "verify-tag", tag], self.repo)
+            command(
+                [
+                    "git",
+                    "-c",
+                    f"tag.gpgsign={str(self.sign).lower()}",
+                    "tag",
+                    "-s" if self.sign else "-a",
+                    tag,
+                    "-m",
+                    tag,
+                ],
+                self.repo,
+            )
+        require(
+            command(["git", "cat-file", "-t", f"refs/tags/{tag}"], self.repo) == "tag", "Release tag must be annotated"
+        )
+        if self.sign:
+            command(["git", "verify-tag", tag], self.repo)
         require(
             command(["git", "rev-parse", tag + "^{commit}"], self.repo) == self.journal.data["commit"],
             "Tag commit mismatch",
@@ -598,91 +627,9 @@ class Pipeline:
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("positional_version", nargs="?")
-    parser.add_argument("--version")
-    parser.add_argument("--bump")
-    parser.add_argument("--push", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument(
-        "--skip-full-verify", action="store_true", help="Compatibility alias: reuse only verified matching receipts"
-    )
-    parser.add_argument(
-        "--browser-slots",
-        type=int,
-        choices=(1, 2),
-        default=1,
-        help="Maximum independent browser groups (default: 1; resource guard may reduce 2)",
-    )
-    parser.add_argument("--state-dir", type=Path)
-    parser.add_argument("--validate-build", type=Path)
-    parser.add_argument(
-        "--verify-only", action="store_true", help="Prepare and verify without committing/tagging/pushing"
-    )
-    args = parser.parse_args()
-    if args.validate_build:
-        validate_build(args.validate_build, ROOT)
-        return
-    version = args.version or args.positional_version
-    if not version:
-        version = command(["node", "scripts/bump_version.mjs", "--bump", args.bump or "beta"])
-    require(re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.-]*", version), "Invalid version")
-    if args.dry_run:
-        print(
-            f"preflight → prepare → check → build → 3 Chromium shards + Firefox + WebKit (up to {args.browser_slots} slots) → offline package"
-        )
-        print("→ signed commit/tag" if not args.verify_only else "→ stop before commit/tag")
-        if args.push and not args.verify_only:
-            print("→ version images → Git refs → Release → Wiki → delivery/offline verification → latest")
-        return
-    from release_host_guard import HostGuard
+    from release_cli import main as run
 
-    common = Path(command(["git", "rev-parse", "--git-common-dir"]))
-    if not common.is_absolute():
-        common = ROOT / common
-    directory = (args.state_dir or (ROOT.parent / (ROOT.name + "-release-state") / version)).resolve()
-    # State must be excluded from source fingerprints and archive packaging.
-    require(
-        not directory.is_relative_to(ROOT),
-        "State must be outside checkout",
-    )
-    with release_lock(ROOT):
-        guard = HostGuard(directory / "host")
-        pipeline = Pipeline(ROOT, version, directory, guard, browser_slots=args.browser_slots)
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            signal.signal(sig, lambda _s, _f: pipeline.runner.stopping.set())
-        pipeline.preflight()
-        require(guard.admit(), guard.reason)
-        pipeline.prepare()
-        frozen = pipeline.journal.data.get("release_input")
-        require(
-            not frozen or frozen == pipeline.fingerprint(),
-            "Release input/runtime changed after commit; use a new version",
-        )
-        pipeline.stage("converter-smoke", [sys.executable, "scripts/check_release_converter.py"])
-        pipeline.stage("check", ["npm", "run", "check"])
-        pipeline.stage("build", ["npm", "run", "build"], [ROOT / "web-dist", ROOT / ".vitepress/dist"])
-        pipeline.browsers()
-        package = ROOT / "dist" / f"CageLedger-offline-{version}.tar.gz"
-        pipeline.stage(
-            "package",
-            ["bash", "scripts/package_offline.sh"],
-            [package],
-            env={**pipeline.environment, "CAGELEDGER_RELEASE_BUILD_RECEIPT": str(pipeline.journal.path)},
-            inputs=[ROOT / "web-dist", ROOT / ".vitepress/dist"],
-        )
-        from release_verify_offline import archive_check
-
-        with tarfile.open(package) as bundle:
-            package_safety = archive_check(bundle, ROOT)
-        atomic_json(directory / "package-safety.json", {"sha256": digest(package), **package_safety})
-        if not args.verify_only:
-            pipeline.journal.data["release_input"] = pipeline.fingerprint()
-            pipeline.journal.save()
-            pipeline.commit_and_tag()
-            if args.push:
-                pipeline.publish()
-        print(f"Release stages complete; evidence: {directory}")
+    run(Pipeline)
 
 
 if __name__ == "__main__":

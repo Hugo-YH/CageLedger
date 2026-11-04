@@ -36,9 +36,9 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 | 测试、浏览器、打印、性能 | [testing-strategy.md](docs/contracts/testing-strategy.md) 中对应任务条目                                                                                                                          |
 | 格式、lint、架构门禁     | [code-quality.md](docs/contracts/code-quality.md)                                                                                                                                                 |
 | 文档或代理指令维护       | [documentation-system.md](docs/contracts/documentation-system.md)、[agent-instructions.md](docs/contracts/agent-instructions.md)                                                                  |
-| 发布                     | [开发规范](wiki/开发规范.md)、[branching.md](docs/contracts/branching.md)、`scripts/release_local.sh`                                                                                             |
+| 发布                     | [开发规范](wiki/开发规范.md)、[发布工程](docs/contracts/release-engineering.md)、[branching.md](docs/contracts/branching.md)、`scripts/release_local.sh`                                          |
 
-常用命令：`npm run dev`、`npm run check`、`npm run build`。开发页面 `http://localhost:5173`，API `http://127.0.0.1:5174`；页面异常先确认这两个端口的进程归属。项目 Python 命令通过 `scripts/run_python.mjs` 使用 `.venv`，可由 `CAGELEDGER_PYTHON_BIN` 覆盖。
+日常入口：`npm run dev`，按影响范围使用 `test:target`、`test:related`、`test:python:target` 并指定目标；全量 `check`、`verify:full` 留到发布前或明确要求全量时。开发页面 `http://localhost:5173`，API `http://127.0.0.1:5174`；页面异常先确认这两个端口的进程归属。项目 Python 命令通过 `scripts/run_python.mjs` 使用 `.venv`，可由 `CAGELEDGER_PYTHON_BIN` 覆盖。
 
 ## 业务边界
 
@@ -74,4 +74,12 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 MacBook 默认负责修改代码、针对性验证、提交并推送到 Gitea；推送代码不代表授权发布，不自动连接 Mac mini 执行完整检查或发布。交付时说明提交、验证结果及留待发布验证的项目。
 
-Mac mini 负责从 Gitea 同步待发布代码、发布前完整检查、版本与标签、构建打包、镜像及 Release 上传和 Wiki 同步。完整门禁优先按 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置受管并行执行，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
+Mac mini 负责从 Gitea 同步待发布代码、发布前完整检查、版本与标签、构建打包、镜像及 Release 上传和 Wiki 同步。完整门禁按 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置受管执行，一次只运行一组浏览器，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
+
+## 测试执行约束
+
+- 日常按“本次 diff → 影响模块/风险 → 明确测试目标”选择检查。文案、样式小改、提交或推送不触发全量测试；不得为追求测试数量新增重复、只匹配措辞或复述实现的用例。新增覆盖优先选择能验证行为的最轻层。
+- 使用 `test:target`、`test:related`、`test:python:target` 并提供明确目标；静态依赖选择无法覆盖动态/跨语言关系时补充相关模块，不能将零用例当通过或静默转为全量。失败先定位再重跑，已通过且未受改动影响的结果不重复执行。
+- Mac mini 16GB 固定单组浏览器、单 worker；禁止同时运行多套验证、Docker 构建/预热或大模型推理。完整检查及浏览器使用受管入口，不直接调用 `check:steps` 或后台拼接命令绕过宿主机锁和资源保护；warning/critical 内存压力时停止本次任务。
+- 交付报告实际范围、通过/失败/未运行项。资源中止不算通过；不得靠增大超时、重试直到变绿或删测绕过。测试选择、用例治理与官方依据统一见 [测试策略](docs/contracts/testing-strategy.md)。
+- 发布默认不签名，需要时显式 `--sign`；保留推送认证、制品校验和完整门禁，不修改个人 Git 签名配置。
