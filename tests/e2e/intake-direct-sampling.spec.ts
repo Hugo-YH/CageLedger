@@ -14,7 +14,7 @@ async function loginAndOpenEntry(page: Page) {
 
 async function expectDirectFields(page: Page) {
   await expect(page.getByRole("heading", { name: "直接取材预约", exact: true })).toBeVisible();
-  for (const label of ["房间", "结束日期", "饲养周期（天）", "打印张数"]) {
+  for (const label of ["房间", "结束日期", "饲养周期（天）", "打印张数", "接收人员", "联系电话"]) {
     await expect(page.getByLabel(label, { exact: true })).toHaveCount(0);
   }
   await expect(page.getByLabel("接收日期", { exact: true })).toBeVisible();
@@ -160,7 +160,6 @@ test("AI direct-sampling recognition and manual purpose correction work across v
   await page.getByLabel("预约消息", { exact: true }).fill("预约10只小鼠，到货直接取材，无需饲养。");
   await page.getByRole("button", { name: "AI识别", exact: true }).click();
   await expectDirectFields(page);
-  await expect(page.getByLabel("接收人员", { exact: true })).toHaveValue("系统管理员");
   await expect(page.getByLabel("供应商", { exact: true })).toHaveValue("广东维通利华");
   for (const viewport of [
     { width: 1440, height: 1000 },
@@ -170,7 +169,6 @@ test("AI direct-sampling recognition and manual purpose correction work across v
   ]) {
     await page.setViewportSize(viewport);
     await expectDirectFields(page);
-    await page.getByLabel("联系电话", { exact: true }).fill("020-12345678 / 13800000000");
     await page.getByRole("combobox", { name: "状态", exact: true }).scrollIntoViewIfNeeded();
     expect(await page.locator(".workspace-view").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`direct-${viewport.width}.png`), animations: "disabled" });
