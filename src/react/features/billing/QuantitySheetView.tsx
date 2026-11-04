@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Alert, Button, Switch } from "antd";
+import { Alert, Button, Flex, Switch, Typography } from "antd";
+import { CheckCircleOutlined } from "@ant-design/icons";
 import type { SessionUser } from "../../api/contracts";
 import { useQuantitySheetDetail } from "../../api/quantitySheets";
 import { Tooltip } from "../../components/Tooltip";
@@ -45,6 +46,7 @@ export function QuantitySheetView({
     setConfirmSave,
     selectedRoom,
     persistSheet,
+    lastSaved,
   } = editor;
   const openEditor = useCallback((id: string) => setEditingId(id), []);
   const dismissEditor = useCallback(() => {
@@ -108,17 +110,49 @@ export function QuantitySheetView({
       />
     ) : null;
 
+  const entryHeader = (
+    <>
+      {entryToolbar}
+      {mode === "entry" && lastSaved ? (
+        <Alert
+          aria-label="上次成功保存的数量统计表"
+          role="status"
+          type="info"
+          showIcon
+          icon={<CheckCircleOutlined />}
+          title={
+            <Flex align="center" gap={12} wrap>
+              <strong>上次成功保存</strong>
+              <Typography.Text strong>{lastSaved.iacuc}</Typography.Text>
+              <Typography.Text>{lastSaved.month}</Typography.Text>
+              <Typography.Text>房间 {lastSaved.roomName || "未标注"}</Typography.Text>
+              <Typography.Text type="secondary">
+                <time dateTime={lastSaved.savedAt}>
+                  {new Date(lastSaved.savedAt).toLocaleTimeString("zh-CN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  })}
+                </time>
+              </Typography.Text>
+            </Flex>
+          }
+        />
+      ) : null}
+    </>
+  );
+
   if (initialLoading)
     return (
       <section className="billing-layout quantity-billing-layout react-quantity-layout">
-        {entryToolbar}
+        {entryHeader}
         <PageSkeleton embedded label="数量统计表" variant="form" />
       </section>
     );
   if (mode === "entry" && metadataError && !metadataHasData) {
     return (
       <section className="billing-layout quantity-billing-layout react-quantity-layout">
-        {entryToolbar}
+        {entryHeader}
         <PageState title="房间或负责人配置加载失败" retry={retryMetadata} />
       </section>
     );
@@ -126,7 +160,7 @@ export function QuantitySheetView({
 
   return (
     <section className="billing-layout quantity-billing-layout react-quantity-layout">
-      {entryToolbar}
+      {entryHeader}
       {mode === "entry" && metadataError && metadataHasData ? (
         <Alert
           role="alert"

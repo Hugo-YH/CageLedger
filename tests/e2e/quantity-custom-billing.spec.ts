@@ -77,7 +77,7 @@ test("full-balance custom pricing saves without a fixed count and restores on ed
   const { item } = await response.json();
   generatedSheetId = item.id;
   expect(item.customBillingSegments[0]).toMatchObject({ quantityMode: "all", quantity: null, unitPrice: 3 });
-  await expect(page.getByRole("status")).toContainText("统计表已保存");
+  await expect(page.getByRole("status").filter({ hasText: "统计表已保存" })).toBeVisible();
   const read = await page.request.get(`/api/quantity-sheets/${item.id}`);
   expect((await read.json()).item.customBillingSegments).toEqual(item.customBillingSegments);
   const overlap = await page.request.put(`/api/quantity-sheets/${item.id}`, {

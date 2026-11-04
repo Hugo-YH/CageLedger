@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { QuantitySheet } from "../../api/contracts";
 import { QuantitySheetView } from "./QuantitySheetView";
+import type { QuantitySaveReceipt } from "./quantitySheetEditorModel";
 
 const api = vi.hoisted(() => ({
   detail: {
@@ -14,6 +15,7 @@ const api = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   editingDialog: false,
+  lastSaved: null as QuantitySaveReceipt | null,
   metadataError: false,
   metadataHasData: true,
   metadataReady: true,
@@ -35,6 +37,7 @@ vi.mock("./hooks/useQuantitySheetEditor", () => ({
       confirmSave: null,
       draft: { id: "draft", iacuc: "", month: "2026-10" },
       editingDialog: api.editingDialog,
+      lastSaved: api.lastSaved,
       editorRows: [],
       initialLoading: false,
       metadataLoading: false,
@@ -109,6 +112,7 @@ describe("QuantitySheetView saved editor", () => {
   beforeEach(() => {
     api.detail = { data: undefined, error: null, isError: false, isPending: true, refetch: vi.fn() };
     api.editingDialog = false;
+    api.lastSaved = null;
     api.metadataError = false;
     api.metadataHasData = true;
     api.metadataReady = true;
@@ -122,6 +126,24 @@ describe("QuantitySheetView saved editor", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("shows the receipt on entry without turning the saved list into a success banner", () => {
+    api.lastSaved = {
+      id: "saved-id",
+      iacuc: "Z2025034",
+      month: "2026-11",
+      roomName: "8101",
+      savedAt: "2026-11-04T08:30:00.000Z",
+    };
+    const view = render(<QuantitySheetView user={user} mode="entry" />);
+    const receipt = screen.getByRole("status", { name: "上次成功保存的数量统计表" });
+    expect(receipt).toHaveTextContent("Z2025034");
+    expect(receipt).toHaveTextContent("2026-11");
+    expect(receipt).toHaveTextContent("房间 8101");
+    expect(receipt.querySelector("time")).toHaveAttribute("dateTime", api.lastSaved.savedAt);
+    view.rerender(<QuantitySheetView user={user} mode="saved" />);
+    expect(screen.queryByRole("status", { name: "上次成功保存的数量统计表" })).not.toBeInTheDocument();
   });
 
   it("opens the edit dialog immediately and ignores a result that arrives after close", () => {

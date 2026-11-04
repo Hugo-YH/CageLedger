@@ -1,5 +1,6 @@
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
+import { useWorkspaceMemory } from "../../../state/workspaceMemory";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CustomBillingSegment, QuantitySheet, QuantitySheetRow, SessionUser } from "../../../api/contracts";
 import { usePrincipalIdentities } from "../../../api/administration";
@@ -19,6 +20,7 @@ import {
   makeEditorRows,
   hasRowContent,
   hasExpandedBillingOptions,
+  type QuantitySaveReceipt,
 } from "../quantitySheetEditorModel";
 import { useQuantityIacuc } from "./useQuantityIacuc";
 
@@ -26,6 +28,7 @@ const normalizeIacuc = (value: string) => value.trim().toUpperCase();
 
 export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved", editRequested = false) {
   const feedback = useOperationFeedback();
+  const [lastSaved, setLastSaved] = useWorkspaceMemory<QuantitySaveReceipt | null>("quantity-entry:last-saved", null);
   const [editingDialog, setEditingDialog] = useState(false);
   const metadataEnabled = mode === "entry" || editRequested || editingDialog;
   const roomsQuery = useQuantitySheetRooms(metadataEnabled);
@@ -257,6 +260,15 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
       const response = await save.mutateAsync({ sheet: confirmSave, exists });
       if (!isCurrent()) return;
       const normalized = normalizeQuantitySheet(response.item);
+      if (mode === "entry") {
+        setLastSaved({
+          id: normalized.id,
+          iacuc: normalized.iacuc,
+          month: normalized.month,
+          roomName: normalized.roomName,
+          savedAt: new Date().toISOString(),
+        });
+      }
       const next = createQuantitySheet(normalized.month, user.displayName);
       iacucLookup.reset();
       peopleEdits.current = { code: "", pi: false, owner: false };
@@ -308,6 +320,7 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   }
 
   return {
+    lastSaved,
     rooms,
     draft,
     setDraft,

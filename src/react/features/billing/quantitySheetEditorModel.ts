@@ -4,6 +4,9 @@ import { createQuantityRow } from "../../../domain/quantitySheets";
 export const todayMonth = new Date().toISOString().slice(0, 7);
 export const QUANTITY_ROWS_PER_PAGE = 31;
 
+/** Display-only receipt for this account's entry session, not a cached business object. */
+export type QuantitySaveReceipt = Pick<QuantitySheet, "id" | "iacuc" | "month" | "roomName"> & { savedAt: string };
+
 export function makeEditorRows(sheet: QuantitySheet) {
   const count = Math.max(sheet.pageCount, 1) * QUANTITY_ROWS_PER_PAGE;
   return Array.from({ length: count }, (_, index) => sheet.rows[index] || createQuantityRow(sheet.month, index === 0));

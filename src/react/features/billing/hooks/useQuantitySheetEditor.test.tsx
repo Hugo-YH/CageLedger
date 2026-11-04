@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { QuantitySheet, SessionUser } from "../../../api/contracts";
+import { WorkspaceMemory } from "../../../state/workspaceMemory";
 import { createQuantityRow, normalizeQuantitySheet } from "../../../../domain/quantitySheets";
 import { useQuantitySheetEditor } from "./useQuantitySheetEditor";
 
@@ -42,11 +43,17 @@ describe("quantity editor draft lifecycle", () => {
   let saveResponse: (sheet: QuantitySheet) => Response | Promise<Response>;
   let lookupResponse: (() => Promise<Response>) | undefined;
   let writes: Array<{ url: string; method: string; body: { sheet: QuantitySheet; expectedUpdatedAt: string } }>;
+  let memory: Map<string, unknown>;
   function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <WorkspaceMemory.Provider value={memory}>{children}</WorkspaceMemory.Provider>
+      </QueryClientProvider>
+    );
   }
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+    memory = new Map();
     writes = [];
     lookupResponse = undefined;
     saveResponse = (sheet) => Response.json({ item: { ...sheet, updatedAt: "server-version" } });
@@ -141,12 +148,57 @@ describe("quantity editor draft lifecycle", () => {
     expect(result.current.editorRows).toHaveLength(31);
     expect(result.current.editingDialog).toBe(false);
     expect(result.current.notice).toBe("");
+    expect(result.current.lastSaved).toBeNull();
     expect(operationFeedback.success).toHaveBeenCalledWith("数量统计表已保存", expect.any(String));
+  });
+
+  it("keeps the last confirmed entry receipt through new drafts, errors and same-account navigation", async () => {
+    const first = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    await waitFor(() => expect(first.result.current.metadataReady).toBe(true));
+    expect(first.result.current.lastSaved).toBeNull();
+    act(() => first.result.current.loadForEdit(savedSheet()));
+    act(() => first.result.current.requestSave(submitEvent()));
+    saveResponse = (sheet) => Response.json({ item: { ...sheet, id: "confirmed-id", roomName: "服务端房间" } });
+    await act(async () => first.result.current.persistSheet());
+    const receipt = first.result.current.lastSaved;
+    expect(receipt).toMatchObject({
+      id: "confirmed-id",
+      iacuc: "Z1",
+      month: "2026-09",
+      roomName: "服务端房间",
+      savedAt: expect.any(String),
+    });
+    expect(first.result.current.draft.iacuc).toBe("");
+
+    act(() => first.result.current.setField("iacuc", "NEXT"));
+    act(() => first.result.current.startNew());
+    expect(first.result.current.lastSaved).toEqual(receipt);
+    act(() => first.result.current.loadForEdit({ ...savedSheet(), iacuc: "Z2" }));
+    act(() => first.result.current.requestSave(submitEvent()));
+    saveResponse = () => Response.json({ error: "保存暂时失败" }, { status: 503 });
+    await act(async () => first.result.current.persistSheet());
+    expect(first.result.current.notice).toContain("保存暂时失败");
+    expect(first.result.current.lastSaved).toEqual(receipt);
+
+    first.unmount();
+    const returned = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    expect(returned.result.current.lastSaved).toEqual(receipt);
+    await waitFor(() => expect(returned.result.current.metadataReady).toBe(true));
+    act(() => returned.result.current.loadForEdit({ ...savedSheet(), iacuc: "Z2" }));
+    act(() => returned.result.current.requestSave(submitEvent()));
+    saveResponse = (sheet) => Response.json({ item: sheet });
+    await act(async () => returned.result.current.persistSheet());
+    expect(returned.result.current.lastSaved?.iacuc).toBe("Z2");
+
+    returned.unmount();
+    memory = new Map();
+    const nextSession = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    expect(nextSession.result.current.lastSaved).toBeNull();
   });
 
   it.each([200, 409])("ignores an old save response (%s) after its confirmation is replaced", async (status) => {
     let finish!: (response: Response) => void;
-    const { result } = renderHook(() => useQuantitySheetEditor(user, "saved", true), { wrapper });
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
     await waitFor(() => expect(result.current.metadataReady).toBe(true));
     act(() => result.current.loadForEdit(savedSheet()));
     act(() => result.current.requestSave(submitEvent()));
@@ -173,6 +225,7 @@ describe("quantity editor draft lifecycle", () => {
     expect(result.current.draft.funding).toBe("后续草稿");
     expect(result.current.notice).not.toContain("旧请求冲突");
     expect(operationFeedback.success).not.toHaveBeenCalled();
+    expect(result.current.lastSaved).toBeNull();
   });
 
   it("retains the draft and row edits on a conflict without retrying the write", async () => {

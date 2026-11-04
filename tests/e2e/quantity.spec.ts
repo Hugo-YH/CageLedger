@@ -96,14 +96,27 @@ test(
     await expect(confirmDialog).toBeVisible();
     await captureUiAudit(page, testInfo, "quantity-save-confirm", confirmDialog);
     await confirmDialog.getByRole("button", { name: "确认保存", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("统计表已保存");
+    const successNotice = page.getByRole("status").filter({ hasText: "统计表已保存" });
+    await expect(successNotice).toBeVisible();
+    const receipt = page.getByRole("status", { name: "上次成功保存的数量统计表" });
+    await expect(receipt).toContainText("E2E-IACUC-001");
+    await expect(receipt).toContainText(savedMonth);
+    await expect(receipt).toContainText("房间 8014");
     await expect(page.getByRole("combobox", { name: "房间号", exact: true })).toHaveValue("");
     await expect(page.getByRole("combobox", { name: "IACUC 编号", exact: true })).toHaveValue("");
     await expect(page.locator("form").getByLabel("项目负责人", { exact: true })).toHaveValue("");
     await expect(page.getByLabel("第 1 行结余笼数", { exact: true })).toHaveValue("");
+    await expect(successNotice).toHaveCount(0, { timeout: 10_000 });
+    await expect(receipt).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("quantity-last-saved-receipt.png"), animations: "disabled" });
 
     await openSavedQuantitySheets(page);
     await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
+    await expect(receipt).toHaveCount(0);
+    await openQuantityEntry(page);
+    await expect(receipt).toContainText("E2E-IACUC-001");
+    await expect(page.getByRole("combobox", { name: "IACUC 编号", exact: true })).toHaveValue("");
+    await openSavedQuantitySheets(page);
     const actionsHeader = page.locator(".quantity-saved-panel .ant-table-thead th.ant-table-cell-fix-end");
     await expect(actionsHeader).toHaveText("操作");
     await expect(actionsHeader).toHaveCSS("position", "sticky");
