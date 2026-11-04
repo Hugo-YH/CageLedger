@@ -2,15 +2,11 @@
 
 import hashlib
 import json
-import re
 
 from server_app.domains.administration import audit_event
+from server_app.domains.intake.identifier_matching import identifier_match_keys
+from server_app.domains.intake.identifier_matching import purchase_order_is_description as purchase_order_is_description
 from server_app.domains.intake.repository import find_duplicate_identifiers
-from server_app.shared.intake_identifiers import (
-    intake_identifier_member_keys,
-    intake_identifier_values,
-    intake_order_identifier_values,
-)
 
 
 class IntakeDuplicateConfirmationRequired(Exception):
@@ -19,34 +15,12 @@ class IntakeDuplicateConfirmationRequired(Exception):
         self.details = details
 
 
-def purchase_order_is_description(key):
-    """Explanations remain in the record, but are not unique purchase identifiers."""
-    if not re.search(r"[A-Z0-9]", key):
-        return True
-    if key in {"N/A", "N.A.", "NA", "NONE", "NULL", "TBD", "UNKNOWN", "NOT APPLICABLE"}:
-        return True
-    return bool(
-        re.match(
-            r"^(?:(?:不走|未走|不经|未经|不通过|未通过|无需|非)\s*锐竞"
-            r"|自购|自带|自行采购|自行购买|课题组自购|课题组提供|赠送|待补充|待填写|暂无单号|无采购单号)",
-            key,
-        )
-    )
-
-
 def confirm_duplicate_identifiers(conn, item, exclude_id, confirmation):
     """Caller holds the write lock; never persist anything for an unconfirmed attempt."""
-    _, purchase_key, batch_key = intake_identifier_values(item)
-    if purchase_order_is_description(purchase_key):
-        purchase_key = ""
-    _, order_key = intake_order_identifier_values(item)
-    if purchase_order_is_description(order_key):
-        order_key = ""
-    keys = intake_identifier_member_keys(item)
-    for kind in ("purchaseOrderNo", "orderNo"):
-        keys[kind] = [key for key in keys[kind] if not purchase_order_is_description(key)]
+    match = identifier_match_keys(item)
+    purchase_key, order_key, batch_key = match.purchase, match.order, match.batch
     rows = find_duplicate_identifiers(
-        conn, purchase_key, batch_key, exclude_id, order_no_key=order_key, member_keys=keys
+        conn, purchase_key, batch_key, exclude_id, order_no_key=order_key, member_keys=match.searchable_members
     )
     if not rows:
         return None

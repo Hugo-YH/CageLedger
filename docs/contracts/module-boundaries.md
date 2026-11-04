@@ -114,9 +114,17 @@ graph TD
 
 完整逐项对照及验证边界见[本轮验收记录](../archives/hotspot-decomposition-2026-10-24/acceptance.md)。
 
+## 接收预约的职责边界
+
+- `IntakeView` 组合录入、列表与弹窗；`useIntakeEditor` 管草稿和识别生命周期，`useIntakeBatchPage` 管分页、筛选与最后成功页。跨入口继续保留原草稿语义，不新增业务缓存。
+- `useIntakeSaveFlow` 是普通保存、打印前保存与重复确认的共同提交入口；固定草稿版本及图片快照，`useIntakePrintActions` 只接续打印动作，`useIntakeBatchActions` 负责列表状态操作。打印模板仍由原打印模块拥有。
+- `recognition_pipeline.py` 明确新识别的来源事实、合并预约和最终核对三个阶段；`recognition_review.py` 输出结构化核对信息。前端 `legacyRecognitionReview.ts` 仅兼容缺少结构化信息的历史依据。
+- `identifier_matching.py` 为重复提醒和文字补充合并构造同一份规范编号快照，两者分别保留原确认令牌和合并策略。
+- `repositories/intake_transactions.py` 读取批次事务所需的目标、关联记录和房间定义；全局短码通过独立投影读取。领域命令持有原写锁、权限与审计，其他全量状态接口继续沿用原聚合逻辑。
+
 ## 实验人员信息职责边界
 
-实验人员信息前端位于 `features/researchers/`，typed接口与共享类型位于 `api/researchers.ts`、`contracts/researchers.ts`。后端 `domains/researchers/` 分离表格解析、字段校验、目录查询与事务；`web/researchers.py` 先鉴权再解析文件或读取数据库。持久业务关联使用稳定人员ID，不建立第二份联系方式缓存。
+实验人员信息前端位于 `features/researchers/`，typed接口与共享类型位于 `api/researchers.ts`、`contracts/researchers.ts`。后端 `domains/researchers/` 分离表格解析、字段校验、目录查询与事务；`web/researchers.py` 先鉴权再解析文件或读取数据库。持久业务关联使用稳定人员ID，不建立第二份联系方式缓存。普通笼卡在每次打印时按姓名或完整别名只读匹配最新电话；重名、未匹配或缺号时留空提示，不回写预约或笼卡历史字段。
 
 ## 验收标准
 

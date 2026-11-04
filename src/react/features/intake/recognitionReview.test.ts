@@ -109,3 +109,21 @@ describe("buildRecognitionReview", () => {
     expect(withSemicolon.reminders).toEqual(["请拆分不同批次；重新识别后核对。"]);
   });
 });
+
+it("uses explicit server review fields independently of warning wording and preserves input", () => {
+  const structured: IntakeRecognitionEvidence = {
+    ...evidence,
+    warnings: ["这段说明可以调整，不参与显示逻辑"],
+    review: {
+      version: 1,
+      comparisons: [{ key: "quantity", label: "数量", husbandry: "77 只", purchase: "30 只" }],
+      reminders: ["请核对本次到货数量"],
+    },
+  };
+  const result = buildRecognitionReview(structured);
+  expect(result).toEqual({ comparisons: structured.review!.comparisons, reminders: structured.review!.reminders });
+  result.comparisons[0].purchase = "changed";
+  result.reminders.push("changed");
+  expect(structured.review!.comparisons[0].purchase).toBe("30 只");
+  expect(structured.review!.reminders).toEqual(["请核对本次到货数量"]);
+});

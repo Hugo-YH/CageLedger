@@ -57,7 +57,7 @@ it.each([false, true])("keeps purchase and order inputs separate in the entry fo
   fireEvent.change(order, { target: { value: groupedOrders } });
   expect(onUpdate).toHaveBeenLastCalledWith("orderNo", groupedOrders);
   const groupedBatches = "（Z2025034）2025090302；（Z2025034）2025090313";
-  fireEvent.change(screen.getByRole("textbox", { name: "批次号" }), { target: { value: groupedBatches } });
+  fireEvent.change(screen.getByRole("textbox", { name: "饲养需求批次编号" }), { target: { value: groupedBatches } });
   expect(onUpdate).toHaveBeenLastCalledWith("batchNo", groupedBatches);
   fireEvent.change(screen.getByRole("textbox", { name: "采购单号" }), { target: { value: "线下采购" } });
   expect(onUpdate).toHaveBeenLastCalledWith("purchaseOrderNo", "线下采购");

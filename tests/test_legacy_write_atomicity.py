@@ -348,7 +348,7 @@ class LegacyWriteAtomicityTests(unittest.TestCase):
                 existing = saved["item"]
                 self.race(
                     module,
-                    "assemble_state",
+                    "read_intake_context" if module is intake_commands else "assemble_state",
                     lambda conn, name, endpoint=endpoint, item=item, existing=existing: composition.write_entity_state(
                         endpoint,
                         "PUT",

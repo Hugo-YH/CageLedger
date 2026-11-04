@@ -69,7 +69,7 @@ test("an approximate IACUC search result never supplies another project's respon
   await expect(page.getByLabel("IACUC 编号", { exact: true })).toHaveValue("Z2026108");
   await expect(page.getByRole("button", { name: "AI识别", exact: true })).toBeEnabled();
   await expect(page.getByLabel("项目负责人", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("实验负责人", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("实验负责人/助手", { exact: true })).toHaveValue("");
 });
 
 test("recognizes synthetic images and persists evidence and original bytes in the isolated service", async ({
@@ -112,7 +112,7 @@ test("recognizes synthetic images and persists evidence and original bytes in th
   await expect(page.getByRole("button", { name: "本地识别" })).toBeDisabled();
   await page.getByRole("button", { name: "AI识别" }).click();
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("24");
-  await expect(page.getByLabel("体重/日龄（规格）", { exact: true })).toHaveValue("6–8个月");
+  await expect(page.getByLabel("规格（体重/日龄）", { exact: true })).toHaveValue("6–8个月");
   await expect(page.getByLabel("打印张数", { exact: true })).toHaveValue("4");
   await expect(page.getByLabel("接收日期", { exact: true })).toHaveValue("");
   await expect(page.getByText("未明确接收日期，请核对")).toBeHidden();
@@ -164,13 +164,13 @@ test("recognizes synthetic images and persists evidence and original bytes in th
     expect(await original.body()).toEqual(png);
     await openNavigationEntry(page, "笼卡管理", "待接收批次");
     await page.locator("tr", { hasText: batchNo }).getByRole("button", { name: "编辑", exact: true }).click();
-    await expect(page.getByLabel("体重/日龄（规格）", { exact: true })).toHaveValue("6–8个月");
+    await expect(page.getByLabel("规格（体重/日龄）", { exact: true })).toHaveValue("6–8个月");
     await page.getByRole("button", { name: /请核对识别提示/ }).click();
     await page.getByText("识别依据与留档").click();
     await expect(page.getByText(evidence.extractedText)).toBeVisible();
     await expect(page.getByAltText("已留档 预约.png")).toBeVisible();
     const editor = page.getByRole("dialog", { name: "编辑待接收批次" });
-    await editor.getByLabel("体重/日龄（规格）", { exact: true }).fill("6–8个月（已核对）");
+    await editor.getByLabel("规格（体重/日龄）", { exact: true }).fill("6–8个月（已核对）");
     const updateResponse = page.waitForResponse(
       (response) =>
         response.request().method() === "PUT" &&
@@ -212,7 +212,7 @@ test("failed recognition preserves inputs and changed images invalidate delayed 
   await waiting;
   await page.getByRole("button", { name: "移除图片 预约.png" }).click();
   release();
-  await expect(page.getByLabel("批次号", { exact: true })).not.toHaveValue("STALE");
+  await expect(page.getByLabel("饲养需求批次编号", { exact: true })).not.toHaveValue("STALE");
   await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue("请保留这段文字");
 });
 
@@ -239,7 +239,7 @@ test("a late IACUC lookup cannot overwrite a new draft", async ({ page }) => {
   await waiting;
   await page.getByRole("button", { name: "新建批次", exact: true }).click();
   release();
-  await expect(page.getByLabel("批次号", { exact: true })).not.toHaveValue("STALE-IACUC");
+  await expect(page.getByLabel("饲养需求批次编号", { exact: true })).not.toHaveValue("STALE-IACUC");
   await expect(page.getByLabel("项目负责人", { exact: true })).not.toHaveValue("旧负责人");
 });
 
@@ -286,7 +286,7 @@ for (const action of ["save", "print"] as const) {
       );
       await addImage(page);
       await page.getByRole("button", { name: "AI识别" }).click();
-      await expect(page.getByLabel("批次号", { exact: true })).toHaveValue(batchNo);
+      await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
       await setDate(page);
       const bodies: Array<{
         recognitionImages?: Array<{ name: string; dataUrl: string }>;
@@ -367,7 +367,7 @@ test("closing the editor invalidates a pending recognition result", async ({ pag
     release();
     await expect(page.getByRole("dialog", { name: "编辑待接收批次" })).toBeHidden();
     await page.locator("tr", { hasText: batchNo }).getByRole("button", { name: "编辑", exact: true }).click();
-    await expect(page.getByLabel("批次号", { exact: true })).toHaveValue(batchNo);
+    await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
   } finally {
     await page.request.delete(`/api/intake-batches/${encodeURIComponent(id)}`);
   }
@@ -402,7 +402,7 @@ for (const change of ["text", "new"] as const) {
     else await page.getByRole("button", { name: "新建批次", exact: true }).click();
     release();
     await finished;
-    await expect(page.getByLabel("批次号", { exact: true })).not.toHaveValue("STALE-AI");
+    await expect(page.getByLabel("饲养需求批次编号", { exact: true })).not.toHaveValue("STALE-AI");
     await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(change === "text" ? "修改后文字" : "");
   });
 }
@@ -460,7 +460,7 @@ test("a delayed local strain lookup cannot overwrite a new draft", async ({ page
   await page.getByRole("button", { name: "新建批次", exact: true }).click();
   release();
   await finished;
-  await expect(page.getByLabel("批次号", { exact: true })).not.toHaveValue("LOCAL-STALE");
+  await expect(page.getByLabel("饲养需求批次编号", { exact: true })).not.toHaveValue("LOCAL-STALE");
   await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue("");
 });
 
@@ -567,7 +567,7 @@ test("calculated purchase quantity and its facts survive save and reload", async
   await addImage(page);
   await page.getByRole("button", { name: "AI识别", exact: true }).click();
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("30");
-  await expect(page.getByLabel("体重/日龄（规格）", { exact: true })).toHaveValue("6-8w");
+  await expect(page.getByLabel("规格（体重/日龄）", { exact: true })).toHaveValue("6-8w");
   await page.getByRole("button", { name: /请核对识别提示/ }).click();
   await page.getByText("识别依据与留档").click();
   await expect(page.getByText("采购数量（只）：27")).toBeVisible();
@@ -718,4 +718,40 @@ test("calendar-month period waits for a date and persists its actual day count",
   } finally {
     await page.request.delete(`/api/intake-batches/${encodeURIComponent(saved.item.id)}`);
   }
+});
+
+test("structured recognition review survives saving without depending on warning wording", async ({ page }) => {
+  await login(page);
+  expect((await (await page.request.get("/api/health")).json()).database).toContain("cageledger-e2e-");
+  const review = {
+    version: 1,
+    comparisons: [{ key: "quantity", label: "数量", husbandry: "77 只", purchase: "30 只" }],
+    reminders: ["请核对本次到货数量"],
+  };
+  await page.route("**/api/intake/ai-parse", (route) =>
+    finish(route, {
+      item: { ...aiItem(`E2E-STRUCTURED-${Date.now()}`, "Z2026001"), quantity: 30, finalCardCount: 5 },
+      recognition: { ...evidence, warnings: ["已整理来源资料"], review },
+    }),
+  );
+  await addImage(page);
+  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("30");
+  await page.getByRole("button", { name: /请核对识别提示/ }).click();
+  await expect(page.getByRole("cell", { name: "77 只", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "30 只", exact: true })).toBeVisible();
+  await expect(page.getByText("请核对本次到货数量", { exact: true })).toBeVisible();
+  await setDate(page);
+  const written = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/intake-batches" && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "保存待接收批次", exact: true }).click();
+  const response = await written;
+  expect(response.ok(), await response.text()).toBe(true);
+  const saved = (await response.json()).item;
+  expect(saved.recognition.review).toEqual(review);
+  expect(saved.recognition.images).toHaveLength(1);
+  const detail = await page.request.get(`/api/intake-batches/${saved.id}`);
+  expect(detail.ok()).toBe(true);
+  expect((await detail.json()).item.recognition.review).toEqual(review);
 });

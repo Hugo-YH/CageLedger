@@ -78,7 +78,7 @@ test("intake lists summaries before room data, loads edit detail on demand and r
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("批次详情加载失败")).toBeVisible();
     await dialog.getByRole("button", { name: "重新加载", exact: true }).click();
-    await expect(dialog.getByLabel("批次号", { exact: true })).toHaveValue(batchNo);
+    await expect(dialog.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
     expect(details).toBe(3);
     await dialog.getByRole("button", { name: "关闭", exact: true }).click();
     await row.getByRole("checkbox", { name: `选择 ${batchNo}` }).check();

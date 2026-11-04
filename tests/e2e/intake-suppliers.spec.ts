@@ -23,16 +23,16 @@ test("local and AI supplier recognition share regional aliases without collapsin
     supplier = raw;
     await page.getByLabel("预约消息", { exact: true }).fill(`供应商：${raw}\n数量：10\n到货直接取材`);
     await page.getByRole("button", { name: "本地识别", exact: true }).click();
-    await expect(page.getByLabel("购买单位", { exact: true })).toHaveValue(shortName);
+    await expect(page.getByLabel("供应商", { exact: true })).toHaveValue(shortName);
     await page
       .getByRole("status")
       .filter({ has: page.getByText("预约消息已识别", { exact: true }) })
       .getByRole("button", { name: "关闭通知" })
       .click();
     await expect(page.getByRole("status").filter({ hasText: "预约消息已识别" })).toBeHidden();
-    await page.getByLabel("购买单位", { exact: true }).fill("待核对");
+    await page.getByLabel("供应商", { exact: true }).fill("待核对");
     await page.getByRole("button", { name: "AI识别", exact: true }).click();
-    await expect(page.getByLabel("购买单位", { exact: true })).toHaveValue(shortName);
+    await expect(page.getByLabel("供应商", { exact: true })).toHaveValue(shortName);
     await page
       .getByRole("status")
       .filter({ hasText: "预约消息已识别（AI）" })

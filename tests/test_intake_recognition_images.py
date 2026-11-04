@@ -417,10 +417,12 @@ class ImagePersistenceTests(unittest.TestCase):
         item["recognition"] = {
             "inputImages": [{"name": original["name"], "sha256": original_hash}],
             "sources": [{"imageIndex": 1, "kind": "husbandry", "quantity": 24}],
+            "review": {"version": 1, "comparisons": [], "reminders": ["保留原提示"]},
         }
         saved = self.save(item, recognitionImages=[image_input("blue")])
         self.assertEqual(saved["recognition"]["imageIds"], [""])
         self.assertTrue(any("未留档" in warning for warning in saved["recognition"]["warnings"]))
+        self.assertEqual(saved["recognition"]["review"]["reminders"], ["保留原提示", *saved["recognition"]["warnings"]])
         self.assertEqual(len(saved["recognition"]["images"]), 1)
 
     def setUp(self):

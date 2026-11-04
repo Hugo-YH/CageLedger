@@ -3,6 +3,7 @@
 import re
 
 from server_app.domains.intake.husbandry_period import husbandry_month_values, parse_husbandry_months
+from server_app.domains.intake.identifier_recognition import normalize_recognized_identifiers
 from server_app.domains.intake.recognition_quantity import merge_purchase_quantities, sanitize_quantity_facts
 from server_app.domains.intake.recognition_specification import is_missing_specification, normalize_specification
 from server_app.domains.intake.strain_standard import standardize_strain
@@ -100,7 +101,7 @@ def sanitize_sources(raw, *, normalize_identifiers=False):
             {key: value[:2000] for key, value in source.items() if key in TEXT_FIELDS and isinstance(value, str)}
         )
         if normalize_identifiers:
-            item = normalize_intake_order_identifiers(item)
+            item = normalize_recognized_identifiers(item)
         if item["kind"] == "husbandry":
             # Only the original review text can establish a calendar-month period.
             notes = item.get("reviewNotes", "")
@@ -126,7 +127,7 @@ def sanitize_sources(raw, *, normalize_identifiers=False):
     return result
 
 
-def merge_sources(payload, evidence, sources):
+def merge_sources(payload, evidence, sources, *, review=None):
     result = dict(payload)
     result.pop("husbandryMonths", None)
     evidence["sources"] = sources
@@ -135,6 +136,11 @@ def merge_sources(payload, evidence, sources):
     purchase_conflicts = set()
     husbandry = [source for source in sources if source["kind"] == "husbandry"]
     purchases = [source for source in sources if source["kind"] == "purchase"]
+
+    def compare(field, warning, reminder=""):
+        notices.append(warning)
+        if review is not None:
+            review.compare(field, warning, reminder)
 
     def one(rows, field):
         if field in ("purchaseOrderNo", "orderNo", "batchNo"):
@@ -186,8 +192,9 @@ def merge_sources(payload, evidence, sources):
         result["strainStandard"] = standardize_strain(purchase_strain) or purchase_strain
         evidence["fieldSources"]["strainRaw"] = f"采用采购信息的动物品系/商品名称：{purchase_strain}"
         if husbandry_strain and strain_key(husbandry_strain) != strain_key(purchase_strain):
-            notices.append(
-                f"动物品系差异：饲养需求为“{husbandry_strain}”，采购信息为“{purchase_strain}”，已采用采购信息。"
+            compare(
+                "strain",
+                f"动物品系差异：饲养需求为“{husbandry_strain}”，采购信息为“{purchase_strain}”，已采用采购信息。",
             )
     elif husbandry_strain and not purchases:
         result["strainRaw"] = husbandry_strain
@@ -208,8 +215,9 @@ def merge_sources(payload, evidence, sources):
             and specification_key(husbandry_spec)
             and specification_key(purchase_spec) != specification_key(husbandry_spec)
         ):
-            notices.append(
-                f"体重/日龄（规格）差异：饲养需求为“{husbandry_spec}”，采购信息为“{purchase_spec}”，已采用采购信息。"
+            compare(
+                "specification",
+                f"体重/日龄（规格）差异：饲养需求为“{husbandry_spec}”，采购信息为“{purchase_spec}”，已采用采购信息。",
             )
     if husbandry:
         month_values = set().union(*(husbandry_month_values(row.get("reviewNotes")) for row in husbandry))
@@ -271,8 +279,10 @@ def merge_sources(payload, evidence, sources):
             and husbandry_quantity is not None
             and husbandry_quantity != result["quantity"]
         ):
-            notices.append(
-                f"本批数量差异：饲养需求为{husbandry_quantity}只，本次采购实际数量为{result['quantity']}只，已按采购信息回填；需求可能包含后续批次，请核对笼数及性别适用范围。"
+            compare(
+                "quantity",
+                f"本批数量差异：饲养需求为{husbandry_quantity}只，本次采购实际数量为{result['quantity']}只，已按采购信息回填；需求可能包含后续批次，请核对笼数及性别适用范围。",
+                "需求可能包含后续批次，请核对笼数及性别适用范围。",
             )
     elif "quantity" in conflicts:
         result["quantity"] = None

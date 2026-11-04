@@ -72,6 +72,12 @@ export interface IntakeRecognitionEvidence {
   warnings: string[];
   fieldSources: Record<string, string>;
   sources?: IntakeRecognitionSource[];
+  /** Explicit server rule outcomes; absent on historical recognition evidence. */
+  review?: {
+    version: 1;
+    comparisons: Array<{ key: string; label: string; husbandry: string; purchase: string }>;
+    reminders: string[];
+  };
   quantityCalculation?: {
     baseQuantity: number | null;
     giftQuantity: number | null;

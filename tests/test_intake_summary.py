@@ -50,6 +50,31 @@ def document_text(document):
 
 
 class IntakeSummaryTests(unittest.TestCase):
+    def test_supplier_priority_groups_each_company_within_date_and_room_without_mutating_entries(self):
+        entries = [
+            reservation(1, roomName="8101", supplier="广东药康", status="printed"),
+            reservation(2, roomName="8101", supplier="其他A供应商"),
+            reservation(3, roomName="8101", supplier="江苏集萃药康生物科技股份有限公司"),
+            reservation(4, roomName="8101", supplier="其他B供应商"),
+            reservation(5, roomName="8101", supplier="广东药康生物科技有限公司", status="received"),
+            reservation(6, roomName="8101", supplier="其他A供应商"),
+            reservation(7, roomName="8101", supplier="江苏集萃"),
+            reservation(8, roomName="8100", supplier="广东药康"),
+            reservation(9, roomName="8101", supplier="江苏集萃", intakeDate="2026-10-13"),
+            reservation(10, roomName="8101", supplier=""),
+        ]
+        original = copy.deepcopy(entries)
+        document = Document(
+            BytesIO(summary.generate({"startDate": "2026-10-12", "endDate": "2026-10-13", "batches": entries}))
+        )
+        batch_numbers = [table.rows[0].cells[-1].text.removeprefix("批次号：") for table in document.tables]
+        expected_indices = [8, 3, 7, 1, 5, 2, 6, 4, 10, 9]
+        self.assertEqual(batch_numbers, [reservation(index)["batchNo"] for index in expected_indices])
+        self.assertEqual(entries, original)
+        content = document_text(document)
+        self.assertIn("江苏集萃药康生物科技股份有限公司", content)
+        self.assertIn("广东药康生物科技有限公司", content)
+
     def test_direct_sampling_is_included_without_room_and_grouped_separately(self):
         direct = reservation(
             10, intakePurpose="direct_sampling", roomName="", status="pending_receipt", finalCardCount=0

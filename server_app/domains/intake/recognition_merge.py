@@ -5,15 +5,13 @@ import hashlib
 import json
 from datetime import date, timedelta
 
-from server_app.domains.intake.duplicates import purchase_order_is_description
 from server_app.domains.intake.husbandry_period import calendar_month_end, normalize_husbandry_months
+from server_app.domains.intake.identifier_matching import identifier_match_keys, purchase_order_is_description
 from server_app.domains.intake.recognition_evidence import sanitize_evidence
 from server_app.domains.intake.repository import find_duplicate_identifiers, get_batch_payload
 from server_app.shared.concurrency import StaleWriteError, require_exact_version
 from server_app.shared.intake_identifiers import (
-    intake_identifier_member_keys,
     intake_identifier_values,
-    intake_order_identifier_values,
     normalize_intake_order_identifiers,
 )
 
@@ -65,39 +63,21 @@ def incoming_values(raw):
 
 
 def identifier_matches(conn, incoming):
-    _, purchase, batch = intake_identifier_values(incoming)
-    if purchase_order_is_description(purchase):
-        purchase = ""
-    _, order = intake_order_identifier_values(incoming)
-    if purchase_order_is_description(order):
-        order = ""
-    keys = intake_identifier_member_keys(incoming)
-    for kind in ("purchaseOrderNo", "orderNo"):
-        keys[kind] = [value for value in keys[kind] if not purchase_order_is_description(value)]
-    return find_duplicate_identifiers(conn, purchase, batch, order_no_key=order, member_keys=keys)
+    keys = identifier_match_keys(incoming)
+    return find_duplicate_identifiers(
+        conn, keys.purchase, keys.batch, order_no_key=keys.order, member_keys=keys.searchable_members
+    )
 
 
 def match_classification(existing, incoming):
-    old_members, new_members = intake_identifier_member_keys(existing), intake_identifier_member_keys(incoming)
-    _, old_purchase, old_batch = intake_identifier_values(existing)
-    _, new_purchase, new_batch = intake_identifier_values(incoming)
-    if purchase_order_is_description(old_purchase):
-        old_purchase = ""
-    if purchase_order_is_description(new_purchase):
-        new_purchase = ""
-    _, old_order = intake_order_identifier_values(existing)
-    _, new_order = intake_order_identifier_values(incoming)
-    if purchase_order_is_description(old_order):
-        old_order = ""
-    if purchase_order_is_description(new_order):
-        new_order = ""
+    old, new = identifier_match_keys(existing), identifier_match_keys(incoming)
     pairs = (
-        ("purchaseOrderNo", old_purchase, new_purchase),
-        ("orderNo", old_order, new_order),
-        ("batchNo", old_batch, new_batch),
+        ("purchaseOrderNo", old.purchase, new.purchase),
+        ("orderNo", old.order, new.order),
+        ("batchNo", old.batch, new.batch),
     )
-    matched = [name for name, a, b in pairs if a and b and set(old_members[name]) & set(new_members[name])]
-    conflict = any(a and b and set(old_members[name]) != set(new_members[name]) for name, a, b in pairs)
+    matched = [name for name, a, b in pairs if a and b and set(old.members[name]) & set(new.members[name])]
+    conflict = any(a and b and set(old.members[name]) != set(new.members[name]) for name, a, b in pairs)
     kind = (
         "association_conflict"
         if conflict

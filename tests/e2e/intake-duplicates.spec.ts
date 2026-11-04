@@ -69,12 +69,12 @@ test("intake save requires an explicit confirmation for a duplicate batch and pr
 
   try {
     await openIntakeEntry(page);
-    await page.getByLabel("购买单位", { exact: true }).fill("重复测试供应商");
-    await page.getByLabel("批次号", { exact: true }).fill(batchNo);
+    await page.getByLabel("供应商", { exact: true }).fill("重复测试供应商");
+    await page.getByLabel("饲养需求批次编号", { exact: true }).fill(batchNo);
     await page.getByLabel("采购单号", { exact: true }).fill(`PO-NEW-${suffix}`);
     await page.getByLabel("IACUC 编号", { exact: true }).fill("Z2026001");
     await page.getByLabel("项目负责人", { exact: true }).fill("重复测试负责人");
-    await page.getByLabel("实验负责人", { exact: true }).fill("重复测试实验负责人");
+    await page.getByLabel("实验负责人/助手", { exact: true }).fill("重复测试实验负责人");
     await page.getByLabel("数量（只）", { exact: true }).fill("5");
     await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间", exact: true }));
     await setDate(page, "接收日期", "2026-10-21");
@@ -89,7 +89,7 @@ test("intake save requires an explicit confirmation for a duplicate batch and pr
 
     await dialog.getByRole("button", { name: "返回修改", exact: true }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByLabel("批次号", { exact: true })).toHaveValue(batchNo);
+    await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
     expect(await duplicateIds()).toEqual([existingId]);
 
     await page.getByRole("button", { name: "保存待接收批次", exact: true }).click();
@@ -228,7 +228,7 @@ test("editing excludes the current batch and asks for confirmation after changin
     await expect(page.getByRole("status").filter({ hasText: "待接收批次已更新" })).toBeHidden();
     await expect(page.getByRole("dialog", { name: "发现重复待接收批次", exact: true })).toBeHidden();
 
-    await editor.getByLabel("批次号", { exact: true }).fill(firstBatchNo);
+    await editor.getByLabel("饲养需求批次编号", { exact: true }).fill(firstBatchNo);
     await editor.getByRole("button", { name: "保存待接收批次", exact: true }).click();
     const duplicate = page.getByRole("dialog", { name: "发现重复待接收批次", exact: true });
     await expect(duplicate).toContainText(firstBatchNo);
@@ -298,12 +298,12 @@ test("printing a duplicate purchase order does not save or mark it printed until
 
   try {
     await openIntakeEntry(page);
-    await page.getByLabel("购买单位", { exact: true }).fill("打印重复测试供应商");
-    await page.getByLabel("批次号", { exact: true }).fill(batchNo);
+    await page.getByLabel("供应商", { exact: true }).fill("打印重复测试供应商");
+    await page.getByLabel("饲养需求批次编号", { exact: true }).fill(batchNo);
     await page.getByLabel("采购单号", { exact: true }).fill(duplicatePurchaseOrderNo);
     await page.getByLabel("IACUC 编号", { exact: true }).fill("Z2026001");
     await page.getByLabel("项目负责人", { exact: true }).fill("打印重复测试负责人");
-    await page.getByLabel("实验负责人", { exact: true }).fill("打印重复测试实验负责人");
+    await page.getByLabel("实验负责人/助手", { exact: true }).fill("打印重复测试实验负责人");
     await page.getByLabel("数量（只）", { exact: true }).fill("5");
     await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间", exact: true }));
     await page.getByLabel("打印张数", { exact: true }).fill("1");

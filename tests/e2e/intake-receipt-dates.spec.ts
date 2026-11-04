@@ -8,8 +8,19 @@ test("bulk receipt reviews per-batch dates, preserves drafts on failure and expo
   const health = await (await page.request.get("/api/health")).json();
   expect(health.database).toContain("cageledger-e2e-");
   const prefix = `receive-dates-${Date.now()}`;
+  const supplier = `日期验证供应商-${prefix}`;
   const ids = [`${prefix}-dated`, `${prefix}-undated`];
   const versions: Record<string, string> = {};
+  async function filterOwnBatches() {
+    await page.getByRole("button", { name: "筛选购买单位", exact: true }).click();
+    const filter = page.getByRole("group", { name: "筛选购买单位选项", exact: true });
+    await filter.getByLabel("搜索购买单位筛选选项", { exact: true }).fill(supplier);
+    const option = filter.getByRole("checkbox", { name: supplier, exact: false });
+    await option.click();
+    await expect(option).toBeChecked();
+    await filter.getByRole("button", { name: "应用", exact: true }).click();
+  }
+
   for (const [index, id] of ids.entries()) {
     const save = await page.request.post("/api/intake-batches", {
       data: {
@@ -17,7 +28,7 @@ test("bulk receipt reviews per-batch dates, preserves drafts on failure and expo
           id,
           batchNo: id,
           iacuc: "Z2026001",
-          supplier: "日期验证供应商",
+          supplier,
           intakePurpose: "direct_sampling",
           pi: "项目负责人",
           owner: "实验负责人",
@@ -49,6 +60,7 @@ test("bulk receipt reviews per-batch dates, preserves drafts on failure and expo
     }
     await page.goto("/app");
     await openNavigationEntry(page, "笼卡管理", "待接收批次");
+    await filterOwnBatches();
     for (const id of ids) await page.getByRole("checkbox", { name: `选择 ${id}`, exact: true }).check();
     await page.getByRole("button", { name: "标记已接收", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "确认实际接收日期", exact: true });
@@ -113,6 +125,7 @@ test("bulk receipt reviews per-batch dates, preserves drafts on failure and expo
     expect(result.tasks).toEqual([]);
     await expect(dialog).toBeHidden();
     await openNavigationEntry(page, "接收管理", "接收列表");
+    await filterOwnBatches();
     const region = page.getByRole("region", { name: "接收批次列表" });
     for (const [index, id] of ids.entries()) {
       const row = region.locator("tr", { hasText: id });

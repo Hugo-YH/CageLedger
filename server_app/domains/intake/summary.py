@@ -15,6 +15,7 @@ from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
 from . import repository
+from .strain_standard import abbreviate_supplier
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 STATUS_LABELS = {
@@ -29,6 +30,7 @@ FONT_NAME = "微软雅黑"
 # Keep the VI reference hues (#222962 / #F16901), with lower saturation and higher lightness.
 ROOM_FILL = "CED1E9"
 BATCH_FILL = "F3D8C4"
+SUPPLIER_PRIORITY = {"江苏集萃": 0, "广东药康": 1}
 
 
 def validate_interval(start_date, end_date):
@@ -60,6 +62,12 @@ def text(value):
 
 def field(value):
     return text(value) or "未填写"
+
+
+def supplier_sort_key(batch):
+    # Group known full names and aliases together without changing displayed text.
+    supplier = abbreviate_supplier(text(batch.get("supplier")))
+    return SUPPLIER_PRIORITY.get(supplier, 2), not bool(supplier), supplier
 
 
 def paragraph(document, value, *, bold=False, size=12, after=0, keep_next=False):
@@ -214,7 +222,7 @@ def generate(document_snapshot):
             group_title = "直接取材" if direct_sampling else room or "房间未填写"
             p = paragraph(document, group_title, bold=True, after=4, keep_next=True)
             shade_paragraph(p, ROOM_FILL)
-            for batch in batches:
+            for batch in sorted(batches, key=supplier_sort_key):
                 batch_block(document, batch)
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT

@@ -21,12 +21,8 @@ from server_app.domains.intake.identifier_recognition import (
     normalize_recognized_identifiers,
     recognized_identifiers,
 )
-from server_app.domains.intake.recognition_evidence import (
-    has_explicit_intake_date,
-    normalize_image_result,
-    structure_image_sources,
-)
 from server_app.domains.intake.recognition_images import decode_images
+from server_app.domains.intake.recognition_pipeline import normalize_image_recognition
 from server_app.domains.intake.strain_standard import abbreviate_supplier, standardize_strain
 from server_app.services.ai import deepseek_chat_json
 from server_app.shared import clean_text
@@ -317,22 +313,7 @@ def ai_parse_intake_images(raw_message, room_names, images):
     )
     if not payload:
         raise ValueError("图片未识别出预约字段，请更换清晰截图或补充文字后重试。")
-    # Correct only fresh model output. Historical source evidence is left intact.
-    if isinstance(payload.get("imageSources"), list):
-        payload["imageSources"] = [
-            normalize_recognized_identifiers(source) if isinstance(source, dict) else source
-            for source in payload["imageSources"][:4]
-        ]
-    payload = structure_image_sources(payload)
-    month_source = payload.get("recognition", {}).get("fieldSources", {}).get("husbandryMonths", "")
-    if month_source and not has_explicit_intake_date(payload.get("recognition", {})):
-        payload["intakeDate"] = ""
-    if month_source and not payload.get("recognition", {}).get("fieldSources", {}).get("endDate"):
-        # An AI-computed end date is not an independently stated end date.
-        payload["endDate"] = ""
-    item, evidence = normalize_image_result(
-        payload, _normalize_payload(payload, month_evidence=month_source), DEEPSEEK_VISION_MODEL
-    )
+    item, evidence = normalize_image_recognition(payload, DEEPSEEK_VISION_MODEL, _normalize_payload)
     evidence["inputImages"] = [
         {"name": image.name, "sha256": hashlib.sha256(image.body).hexdigest()} for image in decoded
     ]

@@ -3,7 +3,8 @@
 import re
 
 from server_app.domains.intake.recognition_quantity import sanitize_calculation
-from server_app.domains.intake.recognition_sources import merge_sources, sanitize_sources
+from server_app.domains.intake.recognition_review import sanitize_review
+from server_app.domains.intake.recognition_sources import sanitize_sources
 from server_app.domains.intake.recognition_specification import normalize_specification
 from server_app.shared.intake_identifiers import identifier_iacucs
 
@@ -53,6 +54,9 @@ def sanitize_evidence(raw):
     }
     if raw.get("sources"):
         result["sources"] = sanitize_sources(raw["sources"])
+    review = sanitize_review(raw.get("review"))
+    if review is not None:
+        result["review"] = review
     calculation = sanitize_calculation(raw.get("quantityCalculation"))
     if calculation is not None:
         result["quantityCalculation"] = calculation
@@ -81,10 +85,10 @@ def sanitize_evidence(raw):
 
 
 def structure_image_sources(payload):
-    evidence = sanitize_evidence(payload.get("recognition") or {})
-    sources = sanitize_sources(payload.get("imageSources") or evidence.get("sources"), normalize_identifiers=True)
-    _check_image_identifiers(sources)
-    return merge_sources(payload, evidence, sources)
+    # Compatibility helper for callers that only need merged source facts.
+    from .recognition_pipeline import prepare_image_sources
+
+    return prepare_image_sources(payload).payload
 
 
 def _positive_integer(raw):
@@ -104,14 +108,15 @@ def has_explicit_intake_date(evidence):
     )
 
 
-def normalize_image_result(payload, item, model):
-    evidence = sanitize_evidence(payload.get("recognition") or {})
+def normalize_image_result(payload, item, model, *, evidence=None, image_sources=None):
+    evidence = evidence if evidence is not None else sanitize_evidence(payload.get("recognition") or {})
     evidence["model"] = model
     notices = evidence["warnings"]
     sources = evidence["fieldSources"]
-    image_sources = payload.get("imageSources")
-    image_sources = image_sources if isinstance(image_sources, list) else []
-    _check_image_identifiers(image_sources)
+    if image_sources is None:
+        image_sources = payload.get("imageSources")
+        image_sources = image_sources if isinstance(image_sources, list) else []
+        _check_image_identifiers(image_sources)
     if not image_sources:
         notices.append("未返回逐图编号核对信息，请对照原图确认采购单号、批次号和本次申请数量。")
     explicit_date = has_explicit_intake_date(evidence)

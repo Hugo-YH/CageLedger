@@ -210,10 +210,10 @@ export function inferIntakePurpose(value: string): IntakePurpose {
 
 export function missingIntakeRequiredFields(item: IntakeBatch, { forPrint = false } = {}) {
   const fields: Array<[keyof IntakeBatch, string]> = [
-    ["supplier", "购买单位"],
+    ["supplier", "供应商"],
     ["iacuc", "IACUC 编号"],
     ["pi", "项目负责人"],
-    ["owner", "实验负责人"],
+    ["owner", "实验负责人/助手"],
     ["roomName", "房间"],
   ];
   if (forPrint) fields.push(["intakeDate", "接收日期"]);

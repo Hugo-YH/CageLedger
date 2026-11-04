@@ -470,7 +470,7 @@ describe("intake message parser", () => {
 
   it("allows saving a pending date while retaining the current form print requirements", () => {
     const result = normalizeIntakeBatch({ supplier: "购买单位", iacuc: "Z2026001", pi: "负责人" });
-    expect(missingIntakeRequiredFields(result)).toEqual(["实验负责人", "房间"]);
+    expect(missingIntakeRequiredFields(result)).toEqual(["实验负责人/助手", "房间"]);
     const ready = { ...result, owner: "实验负责人", roomName: "8101" };
     expect(missingIntakeRequiredFields(ready)).toEqual([]);
     expect(missingIntakeRequiredFields(ready, { forPrint: true })).toEqual(["接收日期"]);

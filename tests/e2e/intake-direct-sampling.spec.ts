@@ -47,7 +47,7 @@ test("direct sampling is recognized, saved without cards, confirmed and included
   await expect(page.getByLabel("IACUC 编号", { exact: true })).toHaveValue("Z2026001");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("10");
   await page.getByLabel("项目负责人", { exact: true }).fill("取材测试负责人");
-  await page.getByLabel("实验负责人", { exact: true }).fill("取材测试实验负责人");
+  await page.getByLabel("实验负责人/助手", { exact: true }).fill("取材测试实验负责人");
   await page.screenshot({ path: testInfo.outputPath("direct-entry.png"), fullPage: true, animations: "disabled" });
   const saving = page.waitForResponse(
     (r) => r.url().endsWith("/api/intake-batches") && r.request().method() === "POST",
@@ -161,7 +161,7 @@ test("AI direct-sampling recognition and manual purpose correction work across v
   await page.getByRole("button", { name: "AI识别", exact: true }).click();
   await expectDirectFields(page);
   await expect(page.getByLabel("接收人员", { exact: true })).toHaveValue("系统管理员");
-  await expect(page.getByLabel("购买单位", { exact: true })).toHaveValue("广东维通利华");
+  await expect(page.getByLabel("供应商", { exact: true })).toHaveValue("广东维通利华");
   for (const viewport of [
     { width: 1440, height: 1000 },
     { width: 1180, height: 900 },

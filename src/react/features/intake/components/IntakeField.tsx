@@ -9,6 +9,7 @@ export function IntakeField({
   type = "text",
   required = false,
   extra,
+  tooltip,
   personNames = false,
 }: {
   personNames?: boolean;
@@ -18,9 +19,10 @@ export function IntakeField({
   type?: string;
   required?: boolean;
   extra?: string;
+  tooltip?: string;
 }) {
   return (
-    <Form.Item label={label} required={required} extra={extra}>
+    <Form.Item label={label} required={required} extra={extra} tooltip={tooltip}>
       {type === "date" ? (
         <DateInput label={label} value={String(value)} onChange={onChange} required={required} />
       ) : personNames ? (

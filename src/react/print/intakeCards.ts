@@ -1,4 +1,4 @@
-import { formatPersonNames } from "../../domain/personNames";
+import { formatPersonNames, splitPersonNames } from "../../domain/personNames";
 import type { IntakeBatch } from "../api/contracts";
 import { abbreviateSupplier, isDirectSampling } from "../../domain/intake";
 import { qrCodeSvg } from "./qrCode";
@@ -22,10 +22,11 @@ export interface IntakeCardPrintPlan {
   disabledReason: string;
 }
 
-interface IntakeCardPrintOptions {
+export interface IntakeCardPrintOptions {
   kind?: IntakeCardPrintKind;
   fillBlanks?: boolean;
   targetWindow?: Window | null;
+  contactPhones?: Record<string, string>;
 }
 
 interface IntakeCardPrintItem {
@@ -85,7 +86,10 @@ export function intakeCardsPrintHtml(batches: IntakeBatch[], options: IntakeCard
   );
   const title = kind === "temporary" ? "临时饲养间笼卡打印" : "接收笼卡打印";
   const sheetClass = kind === "temporary" ? "sheet temporary-sheet" : "sheet standard-sheet";
-  const render = kind === "temporary" ? renderTemporaryCard : renderStandardCard;
+  const render =
+    kind === "temporary"
+      ? renderTemporaryCard
+      : (item: IntakeCardPrintItem) => renderStandardCard(item, options.contactPhones);
   return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${title}</title><style>${printStyles()}</style></head><body>${pages.map((page) => `<div class="${sheetClass}">${page.map(render).join("")}</div>`).join("")}<script>window.addEventListener("load",()=>{window.focus();window.print()},{once:true})</script></body></html>`;
 }
 
@@ -120,20 +124,32 @@ function blankPrintItem(): IntakeCardPrintItem {
   return { batch: {} as IntakeBatch, card: null, blank: true };
 }
 
-function renderStandardCard({ batch, card, blank }: IntakeCardPrintItem) {
+function renderStandardCard(
+  { batch, card, blank }: IntakeCardPrintItem,
+  contactPhones: IntakeCardPrintOptions["contactPhones"],
+) {
+  const pi = blank ? "" : formatPersonNames(batch.pi);
+  const owner = blank ? "" : formatPersonNames(batch.owner);
+  const phone = blank ? "" : String(contactPhones?.[batch.id] || "");
+  const phoneClass =
+    splitPersonNames(owner).length > 1 || splitPersonNames(phone).length > 1 ? "value value-compact" : "value";
+  const roomStyle = /^\d{4}$/.test(String(batch.roomName || "")) ? ' style="font-size:12mm"' : "";
+  const quantityRatio = blank ? "" : cardQuantityRatio(batch, card);
+  const cycle = blank ? "" : formatRange(batch.intakeDate, batch.endDate);
+  const cycleFont = cycle.length > 19 ? "2.1mm" : "2.32mm";
   const qrId = blank
     ? ""
     : String(card?.qrId || "")
         .trim()
         .toUpperCase();
-  return `<section class="standard-card"><table><colgroup><col style="width:16mm"><col style="width:11mm"><col style="width:23mm"><col style="width:16mm"><col style="width:8mm"><col style="width:7mm"><col style="width:9.5mm"><col style="width:9.5mm"></colgroup>
-<tr style="height:4.86mm"><td class="label">批次号：</td><td class="value value-compact" colspan="2">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td><td class="label" colspan="2">购买单位：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(abbreviateSupplier(batch.supplier))}</td></tr>
-<tr style="height:4.86mm"><td class="label">动物品系：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(batch.strainStandard || batch.strainRaw)}</td><td class="label" colspan="2">项目负责人：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(formatPersonNames(batch.pi))}</td></tr>
-<tr style="height:4.86mm"><td class="label">接收日期：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td><td class="label label-long" colspan="2">实验责任人/助手：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(formatPersonNames(batch.owner))}</td></tr>
-<tr style="height:4.86mm"><td class="label">接收人员：</td><td class="value" colspan="2">${blank ? "" : escapeHtml(batch.receiverName)}</td><td class="label" colspan="2">联系电话：</td><td class="value" colspan="3">${blank ? "" : escapeHtml(batch.vetPhone)}</td></tr>
-<tr style="height:3.91mm"><td class="row-head">日期</td><td class="row-head">数目变化</td><td class="row-head">饲养周期</td><td class="row-head" colspan="3">房间</td><td class="qr-cell" colspan="2" rowspan="4">${qrId ? qrCodeSvg(qrId, "笼卡二维码", 1) : ""}</td></tr>
-<tr style="height:5.26mm"><td class="value">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td><td class="value quantity-ratio">${blank ? "" : escapeHtml(cardQuantityRatio(batch, card))}</td><td class="cycle">${blank ? "" : escapeHtml(formatRange(batch.intakeDate, batch.endDate))}</td><td class="room" colspan="3" rowspan="3">${blank ? "" : escapeHtml(batch.roomName)}</td></tr>
-<tr style="height:5.26mm"><td></td><td></td><td></td></tr><tr style="height:5.26mm"><td></td><td></td><td></td></tr></table></section>`;
+  return `<section class="standard-card"><table><colgroup><col style="width:14mm"><col style="width:6mm"><col style="width:5mm"><col style="width:25mm"><col style="width:16mm"><col style="width:8mm"><col style="width:7mm"><col style="width:9.5mm"><col style="width:9.5mm"></colgroup>
+<tr style="height:4.86mm"><td class="label" colspan="2">批次号</td><td class="value value-compact" style="line-height:.85" colspan="2">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td><td class="label">供应商</td><td class="value" colspan="4">${blank ? "" : escapeHtml(abbreviateSupplier(batch.supplier))}</td></tr>
+<tr style="height:4.86mm"><td class="label" colspan="2">项目负责人</td><td class="${standardPersonValueClass(pi)}" colspan="2">${escapeHtml(pi)}</td><td class="label">动物品系</td><td class="value" colspan="4">${blank ? "" : escapeHtml(batch.strainStandard || batch.strainRaw)}</td></tr>
+<tr style="height:4.86mm"><td class="label label-long" colspan="2">实验负责人/助手</td><td class="${standardPersonValueClass(owner)}" colspan="2">${escapeHtml(owner)}</td><td class="label">动物规格</td><td class="value" colspan="4">${blank ? "" : escapeHtml(batch.specification)}</td></tr>
+<tr style="height:4.86mm"><td class="label" colspan="2">联系电话</td><td class="${phoneClass}" colspan="2">${escapeHtml(phone)}</td><td class="label">接收日期</td><td class="value" colspan="4">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td></tr>
+<tr style="height:3.91mm"><td class="row-head">日期</td><td class="row-head" colspan="2">数目变化</td><td class="row-head">饲养周期</td><td class="row-head" colspan="3">房间</td><td class="qr-cell" colspan="2" rowspan="4">${qrId ? qrCodeSvg(qrId, "笼卡二维码", 1) : ""}</td></tr>
+<tr style="height:5.26mm"><td class="value">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td><td class="value quantity-ratio" style="font-size:2.32mm" colspan="2">${escapeHtml(quantityRatio)}</td><td class="cycle" style="font-size:${cycleFont}">${escapeHtml(cycle)}</td><td class="room"${roomStyle} colspan="3" rowspan="3">${blank ? "" : escapeHtml(batch.roomName)}</td></tr>
+<tr style="height:5.26mm"><td></td><td colspan="2"></td><td></td></tr><tr style="height:5.26mm"><td></td><td colspan="2"></td><td></td></tr></table></section>`;
 }
 
 function renderTemporaryCard({ batch, card, blank }: IntakeCardPrintItem) {
@@ -196,6 +212,13 @@ function temporaryTextClass(base: string, value: string, compactAt: number) {
     0,
   );
   return units > compactAt ? `${base} temporary-compact` : base;
+}
+function standardPersonValueClass(value: string) {
+  const units = Array.from(value).reduce(
+    (total, character) => total + ((character.codePointAt(0) || 0) > 0xff ? 2 : 1),
+    0,
+  );
+  return units > 20 ? "value value-compact" : "value";
 }
 function escapeHtml(value: unknown) {
   return String(value || "").replace(

@@ -1,55 +1,27 @@
-import { useOperationFeedback } from "../../hooks/useOperationFeedback";
-import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Alert, Button } from "antd";
 
+import type { IntakeBatch, SessionUser } from "../../api/contracts";
 import { useRooms } from "../../api/infrastructure";
-import type {
-  IntakeBatch,
-  IntakeBatchListItem,
-  IntakeListParams,
-  IntakeWriteResponse,
-  SessionUser,
-} from "../../api/contracts";
-import {
-  fetchIntakeBatchesForPrint,
-  intakeDuplicateDetails,
-  useConfirmIntakeBatchesReceipt,
-  useDeleteIntakeBatch,
-  useIntakeBatches,
-  useMarkIntakeBatchesPrinted,
-  useSaveIntakeBatch,
-} from "../../api/intake";
-import { ApiError } from "../../api/client";
-import { ActionButton, ModalPresence } from "../../components/ui";
+import { ActionIcon } from "../../components/ui/ActionIcon";
+import { ActionButton } from "../../components/ui";
+import { AsyncActionButton, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
-import { useIntakeRecognition } from "./hooks/useIntakeRecognition";
-import { useIntakeMessageRecognition } from "./hooks/useIntakeMessageRecognition";
-import { useIntakeRecognitionMerge } from "./hooks/useIntakeRecognitionMerge";
-import { IntakeRecognitionMergeDialog } from "./components/IntakeRecognitionMergeDialog";
-import { useIntakeEditorRead } from "./hooks/useIntakeEditorRead";
-import { useIntakeSelection } from "./hooks/useIntakeSelection";
-import { AsyncActionButton, ModalShell, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
-import {
-  createIntakeDraft,
-  missingIntakeRequiredFields,
-  normalizeIntakeBatch,
-  updateIntakeDraft,
-  isDirectSampling,
-  canConfirmIntakeReceipt,
-} from "../../../domain/intake";
-import {
-  openIntakeCardPrint,
-  planIntakeCardPrint,
-  type IntakeCardPrintKind,
-  type IntakePrintRoom,
-} from "../../print/intakeCards";
-import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
-import { IntakeDuplicateConfirmDialog } from "./components/IntakeDuplicateConfirmDialog";
-import { IntakeReceiptConfirmDialog } from "./components/IntakeReceiptConfirmDialog";
-import { IntakePrintConfirmDialog } from "./components/IntakePrintConfirmDialog";
-import type { IntakeSaveIntent, PendingDuplicateSave, PendingIntakePrintJob } from "./intakeViewTypes";
+import { isDirectSampling } from "../../../domain/intake";
+import { planIntakeCardPrint, type IntakePrintRoom } from "../../print/intakeCards";
 import type { WorkspaceView } from "../../state/ui";
+import { IntakeBatchList, IntakeEntryPanel } from "./components/IntakePanels";
+import { IntakeEditorDialog, type IntakeEditorFormProps } from "./components/IntakeEditorDialog";
+import { IntakeActionDialogs } from "./components/IntakeActionDialogs";
+import { useIntakeEditor } from "./hooks/useIntakeEditor";
+import { useIntakeSaveFlow } from "./hooks/useIntakeSaveFlow";
+import { useIntakePrintActions } from "./hooks/useIntakePrintActions";
+import { useIntakeBatchActions } from "./hooks/useIntakeBatchActions";
+import { useIntakeBatchPage } from "./hooks/useIntakeBatchPage";
+import { useIntakeSelection } from "./hooks/useIntakeSelection";
+import { useIntakeRecognitionMerge } from "./hooks/useIntakeRecognitionMerge";
+import { useIntakeMessageRecognition } from "./hooks/useIntakeMessageRecognition";
+import type { IntakeSaveIntent } from "./intakeViewTypes";
 
 export function IntakeView({
   user,
@@ -59,62 +31,9 @@ export function IntakeView({
   navigate: (view: WorkspaceView) => void;
   mode: "entry" | "batches";
 }) {
-  const activeMode = useRef(mode);
-  const draftRevision = useRef(0);
-  const saveInFlight = useRef(false);
-  const duplicateConfirmationInFlight = useRef(false);
-  if (activeMode.current !== mode) {
-    activeMode.current = mode;
-    draftRevision.current += 1;
-  }
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  // Leave the initial key unset so the server can put undetermined dates first.
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "desc" });
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const page = useIntakeBatchPage(mode);
   const selection = useIntakeSelection();
-  const { selectedItems, selectingAll, allFilteredSelected } = selection;
-  const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName, user.phone));
-  const [editing, setEditing] = useState(false);
-  const [editingDialog, setEditingDialog] = useState(false);
-
-  const feedback = useOperationFeedback();
-  const [notice, setNotice] = useState("");
-  const [bulkNotice, setBulkNotice] = useState("");
-  const [bulkNoticeKind, setBulkNoticeKind] = useState<"success" | "error" | "info">("info");
-  const [markingPrinted, setMarkingPrinted] = useState(false);
-  const [markingReceived, setMarkingReceived] = useState(false);
-  const [pendingReceipt, setPendingReceipt] = useState<{ items: IntakeBatchListItem[]; skipped: number } | null>(null);
-  const [receiptError, setReceiptError] = useState("");
-  const [receiptNeedsReselect, setReceiptNeedsReselect] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<IntakeBatchListItem | null>(null);
-  const [pendingPrint, setPendingPrint] = useState<PendingIntakePrintJob | null>(null);
-  const [pendingDuplicateSave, setPendingDuplicateSave] = useState<PendingDuplicateSave | null>(null);
-  const onRecognitionChange = useCallback(() => {
-    draftRevision.current += 1;
-    setPendingDuplicateSave(null);
-  }, []);
-  const recognition = useIntakeRecognition(onRecognitionChange);
-  const { reset: resetRecognition, invalidate: invalidateRecognition } = recognition;
-  const params = useMemo<IntakeListParams>(
-    () => ({
-      limit: pageSize,
-      offset: (page - 1) * pageSize,
-      sortKey: sort.key,
-      sortDir: sort.dir,
-      columnFilters: filters,
-    }),
-    [pageSize, page, sort.key, sort.dir, filters],
-  );
-  const list = useIntakeBatches(params, mode === "batches");
-  const [displayedParams, setDisplayedParams] = useState(params);
-  const displayed = useIntakeBatches(displayedParams, false);
-  useEffect(() => {
-    if (list.isSuccess && !list.isPlaceholderData) setDisplayedParams(params);
-  }, [list.isSuccess, list.isPlaceholderData, params]);
-  const listData = list.data ?? displayed.data;
-  const listBlocked = list.isFetching || list.isError || list.isPlaceholderData;
-  const roomQuery = useRooms(mode === "entry" || Boolean(listData));
+  const roomQuery = useRooms(mode === "entry" || Boolean(page.data));
   const roomNames = useMemo(
     () => roomQuery.data?.items.map((room) => room.name).filter(Boolean) || [],
     [roomQuery.data],
@@ -125,33 +44,68 @@ export function IntakeView({
   );
   const roomsAvailable = Boolean(roomQuery.data);
   const roomsReady = roomsAvailable && !roomQuery.isError;
-  const editRead = useIntakeEditorRead(roomsReady, (item) => replaceDraft(normalizeIntakeBatch(item, roomNames)), mode);
-  const pendingEdit = editRead.target;
-  const cancelEditorRead = editRead.cancel;
-  const save = useSaveIntakeBatch();
+  const editor = useIntakeEditor({ user, mode, roomNames, roomsReady, updateSelection: selection.update });
+  const actions = useIntakeBatchActions(selection, () => page.query.refetch());
+  const saves = useIntakeSaveFlow({
+    mode,
+    revision: editor.revision,
+    snapshotImages: editor.recognition.snapshot,
+    isCurrent: editor.isCurrent,
+    onError: editor.setNotice,
+    invalidate: editor.invalidate,
+    onSaved: completeSave,
+  });
+  const printer = useIntakePrintActions({
+    editor,
+    saves,
+    roomNames,
+    printRooms,
+    markPrinted: actions.markPrinted,
+    showBulkNotice: actions.showBulkNotice,
+  });
   const merge = useIntakeRecognitionMerge({
-    revision: draftRevision,
-    save,
-    saveInFlight,
+    revision: editor.revision,
+    save: saves.mutation,
+    saveInFlight: saves.inFlight,
     onSaved: (item) => {
       selection.update([item]);
-      completeSavedDraft(saveIntent(draft, false), item, "预约信息已合并");
-      setEditingDialog(false);
+      editor.completeSavedDraft(saves.capture(editor.draft, false), item, "预约信息已合并");
+      editor.setDialogOpen(false);
     },
   });
   const { parseMessage, aiParseMessage } = useIntakeMessageRecognition({
-    draft,
+    draft: editor.draft,
     user,
     mode,
-    editing,
+    editing: editor.editing,
     roomNames,
-    revision: draftRevision,
-    recognition,
-    requireRooms,
-    replaceDraft,
-    setNotice,
+    revision: editor.revision,
+    recognition: editor.recognition,
+    requireRooms: editor.requireRooms,
+    replaceDraft: editor.replaceDraft,
+    setNotice: editor.setNotice,
     onTextRecognized: merge.preview,
   });
+  useSelectionScope(
+    page.scope,
+    () => {
+      selection.clear();
+      printer.clearSelection();
+      actions.clearScope();
+    },
+    selection.selectedItems.length > 0 || selection.selectingAll,
+  );
+
+  function completeSave(intent: IntakeSaveIntent, item: IntakeBatch, popup: Window | null): void | Promise<void> {
+    if (intent.print) return printer.completeSavedPrint(intent, item, popup);
+    editor.completeSavedDraft(intent, item);
+  }
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const item = editor.prepareSave();
+    if (item) void saves.run(saves.capture(item, mode === "batches" && editor.editing));
+  }
+
   const mergeFeedback = merge.state?.checking ? (
     <Alert showIcon type="info" title="正在匹配已有图片预约…" />
   ) : merge.state?.error ? (
@@ -163,42 +117,6 @@ export function IntakeView({
       action={<Button onClick={merge.retry}>重试匹配</Button>}
     />
   ) : null;
-  const remove = useDeleteIntakeBatch();
-  const markBatchesPrinted = useMarkIntakeBatchesPrinted();
-  const confirmBatchesReceipt = useConfirmIntakeBatchesReceipt();
-  const items = listData?.items || [];
-  const total = listData?.page.total || 0;
-  const selectedPrintPlan = planIntakeCardPrint(selectedItems, printRooms);
-  const selectionScope = JSON.stringify([
-    mode,
-    Object.entries(filters)
-      .filter(([, values]) => values.length)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, values]) => [key, [...values].sort()]),
-  ]);
-  useSelectionScope(
-    selectionScope,
-    () => {
-      selection.clear();
-      setPendingPrint((current) => (current?.saveCurrent ? current : null));
-      setDeleteTarget(null);
-      setPendingReceipt(null);
-    },
-    selectedItems.length > 0 || selectingAll,
-  );
-  useEffect(() => {
-    resetRecognition();
-    cancelEditorRead();
-    setEditingDialog(false);
-    setEditing(false);
-    setPendingDuplicateSave(null);
-    setPendingReceipt(null);
-    return () => {
-      draftRevision.current += 1;
-      invalidateRecognition();
-    };
-  }, [mode, resetRecognition, invalidateRecognition, cancelEditorRead]);
-
   const roomFeedback = !roomsReady ? (
     <Alert
       role={roomQuery.isError ? "alert" : "status"}
@@ -218,417 +136,25 @@ export function IntakeView({
       }
     />
   ) : null;
-
-  function requireRooms() {
-    if (roomsReady) return true;
-    setNotice("房间信息尚未就绪，请先重试加载。");
-    return false;
-  }
-
-  function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
-    recognition.invalidate();
-    draftRevision.current += 1;
-    setPendingDuplicateSave(null);
-    setDraft((current) => updateIntakeDraft(current, key, value, roomNames));
-  }
-
-  function replaceDraft(next: IntakeBatch) {
-    recognition.invalidate();
-    draftRevision.current += 1;
-    setPendingDuplicateSave(null);
-    setDraft(next);
-  }
-
-  function invalidateDraftConfirmation() {
-    draftRevision.current += 1;
-    setPendingDuplicateSave(null);
-  }
-
-  function closeEditingDialog() {
-    recognition.reset();
-    invalidateDraftConfirmation();
-    setEditingDialog(false);
-    editRead.cancel();
-  }
-
-  function isCurrentSaveIntent(intent: IntakeSaveIntent) {
-    return activeMode.current === intent.mode && draftRevision.current === intent.draftRevision;
-  }
-
-  function saveIntent(item: IntakeBatch, exists: boolean, print?: IntakeSaveIntent["print"]): IntakeSaveIntent {
-    return {
-      item,
-      exists,
-      draftRevision: draftRevision.current,
-      recognitionImages: recognition.snapshot(),
-      mode,
-      print,
-    };
-  }
-
-  function showSaveFailure(intent: IntakeSaveIntent, error: unknown, fallback: string) {
-    if (!isCurrentSaveIntent(intent)) return;
-    const details = intakeDuplicateDetails(error);
-    if (details) {
-      setPendingDuplicateSave({ intent, details, error: "" });
-      return;
-    }
-    setNotice(error instanceof Error ? error.message : fallback);
-  }
-
-  function completeSavedDraft(intent: IntakeSaveIntent, savedItem: IntakeBatch, title?: string) {
-    if (!isCurrentSaveIntent(intent)) return false;
-    recognition.reset();
-    if (intent.exists) {
-      selection.update([savedItem]);
-      replaceDraft(normalizeIntakeBatch(savedItem, roomNames));
-      setNotice("");
-      feedback.success("待接收批次已更新", savedItem.batchNo);
-      return true;
-    }
-    replaceDraft(createIntakeDraft(user.displayName, user.phone));
-    setEditing(false);
-    setNotice("");
-    feedback.success(title || "待接收批次已保存", `${savedItem.batchNo}，可继续录入下一批。`);
-    return true;
-  }
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!requireRooms() || recognition.reading) return;
-    const item = normalizeIntakeBatch(draft, roomNames);
-    const missingFields = missingIntakeRequiredFields(item);
-    if (missingFields.length) {
-      setNotice(`请填写必填项目：${missingFields.join("、")}。`);
-      return;
-    }
-    const isEditingSavedBatch = mode === "batches" && editing;
-    const intent = saveIntent(item, isEditingSavedBatch);
-    if (saveInFlight.current) return;
-    saveInFlight.current = true;
-    try {
-      const response = await save.mutateAsync({
-        item,
-        exists: isEditingSavedBatch,
-        checkDuplicates: true,
-        recognitionImages: intent.recognitionImages,
-      });
-      completeSavedDraft(intent, response.item);
-    } catch (error) {
-      showSaveFailure(intent, error, "保存失败");
-    } finally {
-      saveInFlight.current = false;
-    }
-  }
-
-  function startNew() {
-    recognition.reset();
-    replaceDraft(createIntakeDraft(user.displayName, user.phone));
-    setEditing(false);
-    setNotice("");
-  }
-
-  function edit(item: IntakeBatchListItem) {
-    recognition.reset();
-    invalidateDraftConfirmation();
-    setNotice("");
-    editRead.begin(item);
-    setEditing(true);
-    setEditingDialog(mode === "batches");
-  }
-
-  async function markPrinted(targets: IntakeBatchListItem[]) {
-    const printable = targets.filter(
-      (item) => !isDirectSampling(item) && (item.status === "pending_print" || item.status === "draft"),
-    );
-    if (!printable.length) {
-      void feedback.message.info("选中的批次均未处于待打印状态，无需标记已打印。");
-      return;
-    }
-    setMarkingPrinted(true);
-    setBulkNotice("");
-    try {
-      const response = await markBatchesPrinted.mutateAsync(printable.map((item) => item.id));
-      selection.update(response.items);
-      const skipped = targets.length - printable.length;
-      setBulkNotice("");
-      if (skipped)
-        feedback.warning(
-          "批次打印标记已完成",
-          `已标记 ${printable.length} 个批次为已打印；${skipped} 个无需打印或非待打印批次跳过。`,
-        );
-      else feedback.success("批次已标记为已打印", `共 ${printable.length} 个批次。`);
-    } catch (error) {
-      setBulkNotice(error instanceof Error ? error.message : "标记已打印失败");
-      setBulkNoticeKind("error");
-    } finally {
-      setMarkingPrinted(false);
-    }
-  }
-
-  function printCurrentBatch() {
-    if (!requireRooms() || recognition.reading) return;
-    const item = normalizeIntakeBatch(draft, roomNames);
-    if (isDirectSampling(item)) {
-      void feedback.message.info("直接取材批次无需打印笼卡。");
-      return;
-    }
-    const missingFields = missingIntakeRequiredFields(item, { forPrint: true });
-    if (missingFields.length) {
-      setNotice(`打印前请填写必填项目：${missingFields.join("、")}。`);
-      return;
-    }
-    if (!item.quantity || item.quantity <= 0 || item.finalCardCount <= 0) {
-      setNotice("打印前请填写动物数量和打印张数。");
-      return;
-    }
-    requestPrint([item], item, editing);
-  }
-
-  function requestPrint(targets: IntakeBatchListItem[], currentDraft?: IntakeBatch, exists = false) {
-    const saveCurrent = Boolean(currentDraft);
-    if (!requireRooms()) return;
-    const plan = planIntakeCardPrint(targets, printRooms);
-    if (plan.disabledReason) {
-      if (saveCurrent) setNotice(plan.disabledReason);
-      else {
-        setBulkNotice(plan.disabledReason);
-        setBulkNoticeKind("info");
-      }
-      return;
-    }
-    const job: PendingIntakePrintJob = {
-      batches: targets,
-      draft: currentDraft,
-      kind: plan.kind as IntakeCardPrintKind,
-      cardCount: plan.cardCount,
-      pageSize: plan.pageSize,
-      missing: plan.missing,
-      saveCurrent,
-      exists,
-      draftRevision: draftRevision.current,
-    };
-    if (job.missing) {
-      setPendingPrint(job);
-      return;
-    }
-    void executePrint(job, false);
-  }
-
-  function openPrintWindow() {
-    const popup = window.open("", "_blank");
-    if (!popup) return null;
-    popup.document.write(
-      '<!doctype html><html lang="zh-CN"><head><title>正在准备笼卡</title></head><body>正在准备笼卡...</body></html>',
-    );
-    popup.document.close();
-    return popup;
-  }
-
-  async function executePrint(job: PendingIntakePrintJob, fillBlanks: boolean) {
-    setPendingPrint(null);
-    if (job.saveCurrent && draftRevision.current !== job.draftRevision) return;
-    const popup = openPrintWindow();
-    if (!popup) {
-      const message = "打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。";
-      if (job.saveCurrent) setNotice(message);
-      else {
-        setBulkNotice(message);
-        setBulkNoticeKind("error");
-      }
-      return;
-    }
-    let printable: IntakeBatch[] = [];
-    try {
-      if (job.saveCurrent) {
-        const intent: IntakeSaveIntent = {
-          item: job.draft!,
-          exists: job.exists,
-          draftRevision: job.draftRevision,
-          recognitionImages: recognition.snapshot(),
-          mode,
-          print: { job, fillBlanks },
-        };
-        if (!isCurrentSaveIntent(intent)) {
-          popup.close();
-          return;
-        }
-        if (saveInFlight.current) {
-          popup.close();
-          return;
-        }
-        saveInFlight.current = true;
-        let response: IntakeWriteResponse;
-        try {
-          response = await save.mutateAsync({
-            item: intent.item,
-            exists: intent.exists,
-            checkDuplicates: true,
-            recognitionImages: intent.recognitionImages,
-          });
-        } finally {
-          saveInFlight.current = false;
-        }
-        if (!isCurrentSaveIntent(intent)) {
-          popup.close();
-          return;
-        }
-        const saved = normalizeIntakeBatch(response.item, roomNames);
-        recognition.reset();
-        replaceDraft(saved);
-        setEditing(true);
-        printable = [saved];
-      }
-      if (!job.saveCurrent) printable = await fetchIntakeBatchesForPrint(job.batches);
-      if (openIntakeCardPrint(printable, { kind: job.kind, fillBlanks, targetWindow: popup })) {
-        await markPrinted(printable);
-      } else {
-        popup.close();
-        setBulkNotice("所选批次没有可打印的笼卡，请核对后重试。");
-      }
-    } catch (error) {
-      popup.close();
-      if (job.saveCurrent) {
-        const intent: IntakeSaveIntent = {
-          item: job.draft!,
-          exists: job.exists,
-          draftRevision: job.draftRevision,
-          recognitionImages: recognition.snapshot(),
-          mode,
-          print: { job, fillBlanks },
-        };
-        const details = intakeDuplicateDetails(error);
-        if (details && isCurrentSaveIntent(intent)) {
-          setPendingDuplicateSave({ intent, details, error: "" });
-          return;
-        }
-        if (!isCurrentSaveIntent(intent)) return;
-      }
-      const message = error instanceof Error ? error.message : "准备笼卡失败";
-      if (job.saveCurrent) setNotice(message);
-      else {
-        setBulkNotice(message);
-        setBulkNoticeKind("error");
-      }
-    }
-  }
-
-  async function confirmDuplicateSave() {
-    const pending = pendingDuplicateSave;
-    if (!pending || saveInFlight.current || duplicateConfirmationInFlight.current) return;
-    if (!isCurrentSaveIntent(pending.intent)) {
-      setPendingDuplicateSave(null);
-      return;
-    }
-    duplicateConfirmationInFlight.current = true;
-    const popup = pending.intent.print ? openPrintWindow() : null;
-    if (pending.intent.print && !popup) {
-      duplicateConfirmationInFlight.current = false;
-      setPendingDuplicateSave({ ...pending, error: "打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。" });
-      return;
-    }
-    try {
-      saveInFlight.current = true;
-      const response = await save.mutateAsync({
-        item: pending.intent.item,
-        exists: pending.intent.exists,
-        checkDuplicates: true,
-        duplicateConfirmation: pending.details.confirmationToken,
-        recognitionImages: pending.intent.recognitionImages,
-      });
-      if (!isCurrentSaveIntent(pending.intent)) {
-        popup?.close();
-        return;
-      }
-      setPendingDuplicateSave(null);
-      if (!pending.intent.print) {
-        completeSavedDraft(pending.intent, response.item);
-        return;
-      }
-      const saved = normalizeIntakeBatch(response.item, roomNames);
-      recognition.reset();
-      replaceDraft(saved);
-      setEditing(true);
-      if (
-        openIntakeCardPrint([saved], {
-          kind: pending.intent.print.job.kind,
-          fillBlanks: pending.intent.print.fillBlanks,
-          targetWindow: popup,
-        })
-      ) {
-        await markPrinted([saved]);
-      } else {
-        popup?.close();
-      }
-    } catch (error) {
-      popup?.close();
-      if (!isCurrentSaveIntent(pending.intent)) return;
-      const details = intakeDuplicateDetails(error);
-      if (details) {
-        setPendingDuplicateSave({ intent: pending.intent, details, error: "重复记录已更新，请重新核对后确认保存。" });
-        return;
-      }
-      setPendingDuplicateSave({
-        ...pending,
-        error: error instanceof Error ? error.message : "确认保存失败，请重试。",
-      });
-    } finally {
-      saveInFlight.current = false;
-      duplicateConfirmationInFlight.current = false;
-    }
-  }
-
-  function beginReceive(targets: IntakeBatchListItem[]) {
-    const printable = targets.filter(canConfirmIntakeReceipt);
-    if (!printable.length) {
-      void feedback.message.info("请选择已打印的入驻饲养批次或待接收的直接取材批次。");
-      return;
-    }
-    setReceiptError("");
-    setReceiptNeedsReselect(false);
-    setPendingReceipt({ items: printable.map((item) => ({ ...item })), skipped: targets.length - printable.length });
-  }
-
-  async function receive(actualReceiptDates: Record<string, string>) {
-    if (!pendingReceipt || markingReceived) return;
-    const { items: printable, skipped } = pendingReceipt;
-    setMarkingReceived(true);
-    setBulkNotice("");
-    try {
-      const response = await confirmBatchesReceipt.mutateAsync({
-        ids: printable.map((item) => item.id),
-        actualReceiptDates,
-        expectedVersions: Object.fromEntries(printable.map((item) => [item.id, item.updatedAt])),
-      });
-      selection.update(response.batches);
-      setPendingReceipt(null);
-      setBulkNotice("");
-      if (skipped)
-        feedback.warning(
-          "批次接收标记已完成",
-          `已标记 ${printable.length} 个批次为已接收；${skipped} 个不符合接收条件的批次跳过。`,
-        );
-      else feedback.success("批次已标记为已接收", `共 ${printable.length} 个批次。`);
-    } catch (error) {
-      const stale = error instanceof ApiError && error.status === 409;
-      setReceiptNeedsReselect(stale);
-      setReceiptError(
-        stale
-          ? "所选批次已更新，请返回列表重新勾选后确认接收。"
-          : error instanceof Error
-            ? error.message
-            : "标记已接收失败",
-      );
-      setBulkNotice("");
-    } finally {
-      setMarkingReceived(false);
-    }
-  }
-
-  function toggleSort(key: string) {
-    setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
-    setPage(1);
-  }
+  const form: IntakeEditorFormProps = {
+    editing: editor.editing,
+    draft: editor.draft,
+    roomNames,
+    notice: editor.notice,
+    saving: saves.mutation.isPending || editor.recognition.reading,
+    aiPending: editor.recognition.pending || editor.recognition.reading,
+    recognitionImages: editor.recognition.images,
+    recognitionError: editor.recognition.error,
+    onAddImages: (files) => void editor.recognition.addFiles(files),
+    onRemoveImage: editor.recognition.remove,
+    onSubmit: submit,
+    onAiParse: () => void aiParseMessage(),
+    onParse: () => void parseMessage(),
+    onPrint: printer.printCurrentBatch,
+    onUpdate: editor.update,
+    roomsReady,
+  };
+  const selectedPrintPlan = planIntakeCardPrint(selection.selectedItems, printRooms);
 
   return (
     <section className="workspace-view intake-workspace react-intake-view" data-feature="intake">
@@ -636,20 +162,24 @@ export function IntakeView({
         <section className="billing-layout quantity-billing-layout intake-layout">
           {roomFeedback}
           {mode === "entry" ? mergeFeedback : null}
-          {mode === "batches" && list.isError ? (
+          {mode === "batches" && page.query.isError ? (
             <PageState
               title="待接收批次更新失败"
               detail="已加载内容和选择已保留，请重试后继续操作。"
-              retry={() => void list.refetch()}
+              retry={() => void page.query.refetch()}
             />
           ) : null}
           {mode === "entry" ? (
             <WorkspaceToolbar
               ariaLabel="笼卡录入操作"
-              title={isDirectSampling(draft) ? "直接取材预约" : editing ? "编辑接收笼卡" : "接收笼卡"}
               sticky
+              title={isDirectSampling(editor.draft) ? "直接取材预约" : editor.editing ? "编辑接收笼卡" : "接收笼卡"}
               actions={
-                <ActionButton icon={<ActionIcon name="create" />} disabled={save.isPending} onClick={startNew}>
+                <ActionButton
+                  icon={<ActionIcon name="create" />}
+                  disabled={saves.mutation.isPending}
+                  onClick={editor.startNew}
+                >
                   新建批次
                 </ActionButton>
               }
@@ -659,8 +189,8 @@ export function IntakeView({
                   className="primary"
                   type="submit"
                   form="intake-entry-panel"
-                  disabled={!roomsReady || recognition.reading}
-                  pending={save.isPending}
+                  disabled={!roomsReady || editor.recognition.reading}
+                  pending={saves.mutation.isPending}
                   pendingLabel="保存中..."
                 >
                   保存待接收批次
@@ -670,218 +200,57 @@ export function IntakeView({
           ) : null}
           {mode === "entry" ? (
             roomsAvailable ? (
-              <IntakeEntryPanel
-                editing={editing}
-                draft={draft}
-                roomNames={roomNames}
-                notice={notice}
-                saving={save.isPending || recognition.reading}
-                aiPending={recognition.pending || recognition.reading}
-                recognitionImages={recognition.images}
-                recognitionError={recognition.error}
-                onAddImages={(files) => void recognition.addFiles(files)}
-                onRemoveImage={recognition.remove}
-                onSubmit={submit}
-                headActions={null}
-                onAiParse={aiParseMessage}
-                onParse={parseMessage}
-                onPrint={() => void printCurrentBatch()}
-                onUpdate={update}
-                roomsReady={roomsReady}
-              />
+              <IntakeEntryPanel {...form} headActions={null} />
             ) : (
               <PageSkeleton compact label="房间信息" variant="form" />
             )
-          ) : !listData ? (
+          ) : !page.data ? (
             <>
               <WorkspaceToolbar title="待接收批次列表" ariaLabel="待接收批次列表" />
-              {list.isPending ? <PageSkeleton label="待接收批次" variant="table" /> : null}
+              {page.query.isPending ? <PageSkeleton label="待接收批次" variant="table" /> : null}
             </>
           ) : (
             <IntakeBatchList
-              total={total}
-              selectedItems={selectedItems}
-              items={items}
-              loading={listBlocked}
-              selectingAll={selectingAll}
-              allFilteredSelected={allFilteredSelected}
-              bulkNotice={selection.error || bulkNotice}
-              bulkNoticeKind={selection.error ? "error" : bulkNoticeKind}
-              markingPrinted={markingPrinted}
-              markingReceived={markingReceived}
+              total={page.data.page.total}
+              selectedItems={selection.selectedItems}
+              items={page.data.items}
+              loading={page.blocked}
+              selectingAll={selection.selectingAll}
+              allFilteredSelected={selection.allFilteredSelected}
+              bulkNotice={selection.error || actions.bulkNotice}
+              bulkNoticeKind={selection.error ? "error" : actions.bulkNoticeKind}
+              markingPrinted={actions.markingPrinted}
+              markingReceived={actions.markingReceived}
               printDisabledReason={roomsReady ? selectedPrintPlan.disabledReason : "房间信息尚未就绪，请等待或重试。"}
-              page={page}
-              pageSize={pageSize}
-              params={params}
-              filters={filters}
+              page={page.page}
+              pageSize={page.pageSize}
+              params={page.params}
+              filters={page.filters}
               onClearSelection={selection.clear}
-              onToggleAll={() => void selection.toggleAll(params)}
+              onToggleAll={() => void selection.toggleAll(page.params)}
               onToggleItem={selection.toggle}
-              onSort={toggleSort}
-              onFilter={(key, values) => {
-                setFilters((current) => ({ ...current, [key]: values }));
-                setPage(1);
-              }}
-              onPrint={(targets) => requestPrint(targets)}
-              onMarkPrinted={(targets) => void markPrinted(targets)}
-              onReceive={beginReceive}
-              onEdit={edit}
-              onDelete={setDeleteTarget}
-              onPage={setPage}
-              onPageSize={(value) => {
-                setPageSize(value);
-                setPage(1);
-              }}
+              onSort={page.onSort}
+              onFilter={page.onFilter}
+              onPrint={(targets) => printer.requestPrint(targets)}
+              onMarkPrinted={(targets) => void actions.markPrinted(targets)}
+              onReceive={actions.beginReceive}
+              onEdit={editor.edit}
+              onDelete={actions.setDeleteTarget}
+              onPage={page.setPage}
+              onPageSize={page.onPageSize}
             />
           )}
         </section>
       </div>
-      <ModalPresence>
-        {editingDialog ? (
-          <ModalShell
-            key="intake-editor"
-            ariaLabel="编辑待接收批次"
-            className="intake-edit-modal"
-            onClose={closeEditingDialog}
-          >
-            <div className="modal-shell-head">
-              <div>
-                <h2>编辑待接收批次</h2>
-                <p>{pendingEdit?.batchNo || draft.batchNo}</p>
-              </div>
-              <ActionButton onClick={closeEditingDialog}>关闭</ActionButton>
-            </div>
-            <div className="modal-shell-body">
-              {roomFeedback}
-              {mergeFeedback}
-              {pendingEdit ? (
-                editRead.error ? (
-                  <PageState title="批次详情加载失败" detail={editRead.error.message} retry={editRead.retry} />
-                ) : (
-                  <PageSkeleton compact label="批次详情与房间信息" variant="form" />
-                )
-              ) : (
-                <IntakeEntryPanel
-                  editing={editing}
-                  draft={draft}
-                  roomNames={roomNames}
-                  notice={notice}
-                  saving={save.isPending || recognition.reading}
-                  aiPending={recognition.pending || recognition.reading}
-                  recognitionImages={recognition.images}
-                  recognitionError={recognition.error}
-                  onAddImages={(files) => void recognition.addFiles(files)}
-                  onRemoveImage={recognition.remove}
-                  onSubmit={submit}
-                  headActions={
-                    <ActionButton
-                      icon={<ActionIcon name="save" />}
-                      disabled={!roomsReady || recognition.reading}
-                      loading={save.isPending}
-                      tone="primary"
-                      type="submit"
-                    >
-                      保存待接收批次
-                    </ActionButton>
-                  }
-                  onAiParse={aiParseMessage}
-                  onParse={parseMessage}
-                  onPrint={() => void printCurrentBatch()}
-                  onUpdate={update}
-                  roomsReady={roomsReady}
-                />
-              )}
-            </div>
-          </ModalShell>
-        ) : null}
-      </ModalPresence>
-      <ModalPresence>
-        {deleteTarget ? (
-          <ModalShell key={deleteTarget.id} ariaLabel="删除待接收批次" onClose={() => setDeleteTarget(null)}>
-            <div className="modal-shell-head">
-              <div>
-                <h2 id="delete-intake-title">删除待接收批次</h2>
-                <p>{deleteTarget.batchNo}</p>
-              </div>
-            </div>
-            <div className="modal-shell-body">
-              <p>删除后，该批次及关联的待进驻任务会一并移除。</p>
-            </div>
-            <div className="modal-shell-actions">
-              <ActionButton onClick={() => setDeleteTarget(null)}>取消</ActionButton>
-              <ActionButton
-                disabled={remove.isPending}
-                loading={remove.isPending}
-                tone="destructive"
-                onClick={async () => {
-                  await remove.mutateAsync(deleteTarget.id);
-                  selection.remove(deleteTarget.id);
-                  setDeleteTarget(null);
-                }}
-              >
-                确认删除
-              </ActionButton>
-            </div>
-          </ModalShell>
-        ) : null}
-      </ModalPresence>
-      <ModalPresence>
-        {pendingReceipt ? (
-          <IntakeReceiptConfirmDialog
-            key={pendingReceipt.items.map((item) => item.id).join(",")}
-            items={pendingReceipt.items}
-            pending={markingReceived}
-            error={receiptError}
-            blocked={receiptNeedsReselect}
-            onClose={() => {
-              if (!markingReceived) {
-                if (receiptNeedsReselect) {
-                  selection.clear();
-                  void list.refetch();
-                }
-                setPendingReceipt(null);
-              }
-            }}
-            onConfirm={receive}
-          />
-        ) : null}
-      </ModalPresence>
-      <ModalPresence>
-        {pendingPrint ? (
-          <IntakePrintConfirmDialog
-            key={pendingPrint.batches.map((batch) => batch.id).join(",")}
-            job={pendingPrint}
-            onClose={() => setPendingPrint(null)}
-            onPrint={(fillBlanks) => void executePrint(pendingPrint, fillBlanks)}
-          />
-        ) : null}
-      </ModalPresence>
-      <ModalPresence>
-        {merge.state?.result && merge.state.result.total > 0 ? (
-          <IntakeRecognitionMergeDialog
-            key={merge.state.result.items.map((candidate) => candidate.item.id).join(",")}
-            preview={merge.state.result}
-            pending={merge.state.saving || save.isPending}
-            error={merge.state.saveError}
-            blocked={merge.state.needsRefresh}
-            onClose={merge.close}
-            onConfirm={() => void merge.confirm()}
-            onRefresh={merge.retry}
-          />
-        ) : null}
-      </ModalPresence>
-      <ModalPresence>
-        {pendingDuplicateSave ? (
-          <IntakeDuplicateConfirmDialog
-            key={pendingDuplicateSave.details.confirmationToken}
-            details={pendingDuplicateSave.details}
-            error={pendingDuplicateSave.error}
-            pending={save.isPending}
-            onClose={invalidateDraftConfirmation}
-            onConfirm={() => void confirmDuplicateSave()}
-          />
-        ) : null}
-      </ModalPresence>
+      <IntakeEditorDialog
+        editor={editor}
+        form={form}
+        roomFeedback={roomFeedback}
+        mergeFeedback={mergeFeedback}
+        saving={saves.mutation.isPending}
+        roomsReady={roomsReady}
+      />
+      <IntakeActionDialogs actions={actions} printer={printer} saves={saves} merge={merge} />
     </section>
   );
 }

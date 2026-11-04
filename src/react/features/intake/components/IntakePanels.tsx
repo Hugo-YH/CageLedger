@@ -1,4 +1,5 @@
 import { IntakeField as Field } from "./IntakeField";
+import { IntakeStatusTag } from "./IntakeStatusTag";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { RobotOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typography } from "antd";
@@ -223,12 +224,7 @@ export function IntakeEntryPanel({
           </Row>
           <Row gutter={[16, 16]}>
             <Col lg={6} md={12} xs={24}>
-              <Field
-                label="购买单位"
-                required
-                value={draft.supplier}
-                onChange={(value) => onUpdate("supplier", value)}
-              />
+              <Field label="供应商" required value={draft.supplier} onChange={(value) => onUpdate("supplier", value)} />
             </Col>
             <Col lg={6} md={12} xs={24}>
               <Form.Item label="采购单号" tooltip={identifierHelp}>
@@ -253,9 +249,9 @@ export function IntakeEntryPanel({
               </Form.Item>
             </Col>
             <Col lg={6} md={12} xs={24}>
-              <Form.Item label="批次号" tooltip={identifierHelp}>
+              <Form.Item label="饲养需求批次编号" tooltip={identifierHelp}>
                 <Input.TextArea
-                  aria-label="批次号"
+                  aria-label="饲养需求批次编号"
                   aria-description={identifierHelp}
                   autoSize={{ minRows: 1, maxRows: 3 }}
                   value={draft.batchNo}
@@ -292,7 +288,7 @@ export function IntakeEntryPanel({
             </Col>
             <Col lg={5} md={12} xs={24}>
               <Field
-                label="体重/日龄（规格）"
+                label="规格（体重/日龄）"
                 value={draft.specification ?? ""}
                 onChange={(value) => onUpdate("specification", value)}
               />
@@ -333,7 +329,7 @@ export function IntakeEntryPanel({
             <Col lg={8} md={12} xs={24}>
               <Field
                 personNames
-                label="实验负责人"
+                label="实验负责人/助手"
                 required
                 value={draft.owner}
                 onChange={(value) => onUpdate("owner", value)}
@@ -346,7 +342,7 @@ export function IntakeEntryPanel({
                 label="接收日期"
                 type="date"
                 value={draft.intakeDate}
-                extra="日期未定可留空保存，确定后在待接收批次中编辑补填。"
+                tooltip="日期未定可留空保存，确定后在待接收批次中编辑补填。"
                 onChange={(value) => onUpdate("intakeDate", value)}
               />
             </Col>
@@ -377,18 +373,8 @@ export function IntakeEntryPanel({
             )}
           </Row>
           <Row gutter={[16, 16]}>
-            <Col lg={directSampling ? 8 : 6} md={12} xs={24}>
-              <Field
-                label="接收人员"
-                value={draft.receiverName}
-                onChange={(value) => onUpdate("receiverName", value)}
-              />
-            </Col>
-            <Col lg={directSampling ? 8 : 6} md={12} xs={24}>
-              <Field label="联系电话" value={draft.vetPhone} onChange={(value) => onUpdate("vetPhone", value)} />
-            </Col>
             {!directSampling && (
-              <Col lg={6} md={12} xs={24}>
+              <Col lg={12} md={12} xs={24}>
                 <Field
                   label="打印张数"
                   type="number"
@@ -397,13 +383,15 @@ export function IntakeEntryPanel({
                 />
               </Col>
             )}
-            <Col lg={directSampling ? 8 : 6} md={12} xs={24}>
+            <Col lg={directSampling ? 24 : 12} md={directSampling ? 24 : 12} xs={24}>
               <Form.Item label="状态">
-                <Select<IntakeBatchStatus>
+                <Select<IntakeBatchStatus, { value: IntakeBatchStatus; label: string }>
                   aria-label="状态"
                   value={draft.status}
                   disabled={directSampling && draft.status === "received"}
                   options={availableStatuses.map(([value, label]) => ({ value, label }))}
+                  labelRender={() => <IntakeStatusTag status={draft.status} />}
+                  optionRender={({ data }) => <IntakeStatusTag status={data.value} />}
                   onChange={(value) => onUpdate("status", value)}
                 />
               </Form.Item>

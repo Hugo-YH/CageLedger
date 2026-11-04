@@ -25,7 +25,7 @@ def normalize_entity_payload(collection, payload, item_id, method, id_prefix):
     return normalize_entity_payload_rule(collection, payload, item_id, method, id_prefix, new_id)
 
 
-def insert_entity(state, collection, item):
+def insert_entity(state, collection, item, *, used_qr_ids=None):
     items = state.setdefault(collection, [])
     if any(existing.get("id") == item["id"] for existing in items):
         raise sqlite3.IntegrityError(f"Duplicate id: {item['id']}")
@@ -33,7 +33,7 @@ def insert_entity(state, collection, item):
         item = normalize_direct_sampling_batch(item)
         if is_direct_sampling(item) and item.get("status") not in ("draft", "pending_receipt"):
             raise ValueError("直接取材批次初建只能是草稿或待接收")
-        item = ensure_intake_batch_card_qr_ids(state, item)
+        item = ensure_intake_batch_card_qr_ids(state, item, used_qr_ids=used_qr_ids)
     validate_entity_references(state, collection, item)
     items.append(item)
 
@@ -48,13 +48,17 @@ def intake_card_suggested_quantity(batch, index, card_count):
     return str(per_cage)
 
 
-def ensure_intake_batch_card_qr_ids(state, batch):
+def ensure_intake_batch_card_qr_ids(state, batch, *, used_qr_ids=None):
     next_batch = dict(batch)
     if is_direct_sampling(next_batch):
         return normalize_direct_sampling_batch(next_batch)
     card_count = max(as_int(next_batch.get("finalCardCount")) or as_int(next_batch.get("suggestedCardCount")) or 0, 0)
     existing_cards = next_batch.get("cards") if isinstance(next_batch.get("cards"), list) else []
-    used_qr_ids = collect_cage_card_qr_ids(state, next_batch.get("id", ""))
+    used_qr_ids = (
+        collect_cage_card_qr_ids(state, next_batch.get("id", ""))
+        if used_qr_ids is None
+        else {clean_text(value).upper() for value in used_qr_ids if is_cage_card_qr_id(value)}
+    )
     cards = []
     for index in range(card_count):
         existing = (
@@ -181,7 +185,7 @@ def normalize_intake_batches_for_state_write(old_state, state):
     return state
 
 
-def reconcile_intake_batch_update(state, old_item, item):
+def reconcile_intake_batch_update(state, old_item, item, *, used_qr_ids=None):
     item = normalize_calendar_batch(item, old_item)
     next_item = {**old_item, **item}
     next_item["intakePurpose"] = intake_purpose(next_item)
@@ -237,15 +241,15 @@ def reconcile_intake_batch_update(state, old_item, item):
             task["targetRoomId"] = target_room.get("id", "") if target_room else ""
             task["targetRoomName"] = target_room.get("name", "") if target_room else new_room_name
             task["updatedAt"] = next_item.get("updatedAt") or now_iso()
-    return ensure_intake_batch_card_qr_ids(state, next_item)
+    return ensure_intake_batch_card_qr_ids(state, next_item, used_qr_ids=used_qr_ids)
 
 
-def replace_entity(state, collection, item_id, item):
+def replace_entity(state, collection, item_id, item, *, used_qr_ids=None):
     items = state.setdefault(collection, [])
     for index, existing in enumerate(items):
         if existing.get("id") == item_id:
             if collection == "intakeBatches":
-                item = reconcile_intake_batch_update(state, existing, item)
+                item = reconcile_intake_batch_update(state, existing, item, used_qr_ids=used_qr_ids)
             validate_entity_references(state, collection, item)
             items[index] = item
             return

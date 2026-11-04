@@ -25,8 +25,8 @@ test("local intake recognition classifies C and DC identifiers and preserves rev
   const purchaseField = page.getByLabel("采购单号", { exact: true });
   const orderField = page.getByLabel("订单编号", { exact: true });
   const quantity = page.getByLabel("数量（只）", { exact: true });
-  const supplier = page.getByLabel("购买单位", { exact: true });
-  const owner = page.getByLabel("实验负责人", { exact: true });
+  const supplier = page.getByLabel("供应商", { exact: true });
+  const owner = page.getByLabel("实验负责人/助手", { exact: true });
   const recognize = page.getByRole("button", { name: "本地识别", exact: true });
   const success = page.getByRole("status").filter({ hasText: "预约消息已识别" });
 
@@ -38,7 +38,7 @@ test("local intake recognition classifies C and DC identifiers and preserves rev
     await recognize.click();
     await expect(purchaseField).toHaveValue(purchase);
     await expect(orderField).toHaveValue(expectedOrder);
-    await expect(page.getByLabel("批次号", { exact: true })).toHaveValue(batchNo);
+    await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
     await expect(quantity).toHaveValue("6");
     await expect(success).toBeVisible();
     await success.getByRole("button", { name: "关闭通知" }).click();
@@ -108,12 +108,15 @@ test("one 60-animal appointment retains both orders and demands through duplicat
   expect((await preview.json()).total).toBe(0);
   await expect(page.getByLabel("采购单号", { exact: true })).toHaveValue(purchaseOrderNos.join("、"));
   await expect(page.getByLabel("订单编号", { exact: true })).toHaveValue(orderNos.join("、"));
-  await expect(page.getByLabel("批次号", { exact: true })).toHaveValue(batchNos.join("、"));
+  await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNos.join("、"));
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("60");
   await expect(page.getByLabel("IACUC 编号", { exact: true })).toHaveValue("Z2025034");
-  await expect(page.getByRole("status").filter({ hasText: "预约消息已识别" })).toContainText("总数量只记录一次");
+  const recognizedNotice = page.getByRole("status").filter({ hasText: "预约消息已识别" });
+  await expect(recognizedNotice).toContainText("总数量只记录一次");
+  await recognizedNotice.getByRole("button", { name: "关闭通知", exact: true }).click();
+  await expect(recognizedNotice).toBeHidden();
   await page.getByLabel("项目负责人", { exact: true }).fill("同组测试项目负责人");
-  await page.getByLabel("实验负责人", { exact: true }).fill("同组测试实验负责人");
+  await page.getByLabel("实验负责人/助手", { exact: true }).fill("同组测试实验负责人");
   await page
     .locator("#intake-entry-panel")
     .screenshot({ path: info.outputPath("grouped-recognized.png"), animations: "disabled" });
@@ -189,6 +192,10 @@ test("one 60-animal appointment retains both orders and demands through duplicat
     });
     expect(result.auditLogs).toContainEqual(expect.objectContaining({ action: "intake_batch.duplicate_confirmed" }));
     await expect(confirmation).toBeHidden();
+    const savedNotice = page.getByRole("status").filter({ hasText: "待接收批次已保存" });
+    await expect(savedNotice).toBeVisible();
+    await savedNotice.getByRole("button", { name: "关闭通知", exact: true }).click();
+    await expect(savedNotice).toBeHidden();
 
     const detailResponse = await page.request.get(`/api/intake-batches/${encodeURIComponent(savedId)}`);
     expect(detailResponse.ok()).toBe(true);
@@ -225,7 +232,7 @@ test("one 60-animal appointment retains both orders and demands through duplicat
     const editor = page.getByRole("dialog", { name: "编辑待接收批次", exact: true });
     await expect(editor.getByLabel("采购单号", { exact: true })).toHaveValue(purchaseOrderNos.join("、"));
     await expect(editor.getByLabel("订单编号", { exact: true })).toHaveValue(orderNos.join("、"));
-    await expect(editor.getByLabel("批次号", { exact: true })).toHaveValue(batchNos.join("、"));
+    await expect(editor.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNos.join("、"));
     await expect(editor.getByLabel("数量（只）", { exact: true })).toHaveValue("60");
     await page.screenshot({ path: info.outputPath("grouped-editor-reopened.png"), animations: "disabled" });
     await editor.getByRole("button", { name: "关闭", exact: true }).click();

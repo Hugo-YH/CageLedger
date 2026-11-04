@@ -1,7 +1,7 @@
 """Intake batch application transactions."""
 
+import copy
 import hashlib
-import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,8 +17,6 @@ from server_app.domains.intake.recognition_evidence import sanitize_evidence
 from server_app.domains.intake.recognition_images import ImageWriteSession, decode_images
 from server_app.domains.intake.recognition_merge import confirmed_merge
 from server_app.domains.state.audit_diff import build_audit_events, validate_state_write_permission
-from server_app.domains.state.entity_rules import empty_state
-from server_app.domains.state.persistence import assemble_state
 from server_app.repositories.entities import (
     delete_intake_batch as delete_intake_batch_repository,
 )
@@ -31,6 +29,7 @@ from server_app.repositories.entities import (
 from server_app.repositories.entities import (
     upsert_placement_task as upsert_placement_task_repository,
 )
+from server_app.repositories.intake_transactions import read_intake_context, reserved_card_qr_ids
 from server_app.shared import clean_text, new_id
 from server_app.shared.concurrency import begin_write, require_current_version, require_exact_version
 
@@ -52,11 +51,14 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
     with ImageWriteSession() as image_writer, connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
-        state = json.loads(json.dumps(old_state))
-        existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
         normalized_payload = dict(payload)
         raw_item = dict(payload.get("item") if isinstance(payload.get("item"), dict) else payload)
+        target_id = str(raw_item.get("id") or new_id(spec["id_prefix"])) if method == "POST" else item_id
+        if method == "POST":
+            raw_item["id"] = target_id
+        old_state = read_intake_context(conn, [target_id])
+        state = copy.deepcopy(old_state)
+        existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
         merge_changes = None
         if "recognitionMerge" in payload:
             if method != "PUT" or images:
@@ -84,11 +86,11 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
         item = ports.normalize_entity_payload("intakeBatches", normalized_payload, item_id, method, spec["id_prefix"])
         item["updatedAt"] = updated_at
         if method == "POST":
-            ports.insert_entity(state, "intakeBatches", item)
+            ports.insert_entity(state, "intakeBatches", item, used_qr_ids=reserved_card_qr_ids(conn, item["id"]))
             status = HTTPStatus.CREATED
         elif method == "PUT":
             require_current_version(existing or {}, payload.get("expectedUpdatedAt"), "待接收批次")
-            ports.replace_entity(state, "intakeBatches", item_id, item)
+            ports.replace_entity(state, "intakeBatches", item_id, item, used_qr_ids=reserved_card_qr_ids(conn, item_id))
         elif method == "DELETE":
             item = ports.delete_entity(state, "intakeBatches", item_id)
         else:
@@ -125,10 +127,13 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
                 "imageIds": ordered_ids,
             }
             if "" in ordered_ids:
+                warning = "部分识别所用原图未留档，请重新添加识别时的图片或重新识别；新添加图片不会替代旧识别依据。"
                 candidate["recognition"]["warnings"] = [
                     *(evidence or {}).get("warnings", []),
-                    "部分识别所用原图未留档，请重新添加识别时的图片或重新识别；新添加图片不会替代旧识别依据。",
+                    warning,
                 ]
+                if review := candidate["recognition"].get("review"):
+                    candidate["recognition"]["review"] = {**review, "reminders": [*review["reminders"], warning]}
         events = build_audit_events(actor, old_state, state, updated_at)
         if merge_changes is not None:
             events.append(
@@ -221,8 +226,8 @@ def persist_intake_receipt_confirmation(batch_id, body, actor, ports):
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
-        state = json.loads(json.dumps(old_state))
+        old_state = read_intake_context(conn, [batch_id])
+        state = copy.deepcopy(old_state)
         batch, receipt, tasks = ports.confirm_intake_receipt(state, batch_id, body, actor)
         events = build_audit_events(actor, old_state, state, updated_at)
         upsert_intake_batch_repository(conn, batch)
@@ -269,8 +274,8 @@ def persist_intake_batches_mark_printed(body, actor, ports):
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
-        state = json.loads(json.dumps(old_state))
+        old_state = read_intake_context(conn, batch_ids)
+        state = copy.deepcopy(old_state)
         batches_by_id = {batch.get("id"): batch for batch in state.get("intakeBatches", [])}
         missing_ids = [batch_id for batch_id in batch_ids if batch_id not in batches_by_id]
         if missing_ids:
@@ -329,8 +334,8 @@ def persist_intake_receipt_confirmations(body, actor, ports):
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
-        state = json.loads(json.dumps(old_state))
+        old_state = read_intake_context(conn, batch_ids)
+        state = copy.deepcopy(old_state)
         batches_by_id = {batch.get("id"): batch for batch in state.get("intakeBatches", [])}
         missing_ids = [batch_id for batch_id in batch_ids if batch_id not in batches_by_id]
         if missing_ids:

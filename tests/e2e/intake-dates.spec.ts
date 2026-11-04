@@ -50,11 +50,11 @@ test("intake dates stay linked while typing, clearing, saving and editing a batc
   await expect(days).toHaveValue("7");
 
   const batchNo = `E2E-DATE-LINK-${Date.now()}`;
-  await page.getByLabel("购买单位", { exact: true }).fill("日期联动测试供应商");
-  await page.getByLabel("批次号", { exact: true }).fill(batchNo);
+  await page.getByLabel("供应商", { exact: true }).fill("日期联动测试供应商");
+  await page.getByLabel("饲养需求批次编号", { exact: true }).fill(batchNo);
   await page.getByLabel("IACUC 编号", { exact: true }).fill("Z2026001");
   await page.getByLabel("项目负责人", { exact: true }).fill("日期联动负责人");
-  await page.getByLabel("实验负责人", { exact: true }).fill("日期联动实验负责人");
+  await page.getByLabel("实验负责人/助手", { exact: true }).fill("日期联动实验负责人");
   await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间", exact: true }));
   const saved = page.waitForResponse(
     (response) => response.url().endsWith("/api/intake-batches") && response.request().method() === "POST",
@@ -120,11 +120,11 @@ for (const recognition of ["本地识别", "AI识别"]) {
     await expect(date).toHaveValue("");
     await expect(date).not.toHaveAttribute("required");
     const batchNo = `E2E-PENDING-DATE-${Date.now()}`;
-    await page.getByLabel("购买单位", { exact: true }).fill("日期待定测试供应商");
-    await page.getByLabel("批次号", { exact: true }).fill(batchNo);
+    await page.getByLabel("供应商", { exact: true }).fill("日期待定测试供应商");
+    await page.getByLabel("饲养需求批次编号", { exact: true }).fill(batchNo);
     await page.getByLabel("IACUC 编号", { exact: true }).fill("Z2026001");
     await page.getByLabel("项目负责人", { exact: true }).fill("日期待定负责人");
-    await page.getByLabel("实验负责人", { exact: true }).fill("日期待定实验负责人");
+    await page.getByLabel("实验负责人/助手", { exact: true }).fill("日期待定实验负责人");
     await page.getByLabel("数量（只）", { exact: true }).fill("5");
     await page.getByLabel("打印张数", { exact: true }).fill("1");
     await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间", exact: true }));

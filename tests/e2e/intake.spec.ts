@@ -225,6 +225,8 @@ test("marking a saved batch as printed keeps its server version", async ({ page 
 
 test("intake printing blocks mixed layouts and uses the temporary page size", async ({ page }) => {
   const suffix = Date.now();
+  const supplier = `E2E-PRINT-${suffix}`;
+  const createdIds: string[] = [];
   const temporaryId = `batch-e2e-temporary-print-${suffix}`;
   const standardId = `batch-e2e-standard-print-${suffix}`;
   const temporaryBatchNo = `E2E-TEMPORARY-${suffix}`;
@@ -234,6 +236,8 @@ test("intake printing blocks mixed layouts and uses the temporary page size", as
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+  const health = await (await page.request.get("/api/health")).json();
+  expect(health.database).toContain("cageledger-e2e-");
   await ensureTestInfrastructure(page);
   await page.request.post("/api/rooms", {
     data: {
@@ -259,7 +263,7 @@ test("intake printing blocks mixed layouts and uses the temporary page size", as
           status: "pending_print",
           batchNo,
           iacuc: "Z2026001",
-          supplier: "广东药康",
+          supplier,
           strainStandard: "C57BL/6J",
           pi: "E2E 打印负责人",
           owner: "E2E 实验负责人",
@@ -276,37 +280,53 @@ test("intake printing blocks mixed layouts and uses the temporary page size", as
         },
       },
     });
-  await createBatch(temporaryId, temporaryBatchNo, "8014");
-  await createBatch(standardId, standardBatchNo, "8101");
-  await page.reload();
+  try {
+    for (const [id, number, room] of [
+      [temporaryId, temporaryBatchNo, "8014"],
+      [standardId, standardBatchNo, "8101"],
+    ]) {
+      const response = await createBatch(id, number, room);
+      expect(response.ok(), await response.text()).toBe(true);
+      createdIds.push(id);
+    }
+    await page.reload();
 
-  const intakeGroup = page.getByRole("button", { name: "笼卡管理", exact: true }).or(
-    page
+    const intakeGroup = page.getByRole("button", { name: "笼卡管理", exact: true }).or(
+      page
+        .locator(".ant-main-menu")
+        .getByRole("menuitem", { name: /笼卡管理/ })
+        .first(),
+    );
+    await intakeGroup.click();
+    await page
       .locator(".ant-main-menu")
-      .getByRole("menuitem", { name: /笼卡管理/ })
-      .first(),
-  );
-  await intakeGroup.click();
-  await page
-    .locator(".ant-main-menu")
-    .getByRole("menuitem", { name: /待接收批次/ })
-    .click();
+      .getByRole("menuitem", { name: /待接收批次/ })
+      .click();
 
-  const temporaryRow = page.locator("tr", { hasText: temporaryBatchNo }).first();
-  const standardRow = page.locator("tr", { hasText: standardBatchNo }).first();
-  await temporaryRow.getByRole("checkbox", { name: `选择 ${temporaryBatchNo}` }).check();
-  await standardRow.getByRole("checkbox", { name: `选择 ${standardBatchNo}` }).check();
-  const printButton = page.getByRole("button", { name: "打印笼卡", exact: true });
-  await expect(printButton).toBeDisabled();
-  await expect(printButton).toHaveAccessibleDescription("普通饲养间与临时饲养间笼卡不能混合打印，请分开选择。");
+    await page.getByRole("button", { name: "筛选购买单位", exact: true }).click();
+    const supplierFilter = page.getByRole("group", { name: "筛选购买单位选项", exact: true });
+    await supplierFilter.getByLabel("搜索购买单位筛选选项", { exact: true }).fill(supplier);
+    const supplierOption = supplierFilter.getByRole("checkbox", { name: supplier, exact: false });
+    await supplierOption.click();
+    await expect(supplierOption).toBeChecked();
+    await supplierFilter.getByRole("button", { name: "应用", exact: true }).click();
 
-  await standardRow.getByRole("checkbox", { name: `选择 ${standardBatchNo}` }).uncheck();
-  await expect(printButton).toBeEnabled();
-  await printButton.click();
-  await expect(page.getByRole("heading", { name: "补齐空白笼卡", exact: true })).toBeVisible();
-  await expect(page.getByText("8014 临时饲养间版式", { exact: true })).toBeVisible();
-  await expect(page.getByText(/距离整页 15 张还差 14 张/)).toBeVisible();
+    const temporaryRow = page.locator("tr", { hasText: temporaryBatchNo }).first();
+    const standardRow = page.locator("tr", { hasText: standardBatchNo }).first();
+    await temporaryRow.getByRole("checkbox", { name: `选择 ${temporaryBatchNo}` }).check();
+    await standardRow.getByRole("checkbox", { name: `选择 ${standardBatchNo}` }).check();
+    const printButton = page.getByRole("button", { name: "打印笼卡", exact: true });
+    await expect(printButton).toBeDisabled();
+    await expect(printButton).toHaveAccessibleDescription("普通饲养间与临时饲养间笼卡不能混合打印，请分开选择。");
 
-  await page.request.delete(`/api/intake-batches/${temporaryId}`);
-  await page.request.delete(`/api/intake-batches/${standardId}`);
+    await standardRow.getByRole("checkbox", { name: `选择 ${standardBatchNo}` }).uncheck();
+    await expect(printButton).toBeEnabled();
+    await printButton.click();
+    await expect(page.getByRole("heading", { name: "补齐空白笼卡", exact: true })).toBeVisible();
+    await expect(page.getByText("8014 临时饲养间版式", { exact: true })).toBeVisible();
+    await expect(page.getByText(/距离整页 15 张还差 14 张/)).toBeVisible();
+  } finally {
+    for (const id of createdIds)
+      expect((await page.request.delete(`/api/intake-batches/${encodeURIComponent(id)}`)).ok()).toBe(true);
+  }
 });

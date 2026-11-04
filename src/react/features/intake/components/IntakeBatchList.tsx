@@ -18,6 +18,7 @@ import {
 } from "../../../../domain/intake";
 import { IntakeSummaryExport } from "./IntakeSummaryExport";
 import { IntakeStatistics } from "./IntakeStatistics";
+import { IntakeStatusTag } from "./IntakeStatusTag";
 import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
 
 type IntakeBatchListProps = {
@@ -131,6 +132,7 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
     },
     ...(
       [
+        { key: "intakeDate", label: "接收日期", width: 108 },
         { key: "status", label: "状态", width: 82 },
         { key: "intakePurpose", label: "接收用途", width: 100 },
         { key: "purchaseOrderNo", label: "采购单号", width: 168 },
@@ -140,7 +142,6 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
         { key: "owner", label: "实验负责人", width: 110 },
         { key: "quantity", label: "数量", width: 64 },
         { key: "roomName", label: "房间", width: 64 },
-        { key: "intakeDate", label: "接收日期", width: 108 },
         { key: "cardCount", label: "笼卡", width: 94 },
       ] as const
     ).map(({ key, label, width }) => ({
@@ -159,7 +160,7 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
         />
       ),
       render: (_: unknown, item: IntakeBatchListItem) => {
-        if (key === "status") return <Tag color={intakeStatusColor(item.status)}>{intakeStatusLabel(item.status)}</Tag>;
+        if (key === "status") return <IntakeStatusTag status={item.status} />;
         if (key === "intakePurpose")
           return (
             <Tag color={isDirectSampling(item) ? "blue" : undefined}>{intakePurposeLabel(item.intakePurpose)}</Tag>
@@ -371,12 +372,4 @@ function IntakeColumnTitle({
       onSort={onSort}
     />
   );
-}
-
-function intakeStatusColor(status: IntakeBatchStatus) {
-  if (status === "received") return "green";
-  if (status === "printed") return "blue";
-  if (status === "pending_print") return "gold";
-  if (status === "pending_receipt") return "gold";
-  return "default";
 }

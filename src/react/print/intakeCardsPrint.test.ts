@@ -53,6 +53,114 @@ describe("print templates", () => {
     expect(html).not.toContain("保存后生成");
   });
 
+  it("reorders standard-card contact fields while preserving the lower grid dimensions", () => {
+    const batch = {
+      id: "batch-1",
+      batchNo: "（Z2026013）2026110401",
+      iacuc: "Z2026013",
+      supplier: "广东药康生物科技有限公司",
+      strainStandard: "C57BL/6J",
+      strainRaw: "原始品系",
+      specification: "6–8周龄，20–25g",
+      pi: "项目负责人",
+      owner: "实验负责人、实验助手",
+      receiverName: "接收人员姓名",
+      vetPhone: "13900000000",
+      intakeDate: "2026-11-04",
+      endDate: "2026-12-04",
+      roomName: "8101",
+      quantity: 23,
+      finalCardCount: 1,
+      cards: [{ qrId: "ABCD", label: "1/5", index: 1, suggestedQuantity: "5" }],
+    } as IntakeBatch;
+    const html = intakeCardsPrintHtml([batch], {
+      contactPhones: { "batch-1": "13800000001 / 13800000002", other: "13800000003" },
+    });
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const table = document.querySelector<HTMLTableElement>(".standard-card table")!;
+    const rows = Array.from(table.rows);
+    expect(rows.slice(0, 4).map((row) => Array.from(row.cells, (cell) => cell.textContent))).toEqual([
+      ["批次号", "（Z2026013）2026110401", "供应商", "广东药康"],
+      ["项目负责人", "项目负责人", "动物品系", "C57BL/6J"],
+      ["实验负责人/助手", "实验负责人、实验助手", "动物规格", "6–8周龄，20–25g"],
+      ["联系电话", "13800000001 / 13800000002", "接收日期", "2026.11.4"],
+    ]);
+    expect(table.querySelector(".batch-iacuc-highlight")?.textContent).toBe("Z2026013");
+    expect(html).not.toContain(batch.vetPhone);
+    expect(html).not.toContain(batch.receiverName);
+    expect(html).not.toContain("13800000003");
+    expect(table.querySelector(".quantity-ratio")?.textContent).toBe("5/23");
+    expect(table.querySelector(".cycle")?.textContent).toBe("2026.11.4-2026.12.4");
+    expect(table.querySelector(".room")?.textContent).toBe("8101");
+    expect(table.querySelectorAll('[aria-label="笼卡二维码"]')).toHaveLength(1);
+    const columnWidths = Array.from(table.querySelectorAll("col"), (column) => Number.parseFloat(column.style.width));
+    const cellWidths = (row: HTMLTableRowElement) => {
+      let column = 0;
+      return Array.from(row.cells, (cell) => {
+        const width = columnWidths.slice(column, column + cell.colSpan).reduce((sum, value) => sum + value, 0);
+        column += cell.colSpan;
+        return width;
+      });
+    };
+    expect(rows.slice(0, 4).map(cellWidths)).toEqual(Array.from({ length: 4 }, () => [20, 30, 16, 34]));
+    expect(cellWidths(rows[4])).toEqual([14, 11, 25, 31, 19]);
+    expect(cellWidths(rows[5])).toEqual([14, 11, 25, 31]);
+    expect(rows.slice(6).map(cellWidths)).toEqual([
+      [14, 11, 25],
+      [14, 11, 25],
+    ]);
+  });
+
+  it("leaves absent standard-card contact and specification values blank without legacy fallbacks", () => {
+    const batch = {
+      id: "batch-1",
+      specification: "",
+      sex: "雄",
+      vetPhone: "13900000000",
+      finalCardCount: 1,
+      cards: [{}],
+    } as IntakeBatch;
+    for (const contactPhones of [undefined, { other: "13800000001" }]) {
+      const html = intakeCardsPrintHtml([batch], { contactPhones });
+      const document = new DOMParser().parseFromString(html, "text/html");
+      const rows = document.querySelector<HTMLTableElement>(".standard-card table")!.rows;
+      expect(rows[2].cells[3].textContent).toBe("");
+      expect(rows[3].cells[1].textContent).toBe("");
+      expect(html).not.toContain(batch.vetPhone);
+      expect(html).not.toContain("13800000001");
+      expect(html).not.toContain("雄");
+    }
+  });
+
+  it("keeps all three responsible people readable and reserves compact text for long standard-card names", () => {
+    for (const names of ["张三、李四", "丁小虎、蔡要嘉、林浩添"]) {
+      const batch = { pi: names, owner: names, finalCardCount: 1, cards: [{}] } as IntakeBatch;
+      const document = new DOMParser().parseFromString(intakeCardsPrintHtml([batch]), "text/html");
+      const rows = document.querySelector<HTMLTableElement>(".standard-card table")!.rows;
+      for (const cell of [rows[1].cells[1], rows[2].cells[1]]) {
+        expect(cell.textContent).toBe(names);
+        expect(cell.classList.contains("value-compact")).toBe(names === "丁小虎、蔡要嘉、林浩添");
+      }
+    }
+  });
+
+  it("uses the name text size for a single contact and compact text for multiple phones", () => {
+    for (const [owner, phone, compact] of [
+      ["张三", "13800000001", false],
+      ["张三", "020-12345678", false],
+      ["张三、李四", "13800000001 / 13800000002", true],
+      ["张三", "13800000001 / 13800000002", true],
+    ] as const) {
+      const batch = { id: "contact-font", owner, finalCardCount: 1, cards: [{}] } as IntakeBatch;
+      const html = intakeCardsPrintHtml([batch], { contactPhones: { [batch.id]: phone } });
+      const document = new DOMParser().parseFromString(html, "text/html");
+      const rows = document.querySelector<HTMLTableElement>(".standard-card table")!.rows;
+      expect(rows[3].cells[1].textContent).toBe(phone);
+      expect(rows[3].cells[1].classList.contains("value-compact")).toBe(compact);
+      if (!compact) expect(rows[3].cells[1].className).toBe(rows[2].cells[1].className);
+    }
+  });
+
   it("keeps the last cage quantity blank when the batch cannot divide evenly", () => {
     const batch = {
       quantity: 23,
@@ -169,6 +277,33 @@ describe("print templates", () => {
     expect(html).toContain('class="temporary-strain temporary-compact"');
   });
 
+  it("keeps temporary-card HTML identical when standard-card print context is supplied", () => {
+    const batch = {
+      id: "batch-1",
+      batchNo: "（Z2026013）2026110401",
+      iacuc: "Z2026013",
+      supplier: "广东药康生物科技有限公司",
+      strainStandard: "C57BL/6J",
+      pi: "项目负责人",
+      owner: "实验负责人",
+      specification: "6–8周龄",
+      vetPhone: "13900000000",
+      intakeDate: "2026-11-04",
+      endDate: "2026-12-04",
+      roomName: "8014",
+      quantity: 23,
+      finalCardCount: 1,
+      cards: [{ qrId: "ABCD", label: "1/5", index: 1, suggestedQuantity: "5" }],
+    } as IntakeBatch;
+    expect(
+      intakeCardsPrintHtml([batch], {
+        kind: "temporary",
+        fillBlanks: true,
+        contactPhones: { "batch-1": "13800000001" },
+      }),
+    ).toBe(intakeCardsPrintHtml([batch], { kind: "temporary", fillBlanks: true }));
+  });
+
   it("highlights the parenthesized IACUC code on a temporary card when the stored IACUC has changed", () => {
     const batch = {
       batchNo: "（Z2025143变更）2026081301",
@@ -183,12 +318,25 @@ describe("print templates", () => {
 
   it("pads the standard layout to fourteen cards without creating QR markup for blank cards", () => {
     const batch = {
+      id: "batch-1",
+      specification: "6–8周龄",
       quantity: 5,
       finalCardCount: 1,
       cards: [{ qrId: "ABCD", label: "1/1", index: 1, suggestedQuantity: "5" }],
     } as IntakeBatch;
-    const html = intakeCardsPrintHtml([batch], { fillBlanks: true });
+    const html = intakeCardsPrintHtml([batch], {
+      fillBlanks: true,
+      contactPhones: { "batch-1": "13800000001", undefined: "13800000002" },
+    });
     expect(html.match(/<section class="standard-card">/g)).toHaveLength(14);
     expect(html.match(/aria-label="笼卡二维码"/g)).toHaveLength(1);
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const blankCards = Array.from(document.querySelectorAll(".standard-card")).slice(1);
+    for (const card of blankCards) {
+      expect(Array.from(card.querySelectorAll(".value,.cycle,.room,.qr-cell"), (cell) => cell.textContent)).toEqual(
+        Array(13).fill(""),
+      );
+    }
+    expect(html).not.toContain("13800000002");
   });
 });
