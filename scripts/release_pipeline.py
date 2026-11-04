@@ -40,9 +40,27 @@ from release_runtime import (
     require,
     runtime_fingerprint,
     source_fingerprint,
+    specs,
     tree,
 )
 from release_runtime import ROOT as ROOT
+
+
+def verify_compatibility_catalog(repo, report):
+    expected = json.loads((repo / "tests/e2e/compatibility-catalog.json").read_text())
+    require(
+        isinstance(expected, list) and expected and len(expected) == len(set(expected)), "Invalid compatibility catalog"
+    )
+    selected = [
+        "@" + tag.lstrip("@")
+        for spec in specs(report["suites"])
+        for tag in spec.get("tags", [])
+        if tag.lstrip("@").startswith("compat-")
+    ]
+    require(
+        set(selected) == set(expected) and len(selected) == len(expected),
+        "Compatibility tags missing/duplicated; inspect explicit catalog",
+    )
 
 
 class Pipeline:
@@ -224,6 +242,7 @@ class Pipeline:
             args = cli + ([] if engine == "chromium" else ["--config", "playwright.compat.config.ts"])
             text = command(args + ["--list", "--reporter=json"], self.repo, env=env)
             atomic_json(catalog_dir / f"{engine}.json", json.loads(text))
+            verify_compatibility_catalog(self.repo, json.loads(text))
             catalogs[engine] = set(cases(json.loads(text), engine, False))
         jobs = [(f"chromium-{i}", "chromium", i, 5613 + (i - 1) * 10) for i in range(1, 4)]
         jobs += [("firefox", "firefox", None, 5643), ("webkit", "webkit", None, 5653)]
@@ -243,6 +262,8 @@ class Pipeline:
             entry = self.journal.data["stages"].get(name, {})
             if self.journal.reusable(name, key):
                 report = json.loads(Path(entry["report"]).read_text())
+                if engine != "chromium":
+                    verify_compatibility_catalog(self.repo, report)
                 cases(report, engine, True)
                 return entry
             ports_available(port)
@@ -264,6 +285,8 @@ class Pipeline:
                 self.runner.run(args, attempt / "command.log", env, database_probe(port, health))
                 report_path = output / "results.json"
                 report = json.loads(report_path.read_text())
+                if engine != "chromium":
+                    verify_compatibility_catalog(self.repo, report)
                 found = set(cases(report, engine, True))
                 require(found <= catalogs[engine] if shard else found == catalogs[engine], "Browser catalog mismatch")
                 require(report["config"]["shard"] == ({"current": shard, "total": 3} if shard else None), "Wrong shard")
@@ -311,17 +334,20 @@ class Pipeline:
                     raise failure
         require(len(results) == 5, "Incomplete browser stages")
         found = []
+        chromium_suites = []
         databases = []
         for name, engine, _, _ in jobs:
             report = json.loads(Path(results[name]["report"]).read_text())
             if engine == "chromium":
                 found.extend(cases(report, engine, True))
+                chromium_suites.extend(report["suites"])
             databases.append(results[name]["health"]["database"])
         require(
             set(found) == catalogs["chromium"] and all(n == 1 for n in Counter(found).values()),
             "Chromium coverage is not exact-once",
         )
         require(len(set(databases)) == 5, "Browser databases were shared")
+        verify_compatibility_catalog(self.repo, {"suites": chromium_suites})
         self.verify_runtime()
         require(self.fingerprint() == fingerprint, "Browser source changed")
         self.journal.data["browser_input"] = fingerprint
@@ -428,57 +454,9 @@ class Pipeline:
             "Remote branch moved before publishing",
         )
 
-        # Image builder cannot safely infer ownership after a partial push. Preserve and stop.
-        def image_state(previous):
-            if previous and previous["status"] == "passed":
-                actual = command(
-                    ["docker", "buildx", "imagetools", "inspect", "--raw", f"{IMAGE}:{version}"], self.repo
-                )
-                require(hashed(json.loads(actual)) == self.journal.data.get("image_manifest"), "Version image changed")
-                require(
-                    self.journal.reusable("images", previous["fingerprint"]), "Offline image evidence changed/missing"
-                )
-                return "present"
-            if previous:
-                return "unknown"
-            for suffix in ("", "-arm64", "-amd64"):
-                require(
-                    manifest_identity(self.repo, f"{IMAGE}:{version}{suffix}") is None,
-                    "Version image already exists; will not overwrite",
-                )
-            return "absent"
+        from release_images import publish_images
 
-        if image_state(self.journal.data["stages"].get("images")) == "absent":
-            attempt = self.journal.begin("images", self.fingerprint(), mutation=True)
-            try:
-                self.runner.run(
-                    [
-                        "bash",
-                        "scripts/publish_container_local.sh",
-                        "--version",
-                        version,
-                        "--export-offline-images",
-                        "--defer-latest",
-                    ],
-                    attempt / "command.log",
-                )
-                manifest = json.loads(
-                    command(["docker", "buildx", "imagetools", "inspect", "--raw", f"{IMAGE}:{version}"], self.repo)
-                )
-                self.journal.data["image_manifest"] = hashed(manifest)
-                self.journal.end(
-                    "images",
-                    "passed",
-                    [attempt / "command.log", *sorted((self.repo / "dist").glob(f"CageLedger-image-{version}-*"))],
-                )
-            except BaseException:
-                self.journal.end("images", "unknown")
-                raise
-        else:
-            require(
-                image_state(self.journal.data["stages"].get("images")) == "present",
-                "Partial image publication requires inspection",
-            )
+        publish_images(self)
         for ref, expected in (
             (f"refs/heads/{self.branch}", revision),
             (f"refs/tags/v{version}", command(["git", "rev-parse", f"refs/tags/v{version}"], self.repo)),

@@ -1,3 +1,4 @@
+import { compatibilityCase } from "./compatibilityCases";
 import { captureUiAudit } from "./uiAudit";
 import { expect, openNavigationEntry, test } from "./fixtures";
 import type { Page } from "@playwright/test";
@@ -15,62 +16,66 @@ async function openStandards(page: Page) {
   await expect(page.locator(".inspection-standards-panel")).toBeVisible();
 }
 
-test("admin edits the catalog, saves a draft and publishes a new version", async ({ page }, testInfo) => {
-  test.setTimeout(60000);
-  await login(page, "admin", "admin123");
-  await openStandards(page);
-  await expect(page.locator(".inspection-standard-list")).toContainText("125 个巡检条目");
+test(
+  "admin edits the catalog, saves a draft and publishes a new version",
+  compatibilityCase("inspection-catalog"),
+  async ({ page }, testInfo) => {
+    test.setTimeout(60000);
+    await login(page, "admin", "admin123");
+    await openStandards(page);
+    await expect(page.locator(".inspection-standard-list")).toContainText("125 个巡检条目");
 
-  await page.getByRole("button", { name: "编辑目录" }).click();
-  await expect(page.locator(".inspection-editor-panel")).toBeVisible();
-  const treeNode = page
-    .locator(".inspection-editor-tree .ant-tree-treenode:visible")
-    .getByText(/^呼吸急促/)
-    .first();
-  await treeNode.click();
-  await expect(page.locator(".inspection-node-drawer")).toBeVisible();
-  const nameInput = page.locator(".inspection-node-drawer #name");
-  const nodeName = `呼吸急促（E2E 发布 ${Date.now()}）`;
-  await nameInput.fill(nodeName);
-  await captureUiAudit(page, testInfo, "inspection-node", page.getByRole("dialog"));
-  await expect(nameInput).toHaveValue(nodeName);
-  await page.getByRole("button", { name: /保存修改/ }).click();
-  await expect(page.locator(".inspection-editor-tree .inspection-tree-change:visible")).toHaveCount(1);
+    await page.getByRole("button", { name: "编辑目录" }).click();
+    await expect(page.locator(".inspection-editor-panel")).toBeVisible();
+    const treeNode = page
+      .locator(".inspection-editor-tree .ant-tree-treenode:visible")
+      .getByText(/^呼吸急促/)
+      .first();
+    await treeNode.click();
+    await expect(page.locator(".inspection-node-drawer")).toBeVisible();
+    const nameInput = page.locator(".inspection-node-drawer #name");
+    const nodeName = `呼吸急促（E2E 发布 ${Date.now()}）`;
+    await nameInput.fill(nodeName);
+    await captureUiAudit(page, testInfo, "inspection-node", page.getByRole("dialog"));
+    await expect(nameInput).toHaveValue(nodeName);
+    await page.getByRole("button", { name: /保存修改/ }).click();
+    await expect(page.locator(".inspection-editor-tree .inspection-tree-change:visible")).toHaveCount(1);
 
-  await page
-    .getByRole("group", { name: "巡检目录编辑操作", exact: true })
-    .getByRole("button", { name: "保存草稿", exact: true })
-    .click();
-  await expect(
-    page.getByRole("group", { name: "巡检目录编辑操作", exact: true }).getByText("草稿已保存", { exact: true }),
-  ).toHaveText("草稿已保存");
+    await page
+      .getByRole("group", { name: "巡检目录编辑操作", exact: true })
+      .getByRole("button", { name: "保存草稿", exact: true })
+      .click();
+    await expect(
+      page.getByRole("group", { name: "巡检目录编辑操作", exact: true }).getByText("草稿已保存", { exact: true }),
+    ).toHaveText("草稿已保存");
 
-  await page
-    .getByRole("group", { name: "巡检目录编辑操作", exact: true })
-    .getByRole("button", { name: "返回", exact: true })
-    .click();
-  await expect(page.locator(".inspection-draft-banner")).toBeVisible();
-  await page.getByRole("button", { name: "继续编辑" }).click();
-  await expect(page.locator(".inspection-editor-panel")).toBeVisible();
+    await page
+      .getByRole("group", { name: "巡检目录编辑操作", exact: true })
+      .getByRole("button", { name: "返回", exact: true })
+      .click();
+    await expect(page.locator(".inspection-draft-banner")).toBeVisible();
+    await page.getByRole("button", { name: "继续编辑" }).click();
+    await expect(page.locator(".inspection-editor-panel")).toBeVisible();
 
-  await page
-    .getByRole("group", { name: "巡检目录编辑操作", exact: true })
-    .getByRole("button", { name: "发布", exact: true })
-    .click();
-  await expect(page.locator(".inspection-publish-modal")).toBeVisible();
-  await expect(page.locator(".inspection-publish-diff-item")).toHaveCount(1);
-  await captureUiAudit(page, testInfo, "inspection-publish", page.getByRole("dialog"));
-  await page.setViewportSize({ width: 844, height: 390 });
-  const confirmPublish = page.getByRole("button", { name: "确认发布", exact: true });
-  await confirmPublish.scrollIntoViewIfNeeded();
-  await expect(confirmPublish).toBeInViewport();
-  await page.screenshot({ path: testInfo.outputPath("inspection-publish-scrolled-844.png"), animations: "disabled" });
-  await confirmPublish.click();
-  await expect(page.locator(".inspection-standards-panel")).toBeVisible();
-  await expect(page.locator(".inspection-catalog-summary")).toContainText("manual-");
-  await expect(page.locator(".inspection-draft-banner")).toHaveCount(0);
-  await expect(page.locator(".inspection-standard-list")).toContainText("125 个巡检条目");
-});
+    await page
+      .getByRole("group", { name: "巡检目录编辑操作", exact: true })
+      .getByRole("button", { name: "发布", exact: true })
+      .click();
+    await expect(page.locator(".inspection-publish-modal")).toBeVisible();
+    await expect(page.locator(".inspection-publish-diff-item")).toHaveCount(1);
+    await captureUiAudit(page, testInfo, "inspection-publish", page.getByRole("dialog"));
+    await page.setViewportSize({ width: 844, height: 390 });
+    const confirmPublish = page.getByRole("button", { name: "确认发布", exact: true });
+    await confirmPublish.scrollIntoViewIfNeeded();
+    await expect(confirmPublish).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath("inspection-publish-scrolled-844.png"), animations: "disabled" });
+    await confirmPublish.click();
+    await expect(page.locator(".inspection-standards-panel")).toBeVisible();
+    await expect(page.locator(".inspection-catalog-summary")).toContainText("manual-");
+    await expect(page.locator(".inspection-draft-banner")).toHaveCount(0);
+    await expect(page.locator(".inspection-standard-list")).toContainText("125 个巡检条目");
+  },
+);
 
 test("room administrator only sees the read-only standards page", async ({ page }) => {
   await login(page, "admin", "admin123");

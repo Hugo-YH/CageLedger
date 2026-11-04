@@ -34,3 +34,8 @@ def show_status(directory):
         print(f"  日志：{path.parent / name / stage['attempt'] / 'command.log'}")
     print("续跑使用原检出、原版本和相同 --state-dir；只有输入及产物匹配的通过结果可复用。")
     print("unknown 表示发布副作用尚未确认，须先核对远端，不能当成失败后直接重试上传。")
+    summary = path.parent / "release-summary.json"
+    if summary.exists():
+        final = json.loads(summary.read_text())
+        print(f"收尾：{final.get('status', 'unknown')}；制品发布：{final.get('publication', 'unknown')}")
+        print(f"汇总：{summary}")

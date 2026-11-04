@@ -109,7 +109,9 @@ fi
 API_BASE="${GITEA_URL%/}/api/v1"
 AUTH_ARGS=()
 
-if [[ -n "${CAGELEDGER_GITEA_TOKEN:-}" ]]; then
+if [[ -n "${CAGELEDGER_GITEA_AUTHORIZATION:-}" ]]; then
+  AUTH_ARGS=(-H "Authorization: ${CAGELEDGER_GITEA_AUTHORIZATION}")
+elif [[ -n "${CAGELEDGER_GITEA_TOKEN:-}" ]]; then
   AUTH_ARGS=(-H "Authorization: token ${CAGELEDGER_GITEA_TOKEN}")
 else
   GITEA_PROTOCOL="$(printf '%s' "$GITEA_URL" | sed -E 's#^(https?)://.*#\1#')"

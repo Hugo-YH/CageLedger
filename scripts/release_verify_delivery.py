@@ -350,7 +350,12 @@ def manifest_platforms(manifest):
 
 def container_smoke(architecture, digest, package, revision, output, features_expected):
     name = f"cageledger-release-{package['version'].replace('.', '')}-{architecture}-{uuid4().hex[:12]}"
-    report = {"architecture": architecture, "image": f"{IMAGE}@{digest}", "status": "failed"}
+    report = {
+        "architecture": architecture,
+        "image": f"{IMAGE}@{digest}",
+        "status": "failed",
+        "owned_container_name": name,
+    }
     cleanup_ok = False
     try:
         container_id = command(
@@ -475,24 +480,9 @@ def container_smoke(architecture, digest, package, revision, output, features_ex
 
 
 def gitea_authorization():
-    import os
+    from release_credentials import gitea_credentials
 
-    if os.environ.get("CAGELEDGER_GITEA_TOKEN"):
-        return "token " + os.environ["CAGELEDGER_GITEA_TOKEN"]
-    result = subprocess.run(
-        ["git", "credential", "fill"],
-        cwd=REPO,
-        input="protocol=http\nhost=ddns.cellnucle.us:3333\npath=hugo/cageledger\n\n",
-        text=True,
-        capture_output=True,
-        timeout=30,
-        check=False,
-        env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "Never"},
-    )
-    require(result.returncode == 0, "Official Gitea credential helper failed")
-    credential = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
-    require(bool(credential.get("username")) and bool(credential.get("password")), "Gitea credential was unavailable")
-    return "Basic " + base64.b64encode(f"{credential['username']}:{credential['password']}".encode()).decode()
+    return gitea_credentials(REPO)
 
 
 def verify_remote(package, revision, output):

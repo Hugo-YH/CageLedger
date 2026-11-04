@@ -3,7 +3,8 @@
 import subprocess
 import sys
 
-from release_credentials import config, noninteractive_credentials, verify_signing
+from release_browsers import pdf_browser
+from release_credentials import CredentialError, config, noninteractive_credentials, verify_signing
 from release_host_guard import execute
 from release_runtime import browser_installations, command, converter_identity, official_origin, require
 from release_tools import release_converter
@@ -16,6 +17,9 @@ def diagnose(repo, *, sign=False, online=False):
         print(f"[doctor] 检查 {name}…", flush=True)
         try:
             action()
+        except CredentialError as error:
+            failures.append(name)
+            print(f"[FAIL] {name}：{error}", flush=True)
         except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError):
             # Helpers may contain private URLs or credential-manager output. Keep
             # diagnostics actionable without printing exceptions or command output.
@@ -72,6 +76,7 @@ def diagnose(repo, *, sign=False, online=False):
             lambda: browser_installations(repo),
             "先 npm ci，再用本项目的 npx playwright install chromium firefox webkit 安装匹配版本。",
         )
+        check("PDF 专用 Chromium", lambda: pdf_browser(repo), "安装锁定版本的 Chromium；受管测试不使用系统 Chrome。")
         check(
             "Docker / Buildx",
             lambda: (
@@ -99,6 +104,13 @@ def diagnose(repo, *, sign=False, online=False):
                 "Gitea API 权限",
                 authorization,
                 "检查 Gitea credential helper / CAGELEDGER_GITEA_TOKEN 的仓库 push 权限。",
+            )
+            from release_runtime import manifest_identity
+
+            check(
+                "Registry 读取认证",
+                lambda: manifest_identity(repo, "ddns.cellnucle.us:3333/hugo/cageledger:latest"),
+                "检查 Docker 官方仓库凭据与网络；只读预检不保证未来上传一定成功。",
             )
         else:
             print("[SKIP] 远端访问：加 --online 检查 Git/Gitea；此命令不推送或上传。", flush=True)

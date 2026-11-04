@@ -1,228 +1,241 @@
+import { compatibilityCase } from "./compatibilityCases";
 import { captureUiAudit } from "./uiAudit";
 import { ensureTestInfrastructure, expect, openQuantityEntry, openSavedQuantitySheets, test } from "./fixtures";
 
 const bulkSheetIds = Array.from({ length: 7 }, (_, index) => `sheet-e2e-quantity-bulk-${index + 1}`);
 
-test("saved quantity filters remain clickable while the list refreshes", async ({ page }) => {
-  await page.goto("/app");
-  await page.getByLabel("用户名", { exact: true }).fill("admin");
-  await page.getByLabel("密码", { exact: true }).fill("admin123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
-  await openSavedQuantitySheets(page);
-  await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
+test(
+  "saved quantity filters remain clickable while the list refreshes",
+  compatibilityCase("quantity-refresh"),
+  async ({ page }) => {
+    await page.goto("/app");
+    await page.getByLabel("用户名", { exact: true }).fill("admin");
+    await page.getByLabel("密码", { exact: true }).fill("admin123");
+    await page.getByRole("button", { name: "登录", exact: true }).click();
+    await openSavedQuantitySheets(page);
+    await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
 
-  let releaseRefresh: (() => void) | undefined;
-  const refreshBlocked = new Promise<void>((resolve) => {
-    releaseRefresh = resolve;
-  });
-  let requestBlocked: (() => void) | undefined;
-  const requestStarted = new Promise<void>((resolve) => {
-    requestBlocked = resolve;
-  });
-  await page.route("**/api/quantity-sheets?**", async (route) => {
-    requestBlocked?.();
-    await refreshBlocked;
-    await route.continue();
-  });
+    let releaseRefresh: (() => void) | undefined;
+    const refreshBlocked = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    let requestBlocked: (() => void) | undefined;
+    const requestStarted = new Promise<void>((resolve) => {
+      requestBlocked = resolve;
+    });
+    await page.route("**/api/quantity-sheets?**", async (route) => {
+      requestBlocked?.();
+      await refreshBlocked;
+      await route.continue();
+    });
 
-  await page.getByRole("button", { name: "月份，点击切换排序" }).click();
-  await requestStarted;
-  await expect(
-    page.getByRole("region", { name: "已保存数量统计表", exact: true }).and(page.locator('[data-ui="data-table"]')),
-  ).toHaveAttribute("aria-busy", "true");
-  await page.getByRole("button", { name: "筛选IACUC" }).click();
-  await expect(page.getByPlaceholder("搜索当前列")).toBeVisible();
+    await page.getByRole("button", { name: "月份，点击切换排序" }).click();
+    await requestStarted;
+    await expect(
+      page.getByRole("region", { name: "已保存数量统计表", exact: true }).and(page.locator('[data-ui="data-table"]')),
+    ).toHaveAttribute("aria-busy", "true");
+    await page.getByRole("button", { name: "筛选IACUC" }).click();
+    await expect(page.getByPlaceholder("搜索当前列")).toBeVisible();
 
-  releaseRefresh?.();
-});
+    releaseRefresh?.();
+  },
+);
 
 test.afterEach(async ({ page }) => {
   for (const id of bulkSheetIds) await page.request.delete(`/api/quantity-sheets/${id}`);
 });
 
-test("save and delete a quantity sheet in the ephemeral database", async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1180, height: 900 });
-  const iacucCandidates = [
-    { iacuc: "Z2025063", project: "E2E IACUC 候选项目", pi: "E2E负责人" },
-    { iacuc: "E2E-IACUC-001", project: "E2E 保存测试项目", pi: "E2E负责人" },
-  ];
-  await page.route("**/api/iacuc-index?*", (route) => {
-    const query = new URL(route.request().url()).searchParams.get("q")?.toUpperCase() || "";
-    const items = iacucCandidates.filter((item) => item.iacuc.includes(query));
-    return route.fulfill({ json: { items, count: items.length } });
-  });
-  await page.goto("/app");
-  await page.getByLabel("用户名", { exact: true }).fill("admin");
-  await page.getByLabel("密码", { exact: true }).fill("admin123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
-  await ensureTestInfrastructure(page);
-  const existingSheets = await page.request.get("/api/quantity-sheets?limit=100&offset=0");
-  const existingPayload = (await existingSheets.json()) as { items: Array<{ id: string; iacuc: string }> };
-  await Promise.all(
-    existingPayload.items
-      .filter((sheet) => sheet.iacuc === "E2E-IACUC-001")
-      .map((sheet) => page.request.delete(`/api/quantity-sheets/${sheet.id}`)),
-  );
-  await openQuantityEntry(page);
-  const savedMonth = await page.locator("#quantity-sheet-month").inputValue();
-  expect(savedMonth).toMatch(/^\d{4}-\d{2}$/);
-  const iacucInput = page.getByRole("combobox", { name: "IACUC 编号", exact: true });
-  await iacucInput.fill("Z202506");
-  await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
-  await page.getByRole("combobox", { name: "房间号", exact: true }).click();
-  await page.locator(".ant-select-dropdown").getByText("8014", { exact: true }).click();
-  await expect(page.getByRole("group", { name: "登记人员 系统带入", exact: true })).toHaveText(
-    "登记人员系统带入系统管理员",
-  );
-  await expect(page.getByRole("group", { name: "房间管理员 系统带入", exact: true })).toHaveText(
-    "房间管理员系统带入E2E 房间管理员",
-  );
-  await page.getByRole("button", { name: /计费扩展选项/ }).click();
-  await page.getByRole("switch", { name: "全额减免", exact: true }).check();
-  await iacucInput.fill("E2E-IACUC-001");
-  await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E负责人");
-  await page.getByLabel("第 1 行结余笼数", { exact: true }).fill("2");
-  await page.getByRole("button", { name: "保存统计表", exact: true }).click();
-  const confirmDialog = page.getByRole("dialog", { name: "确认保存数量统计表", exact: true });
-  await expect(confirmDialog).toBeVisible();
-  await captureUiAudit(page, testInfo, "quantity-save-confirm", confirmDialog);
-  await confirmDialog.getByRole("button", { name: "确认保存", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("统计表已保存");
-  await expect(page.getByRole("combobox", { name: "房间号", exact: true })).toHaveValue("");
-  await expect(page.getByRole("combobox", { name: "IACUC 编号", exact: true })).toHaveValue("");
-  await expect(page.locator("form").getByLabel("项目负责人", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("第 1 行结余笼数", { exact: true })).toHaveValue("");
+test(
+  "save and delete a quantity sheet in the ephemeral database",
+  compatibilityCase("quantity-write"),
+  async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1180, height: 900 });
+    const iacucCandidates = [
+      { iacuc: "Z2025063", project: "E2E IACUC 候选项目", pi: "E2E负责人" },
+      { iacuc: "E2E-IACUC-001", project: "E2E 保存测试项目", pi: "E2E负责人" },
+    ];
+    await page.route("**/api/iacuc-index?*", (route) => {
+      const query = new URL(route.request().url()).searchParams.get("q")?.toUpperCase() || "";
+      const items = iacucCandidates.filter((item) => item.iacuc.includes(query));
+      return route.fulfill({ json: { items, count: items.length } });
+    });
+    await page.goto("/app");
+    await page.getByLabel("用户名", { exact: true }).fill("admin");
+    await page.getByLabel("密码", { exact: true }).fill("admin123");
+    await page.getByRole("button", { name: "登录", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+    await ensureTestInfrastructure(page);
+    const existingSheets = await page.request.get("/api/quantity-sheets?limit=100&offset=0");
+    const existingPayload = (await existingSheets.json()) as { items: Array<{ id: string; iacuc: string }> };
+    await Promise.all(
+      existingPayload.items
+        .filter((sheet) => sheet.iacuc === "E2E-IACUC-001")
+        .map((sheet) => page.request.delete(`/api/quantity-sheets/${sheet.id}`)),
+    );
+    await openQuantityEntry(page);
+    const savedMonth = await page.locator("#quantity-sheet-month").inputValue();
+    expect(savedMonth).toMatch(/^\d{4}-\d{2}$/);
+    const iacucInput = page.getByRole("combobox", { name: "IACUC 编号", exact: true });
+    await iacucInput.fill("Z202506");
+    await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
+    await page.getByRole("combobox", { name: "房间号", exact: true }).click();
+    await page.locator(".ant-select-dropdown").getByText("8014", { exact: true }).click();
+    await expect(page.getByRole("group", { name: "登记人员 系统带入", exact: true })).toHaveText(
+      "登记人员系统带入系统管理员",
+    );
+    await expect(page.getByRole("group", { name: "房间管理员 系统带入", exact: true })).toHaveText(
+      "房间管理员系统带入E2E 房间管理员",
+    );
+    await page.getByRole("button", { name: /计费扩展选项/ }).click();
+    await page.getByRole("switch", { name: "全额减免", exact: true }).check();
+    await iacucInput.fill("E2E-IACUC-001");
+    await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E负责人");
+    await page.getByLabel("第 1 行结余笼数", { exact: true }).fill("2");
+    await page.getByRole("button", { name: "保存统计表", exact: true }).click();
+    const confirmDialog = page.getByRole("dialog", { name: "确认保存数量统计表", exact: true });
+    await expect(confirmDialog).toBeVisible();
+    await captureUiAudit(page, testInfo, "quantity-save-confirm", confirmDialog);
+    await confirmDialog.getByRole("button", { name: "确认保存", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("统计表已保存");
+    await expect(page.getByRole("combobox", { name: "房间号", exact: true })).toHaveValue("");
+    await expect(page.getByRole("combobox", { name: "IACUC 编号", exact: true })).toHaveValue("");
+    await expect(page.locator("form").getByLabel("项目负责人", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("第 1 行结余笼数", { exact: true })).toHaveValue("");
 
-  await openSavedQuantitySheets(page);
-  await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
-  const actionsHeader = page.locator(".quantity-saved-panel .ant-table-thead th.ant-table-cell-fix-end");
-  await expect(actionsHeader).toHaveText("操作");
-  await expect(actionsHeader).toHaveCSS("position", "sticky");
-  const actionsHeaderRight = await actionsHeader.evaluate((element) => {
-    const tableBody = element.closest(".ant-table-content");
-    return {
-      headerRight: element.getBoundingClientRect().right,
-      tableRight: tableBody?.getBoundingClientRect().right ?? 0,
-    };
-  });
-  expect(Math.abs(actionsHeaderRight.headerRight - actionsHeaderRight.tableRight)).toBeLessThanOrEqual(1);
-  const scrollOwners = await page
-    .getByRole("region", { name: "已保存数量统计表", exact: true })
-    .and(page.locator('[data-ui="data-table"]'))
-    .evaluate((element) => {
-      const content = element.querySelector<HTMLElement>(".ant-table-content");
+    await openSavedQuantitySheets(page);
+    await expect(page.getByRole("heading", { level: 2, name: "已保存数量统计表", exact: true })).toBeVisible();
+    const actionsHeader = page.locator(".quantity-saved-panel .ant-table-thead th.ant-table-cell-fix-end");
+    await expect(actionsHeader).toHaveText("操作");
+    await expect(actionsHeader).toHaveCSS("position", "sticky");
+    const actionsHeaderRight = await actionsHeader.evaluate((element) => {
+      const tableBody = element.closest(".ant-table-content");
       return {
-        contentCanScroll: Boolean(content && content.scrollWidth > content.clientWidth),
-        regionCanScroll: element.scrollWidth > element.clientWidth,
+        headerRight: element.getBoundingClientRect().right,
+        tableRight: tableBody?.getBoundingClientRect().right ?? 0,
       };
     });
-  expect(scrollOwners).toEqual({ contentCanScroll: true, regionCanScroll: false });
-  await captureUiAudit(page, testInfo, "quantity-saved-list");
-  const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
-  await expect(savedRow).toBeVisible();
-  await expect(savedRow).toContainText("系统管理员");
-  await savedRow.getByRole("checkbox", { name: "选择 E2E-IACUC-001" }).check();
-  const downloadPromise = page.waitForEvent("download");
-  await page
-    .getByRole("group", { name: "已保存统计表操作", exact: true })
-    .getByRole("button", { name: "导出 PDF", exact: true })
-    .click();
-  const download = await downloadPromise;
-  const [year, month] = savedMonth.split("-");
-  const pdfMonth = `${year}年${month}月`;
-  expect(download.suggestedFilename()).toBe(`实验动物数量统计表 ${pdfMonth} E2E-IACUC-001.pdf`);
-  const rowActions = savedRow.locator(".quantity-saved-row-actions");
-  await expect(rowActions.getByRole("button")).toHaveText(["预览", "编辑", "删除"]);
-  await expect(rowActions.getByRole("button", { name: "预览", exact: true })).toHaveClass(/ant-btn-variant-filled/);
-  await expect(rowActions.getByRole("button", { name: "预览", exact: true })).toHaveClass(/ant-btn-color-blue/);
-  await expect(rowActions.getByRole("button", { name: "编辑", exact: true })).toHaveClass(/ant-btn-primary/);
-  await expect(rowActions.getByRole("button", { name: "删除", exact: true })).toHaveClass(/ant-btn-dangerous/);
-  for (const button of await rowActions.getByRole("button").all()) {
-    await expect(button.locator(".ant-btn-icon")).toHaveCount(0);
-    await expect(button).toHaveCSS("width", "64px");
-    await expect(button).toHaveCSS("height", "32px");
-  }
-  await rowActions.screenshot({ path: testInfo.outputPath("saved-quantity-row-actions.png") });
-  await savedRow.getByRole("button", { name: "删除", exact: true }).click();
-  const deleteDialog = page.getByRole("dialog", { name: "删除数量统计表", exact: true });
-  await expect(deleteDialog).toBeVisible();
-  // WebKit can report the first two animation frames as stable before Ant's
-  // zoom starts. Wait for entry to finish so pointer-down/up hit the same button.
-  await expect(deleteDialog).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
-  await deleteDialog.getByRole("button", { name: "确认删除", exact: true }).click();
-  await expect(savedRow).toHaveCount(0);
-});
+    expect(Math.abs(actionsHeaderRight.headerRight - actionsHeaderRight.tableRight)).toBeLessThanOrEqual(1);
+    const scrollOwners = await page
+      .getByRole("region", { name: "已保存数量统计表", exact: true })
+      .and(page.locator('[data-ui="data-table"]'))
+      .evaluate((element) => {
+        const content = element.querySelector<HTMLElement>(".ant-table-content");
+        return {
+          contentCanScroll: Boolean(content && content.scrollWidth > content.clientWidth),
+          regionCanScroll: element.scrollWidth > element.clientWidth,
+        };
+      });
+    expect(scrollOwners).toEqual({ contentCanScroll: true, regionCanScroll: false });
+    await captureUiAudit(page, testInfo, "quantity-saved-list");
+    const savedRow = page.getByRole("row", { name: /E2E-IACUC-001/ });
+    await expect(savedRow).toBeVisible();
+    await expect(savedRow).toContainText("系统管理员");
+    await savedRow.getByRole("checkbox", { name: "选择 E2E-IACUC-001" }).check();
+    const downloadPromise = page.waitForEvent("download");
+    await page
+      .getByRole("group", { name: "已保存统计表操作", exact: true })
+      .getByRole("button", { name: "导出 PDF", exact: true })
+      .click();
+    const download = await downloadPromise;
+    const [year, month] = savedMonth.split("-");
+    const pdfMonth = `${year}年${month}月`;
+    expect(download.suggestedFilename()).toBe(`实验动物数量统计表 ${pdfMonth} E2E-IACUC-001.pdf`);
+    const rowActions = savedRow.locator(".quantity-saved-row-actions");
+    await expect(rowActions.getByRole("button")).toHaveText(["预览", "编辑", "删除"]);
+    await expect(rowActions.getByRole("button", { name: "预览", exact: true })).toHaveClass(/ant-btn-variant-filled/);
+    await expect(rowActions.getByRole("button", { name: "预览", exact: true })).toHaveClass(/ant-btn-color-blue/);
+    await expect(rowActions.getByRole("button", { name: "编辑", exact: true })).toHaveClass(/ant-btn-primary/);
+    await expect(rowActions.getByRole("button", { name: "删除", exact: true })).toHaveClass(/ant-btn-dangerous/);
+    for (const button of await rowActions.getByRole("button").all()) {
+      await expect(button.locator(".ant-btn-icon")).toHaveCount(0);
+      await expect(button).toHaveCSS("width", "64px");
+      await expect(button).toHaveCSS("height", "32px");
+    }
+    await rowActions.screenshot({ path: testInfo.outputPath("saved-quantity-row-actions.png") });
+    await savedRow.getByRole("button", { name: "删除", exact: true }).click();
+    const deleteDialog = page.getByRole("dialog", { name: "删除数量统计表", exact: true });
+    await expect(deleteDialog).toBeVisible();
+    // WebKit can report the first two animation frames as stable before Ant's
+    // zoom starts. Wait for entry to finish so pointer-down/up hit the same button.
+    await expect(deleteDialog).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
+    await deleteDialog.getByRole("button", { name: "确认删除", exact: true }).click();
+    await expect(savedRow).toHaveCount(0);
+  },
+);
 
-test("selects every saved quantity sheet across result pages", async ({ page }) => {
-  await page.goto("/app");
-  await page.getByLabel("用户名", { exact: true }).fill("admin");
-  await page.getByLabel("密码", { exact: true }).fill("admin123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
-  await ensureTestInfrastructure(page);
+test(
+  "selects every saved quantity sheet across result pages",
+  compatibilityCase("quantity-select-all"),
+  async ({ page }) => {
+    await page.goto("/app");
+    await page.getByLabel("用户名", { exact: true }).fill("admin");
+    await page.getByLabel("密码", { exact: true }).fill("admin123");
+    await page.getByRole("button", { name: "登录", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", exact: true })).toBeVisible();
+    await ensureTestInfrastructure(page);
 
-  const month = new Date().toISOString().slice(0, 7);
-  for (const [index, id] of bulkSheetIds.entries()) {
-    await page.request.post("/api/quantity-sheets", {
-      data: {
-        sheet: {
-          id,
-          month,
-          roomId: "room-e2e-8014",
-          roomName: "8014",
-          manager: "系统管理员",
-          iacuc: `E2E-IACUC-BULK-${index + 1}`,
-          project: `批量选择统计表 ${index + 1}`,
-          pi: `E2E 批量负责人 ${index + 1}`,
-          owner: "E2E 实验负责人",
-          funding: `E2E-FUND-BULK-${index + 1}`,
-          billingUnit: "cage_day",
-          animalDetailEnabled: false,
-          initialAnimalCount: 0,
-          initialCageCount: 2,
-          pageCount: 1,
-          rows: [{ id: `${id}-row`, date: `${month}-01`, cageCount: 2 }],
+    const month = new Date().toISOString().slice(0, 7);
+    for (const [index, id] of bulkSheetIds.entries()) {
+      await page.request.post("/api/quantity-sheets", {
+        data: {
+          sheet: {
+            id,
+            month,
+            roomId: "room-e2e-8014",
+            roomName: "8014",
+            manager: "系统管理员",
+            iacuc: `E2E-IACUC-BULK-${index + 1}`,
+            project: `批量选择统计表 ${index + 1}`,
+            pi: `E2E 批量负责人 ${index + 1}`,
+            owner: "E2E 实验负责人",
+            funding: `E2E-FUND-BULK-${index + 1}`,
+            billingUnit: "cage_day",
+            animalDetailEnabled: false,
+            initialAnimalCount: 0,
+            initialCageCount: 2,
+            pageCount: 1,
+            rows: [{ id: `${id}-row`, date: `${month}-01`, cageCount: 2 }],
+          },
         },
-      },
-    });
-  }
+      });
+    }
 
-  await page.reload();
-  await openSavedQuantitySheets(page);
-  await page.getByLabel("每页显示条数").click();
-  await page.getByRole("option", { name: "5 条/页", exact: true }).click();
-  await page.locator(".quantity-saved-table thead").getByLabel("全选当前筛选结果统计表").check();
-  const toolbar = page.getByRole("group", { name: "已保存统计表操作", exact: true });
-  const selectionSummary = toolbar.getByText(/^已选 \d+ 项$/);
-  await expect(selectionSummary).not.toHaveText("已选 0 项");
-  const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
-  const totalCount = Number((await toolbar.locator(".ant-tag").innerText()).match(/\d+/)?.[0]);
-  // Other specs create and delete sheets against the shared test database. The selected
-  // snapshot remains valid when its source list changes between the two requests.
-  expect(selectedCount).toBeGreaterThanOrEqual(bulkSheetIds.length);
-  expect(selectedCount).toBeLessThanOrEqual(totalCount);
-  await page.locator(".quantity-saved-pagination .ant-pagination-next").click();
-  await expect(page.getByRole("checkbox", { name: /选择 E2E-IACUC-BULK-/ }).first()).toBeChecked();
-  await page.getByLabel("每页显示条数").click();
-  await page.getByRole("option", { name: "10 条/页", exact: true }).click();
-  await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
-  await page.getByRole("button", { name: "月份，点击切换排序", exact: true }).click();
-  await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
-  await expect(page.getByRole("checkbox", { name: /选择 E2E-IACUC-BULK-/ }).first()).toBeChecked();
+    await page.reload();
+    await openSavedQuantitySheets(page);
+    await page.getByLabel("每页显示条数").click();
+    await page.getByRole("option", { name: "5 条/页", exact: true }).click();
+    await page.locator(".quantity-saved-table thead").getByLabel("全选当前筛选结果统计表").check();
+    const toolbar = page.getByRole("group", { name: "已保存统计表操作", exact: true });
+    const selectionSummary = toolbar.getByText(/^已选 \d+ 项$/);
+    await expect(selectionSummary).not.toHaveText("已选 0 项");
+    const selectedCount = Number((await selectionSummary.innerText()).match(/\d+/)?.[0]);
+    const totalCount = Number((await toolbar.locator(".ant-tag").innerText()).match(/\d+/)?.[0]);
+    // Other specs create and delete sheets against the shared test database. The selected
+    // snapshot remains valid when its source list changes between the two requests.
+    expect(selectedCount).toBeGreaterThanOrEqual(bulkSheetIds.length);
+    expect(selectedCount).toBeLessThanOrEqual(totalCount);
+    await page.locator(".quantity-saved-pagination .ant-pagination-next").click();
+    await expect(page.getByRole("checkbox", { name: /选择 E2E-IACUC-BULK-/ }).first()).toBeChecked();
+    await page.getByLabel("每页显示条数").click();
+    await page.getByRole("option", { name: "10 条/页", exact: true }).click();
+    await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
+    await page.getByRole("button", { name: "月份，点击切换排序", exact: true }).click();
+    await expect(selectionSummary).toHaveText(`已选 ${selectedCount} 项`);
+    await expect(page.getByRole("checkbox", { name: /选择 E2E-IACUC-BULK-/ }).first()).toBeChecked();
 
-  await page.getByRole("button", { name: "筛选IACUC", exact: true }).click();
-  const filterPanel = page.locator(".table-filter-panel:visible");
-  const iacucFilter = filterPanel.getByRole("checkbox", { name: /E2E-IACUC-BULK-1/ });
-  await expect(iacucFilter).not.toBeChecked();
-  // Ant's controlled Checkbox.Group commits its value in an effect after the click.
-  await iacucFilter.click();
-  await expect(iacucFilter).toBeChecked();
-  await filterPanel.getByRole("button", { name: "应用", exact: true }).click();
-  await expect(selectionSummary).toHaveText("已选 0 项");
-  await expect(page.getByText("范围已变化，已清空选择", { exact: true })).toBeVisible();
-  await expect(toolbar.getByRole("button", { name: "清空选择", exact: true })).toBeDisabled();
-  await page.getByRole("checkbox", { name: "选择 E2E-IACUC-BULK-1", exact: true }).check();
-  await toolbar.getByRole("button", { name: "清空选择", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name: "选择 E2E-IACUC-BULK-1", exact: true })).not.toBeChecked();
-});
+    await page.getByRole("button", { name: "筛选IACUC", exact: true }).click();
+    const filterPanel = page.locator(".table-filter-panel:visible");
+    const iacucFilter = filterPanel.getByRole("checkbox", { name: /E2E-IACUC-BULK-1/ });
+    await expect(iacucFilter).not.toBeChecked();
+    // Ant's controlled Checkbox.Group commits its value in an effect after the click.
+    await iacucFilter.click();
+    await expect(iacucFilter).toBeChecked();
+    await filterPanel.getByRole("button", { name: "应用", exact: true }).click();
+    await expect(selectionSummary).toHaveText("已选 0 项");
+    await expect(page.getByText("范围已变化，已清空选择", { exact: true })).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: "清空选择", exact: true })).toBeDisabled();
+    await page.getByRole("checkbox", { name: "选择 E2E-IACUC-BULK-1", exact: true }).check();
+    await toolbar.getByRole("button", { name: "清空选择", exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "选择 E2E-IACUC-BULK-1", exact: true })).not.toBeChecked();
+  },
+);

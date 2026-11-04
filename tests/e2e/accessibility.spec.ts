@@ -1,3 +1,4 @@
+import { compatibilityCase } from "./compatibilityCases";
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
@@ -29,42 +30,46 @@ test("login and dashboard have no serious accessibility violations", async ({ pa
   await expectNoSeriousViolations(page);
 });
 
-test("core workspaces and dialogs retain accessible semantics", async ({ page }) => {
-  await login(page);
+test(
+  "core workspaces and dialogs retain accessible semantics",
+  compatibilityCase("core-accessibility"),
+  async ({ page }) => {
+    await login(page);
 
-  await openIntakeEntry(page);
-  await expect(page.getByRole("heading", { name: "接收笼卡", exact: true, level: 2 })).toBeVisible();
-  await expectNoSeriousViolations(page);
+    await openIntakeEntry(page);
+    await expect(page.getByRole("heading", { name: "接收笼卡", exact: true, level: 2 })).toBeVisible();
+    await expectNoSeriousViolations(page);
 
-  await openQuantityEntry(page);
-  await expect(page.getByRole("heading", { name: "录入数量统计表", exact: true, level: 2 })).toBeVisible();
-  await expectNoSeriousViolations(page);
+    await openQuantityEntry(page);
+    await expect(page.getByRole("heading", { name: "录入数量统计表", exact: true, level: 2 })).toBeVisible();
+    await expectNoSeriousViolations(page);
 
-  await openWorkflowCenter(page);
-  await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();
-  await expectNoSeriousViolations(page);
+    await openWorkflowCenter(page);
+    await expect(page.getByRole("heading", { name: "单据跟踪", exact: true, level: 2 })).toBeVisible();
+    await expectNoSeriousViolations(page);
 
-  await openSettingsView(page, "房间管理");
-  const openRoomEditor = page.getByRole("button", { name: "新增饲养间", exact: true });
-  // Keyboard entry has a focused return target in every engine; WebKit mouse
-  // clicks intentionally do not focus native buttons.
-  await openRoomEditor.focus();
-  await openRoomEditor.press("Enter");
-  const dialog = page.getByRole("dialog", { name: "新增饲养间" });
-  await expect(dialog).toBeVisible();
-  await expect(page.getByRole("button", { name: "关闭", exact: true })).toBeFocused();
-  await expectNoSeriousViolations(page);
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.getByRole("button", { name: "取消", exact: true })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(openRoomEditor).toBeFocused();
+    await openSettingsView(page, "房间管理");
+    const openRoomEditor = page.getByRole("button", { name: "新增饲养间", exact: true });
+    // Keyboard entry has a focused return target in every engine; WebKit mouse
+    // clicks intentionally do not focus native buttons.
+    await openRoomEditor.focus();
+    await openRoomEditor.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "新增饲养间" });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole("button", { name: "关闭", exact: true })).toBeFocused();
+    await expectNoSeriousViolations(page);
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("button", { name: "取消", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(openRoomEditor).toBeFocused();
 
-  await openSettingsView(page, "关于系统");
-  await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 2 })).toBeVisible();
-  await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toBeVisible();
-  await expectNoSeriousViolations(page);
-});
+    await openSettingsView(page, "关于系统");
+    await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 2 })).toBeVisible();
+    await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toBeVisible();
+    await expectNoSeriousViolations(page);
+  },
+);
 
 test("populated workflow tags and hidden measuring rows remain accessible in both themes", async ({ page }) => {
   await login(page);

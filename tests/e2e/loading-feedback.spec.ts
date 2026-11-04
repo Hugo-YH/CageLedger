@@ -1,56 +1,61 @@
+import { compatibilityCase } from "./compatibilityCases";
 import { expect, openNavigationEntry, test } from "./fixtures";
 import { randomUUID } from "node:crypto";
 
-test("batch search retains rows, recovers from failure, and loads the catalog when creating a record", async ({
-  page,
-}) => {
-  await page.goto("/app");
-  await page.getByLabel("用户名", { exact: true }).fill("admin");
-  await page.getByLabel("密码", { exact: true }).fill("admin123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.getByLabel("用户名", { exact: true })).toBeHidden();
-  const batchName = `refresh-${randomUUID()}`;
-  const created = await page.request.post("/api/quarantine/batches", {
-    data: { item: { id: randomUUID(), name: batchName, sources: [{ id: "s", supplier: "哨兵鼠", species: "小鼠" }] } },
-  });
-  expect(created.ok()).toBe(true);
-  await openNavigationEntry(page, "检疫管理", "检疫批次");
-  await page.getByRole("tab", { name: "检疫批次列表", exact: true }).click();
-  const row = page.getByRole("row").filter({ hasText: batchName });
-  await expect(row).toBeVisible();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => (release = resolve));
-  let fail = true;
-  await page.route("**/api/quarantine/batches?*", async (route) => {
-    await gate;
-    if (fail) await route.fulfill({ status: 503, json: { error: "测试暂时不可用" } });
-    else await route.fallback();
-  });
-  const search = page.getByRole("searchbox", { name: "搜索检疫批次", exact: true });
-  await search.fill(batchName);
-  await search.press("Enter");
-  await expect(page.getByText("正在更新，暂显示上次结果", { exact: true })).toBeVisible();
-  await expect(row).toBeVisible();
-  await expect(search).toBeEnabled();
-  release();
-  await expect(page.getByText("测试暂时不可用", { exact: true })).toBeVisible({ timeout: 15000 });
-  fail = false;
-  await page.getByRole("button", { name: "重试", exact: true }).click();
-  await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "查看", exact: true }).click();
-  await expect(page.getByRole("button", { name: "编辑检疫批次", exact: true })).toBeVisible();
-  await openNavigationEntry(page, "检疫管理", "寄生虫检测");
-  await page.getByRole("button", { name: "新建检测记录", exact: true }).click();
-  const batchSearch = page.getByRole("searchbox", { name: "搜索待填写检疫批次", exact: true });
-  await batchSearch.fill(batchName);
-  await batchSearch.press("Enter");
-  const catalogLoaded = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/api/quarantine/catalog",
-  );
-  await page.getByRole("row").filter({ hasText: batchName }).getByRole("button", { name: "选择并填写" }).click();
-  expect((await catalogLoaded).ok()).toBe(true);
-  await expect(page.getByRole("button", { name: "保存检测草稿", exact: true })).toBeVisible();
-});
+test(
+  "batch search retains rows, recovers from failure, and loads the catalog when creating a record",
+  compatibilityCase("batch-loading-retry"),
+  async ({ page }) => {
+    await page.goto("/app");
+    await page.getByLabel("用户名", { exact: true }).fill("admin");
+    await page.getByLabel("密码", { exact: true }).fill("admin123");
+    await page.getByRole("button", { name: "登录", exact: true }).click();
+    await expect(page.getByLabel("用户名", { exact: true })).toBeHidden();
+    const batchName = `refresh-${randomUUID()}`;
+    const created = await page.request.post("/api/quarantine/batches", {
+      data: {
+        item: { id: randomUUID(), name: batchName, sources: [{ id: "s", supplier: "哨兵鼠", species: "小鼠" }] },
+      },
+    });
+    expect(created.ok()).toBe(true);
+    await openNavigationEntry(page, "检疫管理", "检疫批次");
+    await page.getByRole("tab", { name: "检疫批次列表", exact: true }).click();
+    const row = page.getByRole("row").filter({ hasText: batchName });
+    await expect(row).toBeVisible();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let fail = true;
+    await page.route("**/api/quarantine/batches?*", async (route) => {
+      await gate;
+      if (fail) await route.fulfill({ status: 503, json: { error: "测试暂时不可用" } });
+      else await route.fallback();
+    });
+    const search = page.getByRole("searchbox", { name: "搜索检疫批次", exact: true });
+    await search.fill(batchName);
+    await search.press("Enter");
+    await expect(page.getByText("正在更新，暂显示上次结果", { exact: true })).toBeVisible();
+    await expect(row).toBeVisible();
+    await expect(search).toBeEnabled();
+    release();
+    await expect(page.getByText("测试暂时不可用", { exact: true })).toBeVisible({ timeout: 15000 });
+    fail = false;
+    await page.getByRole("button", { name: "重试", exact: true }).click();
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "查看", exact: true }).click();
+    await expect(page.getByRole("button", { name: "编辑检疫批次", exact: true })).toBeVisible();
+    await openNavigationEntry(page, "检疫管理", "寄生虫检测");
+    await page.getByRole("button", { name: "新建检测记录", exact: true }).click();
+    const batchSearch = page.getByRole("searchbox", { name: "搜索待填写检疫批次", exact: true });
+    await batchSearch.fill(batchName);
+    await batchSearch.press("Enter");
+    const catalogLoaded = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/quarantine/catalog",
+    );
+    await page.getByRole("row").filter({ hasText: batchName }).getByRole("button", { name: "选择并填写" }).click();
+    expect((await catalogLoaded).ok()).toBe(true);
+    await expect(page.getByRole("button", { name: "保存检测草稿", exact: true })).toBeVisible();
+  },
+);
 
 for (const size of [
   { width: 1440, height: 900 },

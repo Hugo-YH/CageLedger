@@ -32,6 +32,7 @@ def report(engine="chromium", ids=("a", "b", "c"), executed=True, shard=None):
                 "specs": [
                     {
                         "id": key,
+                        "tags": ["compat-" + key],
                         "ok": True,
                         "tests": [
                             {
@@ -190,6 +191,10 @@ class PipelineSimulationTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         guard = Mock()
+        (self.root / "tests/e2e").mkdir(parents=True)
+        (self.root / "tests/e2e/compatibility-catalog.json").write_text(
+            json.dumps(["@compat-a", "@compat-b", "@compat-c"])
+        )
         guard.sample = {"free_percent": 55, "load1": 2, "swap_mib": 100}
         guard.policy = SimpleNamespace(cpus=10, baseline_swap=100)
         self.pipeline = rp.Pipeline(self.root, "1.2.3", self.root / "evidence", guard)
@@ -437,6 +442,7 @@ class PipelineSimulationTests(unittest.TestCase):
         with (
             patch.object(delivery, "Client", return_value=client),
             patch.object(delivery, "gitea_authorization", return_value="test"),
+            patch("release_images.remote_manifest", return_value={"version": "image"}),
             patch.object(rp, "remote_ref", side_effect=lambda _repo, ref: remote[ref]),
             patch.object(rp, "command", side_effect=command),
             patch.object(

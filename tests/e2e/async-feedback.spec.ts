@@ -1,3 +1,4 @@
+import { compatibilityCase } from "./compatibilityCases";
 import type { Route } from "@playwright/test";
 import { expect, openBillingNavigation, openWorkflowCenter, test } from "./fixtures";
 
@@ -129,23 +130,27 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
 });
 
-test("failed settlement list has a retry instead of an empty table", async ({ page }) => {
-  let recovered = false;
-  await page.route("**/api/settlement-candidates?*", (route) =>
-    route.fulfill(recovered ? { json: list } : { status: 403, json: { error: "暂时无法读取结算资料" } }),
-  );
-  await openBillingNavigation(page);
-  await page.getByRole("menuitem", { name: /结算列表/ }).click();
-  const error = page.getByRole("alert").filter({ hasText: "结算列表加载失败：暂时无法读取结算资料" });
-  await expect(error).toBeVisible();
-  await expect(page.getByText("暂无数据", { exact: true })).toHaveCount(0);
-  recovered = true;
-  await error.getByRole("button", { name: "重试" }).click();
-  await expect(page.getByRole("checkbox", { name: "选择 甲 2026-08 结算项", exact: true })).toBeVisible();
-  await expect(error).toHaveCount(0);
-});
+test(
+  "failed settlement list has a retry instead of an empty table",
+  compatibilityCase("settlement-list-retry"),
+  async ({ page }) => {
+    let recovered = false;
+    await page.route("**/api/settlement-candidates?*", (route) =>
+      route.fulfill(recovered ? { json: list } : { status: 403, json: { error: "暂时无法读取结算资料" } }),
+    );
+    await openBillingNavigation(page);
+    await page.getByRole("menuitem", { name: /结算列表/ }).click();
+    const error = page.getByRole("alert").filter({ hasText: "结算列表加载失败：暂时无法读取结算资料" });
+    await expect(error).toBeVisible();
+    await expect(page.getByText("暂无数据", { exact: true })).toHaveCount(0);
+    recovered = true;
+    await error.getByRole("button", { name: "重试" }).click();
+    await expect(page.getByRole("checkbox", { name: "选择 甲 2026-08 结算项", exact: true })).toBeVisible();
+    await expect(error).toHaveCount(0);
+  },
+);
 
-test("manual selection wins over a slow select-all response", async ({ page }) => {
+test("manual selection wins over a slow select-all response", compatibilityCase("selection-race"), async ({ page }) => {
   let pending: Route | undefined;
   await page.route("**/api/settlement-candidates?*", async (route) => {
     if (new URL(route.request().url()).searchParams.get("limit") === "100") pending = route;
@@ -166,63 +171,65 @@ test("manual selection wins over a slow select-all response", async ({ page }) =
   await expect(page.getByRole("checkbox", { name: "选择 乙 2026-08 结算项", exact: true })).not.toBeChecked();
 });
 
-test("workflow details open immediately, ignore closed requests, and retry access errors", async ({
-  page,
-}, testInfo) => {
-  await page.route("**/api/billing-workflows?*", (route) =>
-    route.fulfill({ json: { items: workflows, page: list.page } }),
-  );
-  const requests = new Map<string, Route>();
-  await page.route("**/api/billing-workflows/workflow-*", (route) => {
-    requests.set(new URL(route.request().url()).pathname.split("/").at(-1) || "", route);
-  });
-  await openWorkflowCenter(page);
-  const first = page.getByRole("row").filter({ hasText: "甲" }).getByRole("button", { name: "查看", exact: true });
-  const second = page.getByRole("row").filter({ hasText: "乙" }).getByRole("button", { name: "查看", exact: true });
-  // Exercise focus restoration from a keyboard-opened dialog. Mouse clicks in
-  // WebKit do not assign focus to buttons.
-  await first.focus();
-  await first.press("Enter");
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("status", { name: /流程详情/ })).toBeVisible();
-  await expect.poll(() => requests.has(workflows[0].id)).toBe(true);
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(first).toBeFocused();
-  await second.click();
-  await expect.poll(() => requests.has(workflows[1].id)).toBe(true);
-  await requests
-    .get(workflows[0].id)
-    ?.fulfill({ json: { workflow: { ...workflows[0], manager: "不应出现的旧详情" }, events: [], versions: [] } });
-  await requests.get(workflows[1].id)?.fulfill({ status: 403, json: { error: "详情读取失败，请重试" } });
-  await expect(dialog).toContainText("流程详情加载失败：详情读取失败，请重试");
-  await expect(dialog).not.toContainText("不应出现的旧详情");
-  for (const viewport of [
-    { width: 1440, height: 900 },
-    { width: 1180, height: 820 },
-    { width: 760, height: 900 },
-    { width: 844, height: 390 },
-  ]) {
-    await page.setViewportSize(viewport);
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "重试" })).toHaveCSS(
-      "height",
-      viewport.width < 768 ? "44px" : "32px",
+test(
+  "workflow details open immediately, ignore closed requests, and retry access errors",
+  compatibilityCase("workflow-detail-retry"),
+  async ({ page }, testInfo) => {
+    await page.route("**/api/billing-workflows?*", (route) =>
+      route.fulfill({ json: { items: workflows, page: list.page } }),
     );
-    const bounds = await dialog.boundingBox();
-    if (!bounds) throw new Error("流程详情弹窗未显示");
-    expect(bounds.x).toBeGreaterThanOrEqual(0);
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
-    const path = testInfo.outputPath(`workflow-detail-error-${viewport.width}.png`);
-    await page.screenshot({ path, animations: "disabled" });
-    await testInfo.attach(`workflow-detail-error-${viewport.width}`, { path, contentType: "image/png" });
-  }
-  requests.delete(workflows[1].id);
-  await dialog.getByRole("button", { name: "重试" }).click();
-  await expect.poll(() => requests.has(workflows[1].id)).toBe(true);
-  await requests
-    .get(workflows[1].id)
-    ?.fulfill({ json: { workflow: { ...workflows[1], manager: "当前详情登记人" }, events: [], versions: [] } });
-  await expect(dialog).toContainText("当前详情登记人");
-  await expect(dialog).not.toContainText("加载失败");
-});
+    const requests = new Map<string, Route>();
+    await page.route("**/api/billing-workflows/workflow-*", (route) => {
+      requests.set(new URL(route.request().url()).pathname.split("/").at(-1) || "", route);
+    });
+    await openWorkflowCenter(page);
+    const first = page.getByRole("row").filter({ hasText: "甲" }).getByRole("button", { name: "查看", exact: true });
+    const second = page.getByRole("row").filter({ hasText: "乙" }).getByRole("button", { name: "查看", exact: true });
+    // Exercise focus restoration from a keyboard-opened dialog. Mouse clicks in
+    // WebKit do not assign focus to buttons.
+    await first.focus();
+    await first.press("Enter");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("status", { name: /流程详情/ })).toBeVisible();
+    await expect.poll(() => requests.has(workflows[0].id)).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(first).toBeFocused();
+    await second.click();
+    await expect.poll(() => requests.has(workflows[1].id)).toBe(true);
+    await requests
+      .get(workflows[0].id)
+      ?.fulfill({ json: { workflow: { ...workflows[0], manager: "不应出现的旧详情" }, events: [], versions: [] } });
+    await requests.get(workflows[1].id)?.fulfill({ status: 403, json: { error: "详情读取失败，请重试" } });
+    await expect(dialog).toContainText("流程详情加载失败：详情读取失败，请重试");
+    await expect(dialog).not.toContainText("不应出现的旧详情");
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 1180, height: 820 },
+      { width: 760, height: 900 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "重试" })).toHaveCSS(
+        "height",
+        viewport.width < 768 ? "44px" : "32px",
+      );
+      const bounds = await dialog.boundingBox();
+      if (!bounds) throw new Error("流程详情弹窗未显示");
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
+      const path = testInfo.outputPath(`workflow-detail-error-${viewport.width}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      await testInfo.attach(`workflow-detail-error-${viewport.width}`, { path, contentType: "image/png" });
+    }
+    requests.delete(workflows[1].id);
+    await dialog.getByRole("button", { name: "重试" }).click();
+    await expect.poll(() => requests.has(workflows[1].id)).toBe(true);
+    await requests
+      .get(workflows[1].id)
+      ?.fulfill({ json: { workflow: { ...workflows[1], manager: "当前详情登记人" }, events: [], versions: [] } });
+    await expect(dialog).toContainText("当前详情登记人");
+    await expect(dialog).not.toContainText("加载失败");
+  },
+);

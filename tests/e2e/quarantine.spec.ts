@@ -1,3 +1,4 @@
+import { compatibilityCase } from "./compatibilityCases";
 import { randomUUID } from "node:crypto";
 import { ensureTestInfrastructure, expect, openNavigationEntry, test } from "./fixtures";
 import type { Page } from "@playwright/test";
@@ -445,147 +446,151 @@ test("received animals flow through pool, covered cohort and manual completion",
   }
 });
 
-test("ELISA report form links sources, symbols and multi-project image metadata", async ({ page }, testInfo) => {
-  await login(page);
-  const batchId = randomUUID();
-  const batchName = `ELISA填写-${batchId}`;
-  const batchResponse = await page.request.post("/api/quarantine/batches", {
-    data: {
-      item: {
-        id: batchId,
-        name: batchName,
-        sources: [
-          { id: "a", supplier: "江苏集萃", species: "小鼠", pi: "甲组", owner: "张同学" },
-          { id: "b", supplier: "江苏集萃", species: "小鼠", pi: "乙组", owner: "李同学" },
-        ],
+test(
+  "ELISA report form links sources, symbols and multi-project image metadata",
+  compatibilityCase("elisa-report"),
+  async ({ page }, testInfo) => {
+    await login(page);
+    const batchId = randomUUID();
+    const batchName = `ELISA填写-${batchId}`;
+    const batchResponse = await page.request.post("/api/quarantine/batches", {
+      data: {
+        item: {
+          id: batchId,
+          name: batchName,
+          sources: [
+            { id: "a", supplier: "江苏集萃", species: "小鼠", pi: "甲组", owner: "张同学" },
+            { id: "b", supplier: "江苏集萃", species: "小鼠", pi: "乙组", owner: "李同学" },
+          ],
+        },
       },
-    },
-  });
-  expect(batchResponse.ok()).toBe(true);
-  const recordId = randomUUID();
-  const recordResponse = await page.request.post("/api/quarantine/tests", {
-    data: {
-      item: {
-        id: recordId,
-        batchId,
-        method: "elisa_mouse",
-        reportFormVersion: 2,
-        reportMaterial: "血清",
-        reportSpecimenState: "液体",
-        samplingDate: "2026-09-02",
-        testDate: "2026-09-03",
-        samples: [
-          {
-            id: "s",
-            number: "1",
-            material: "血清",
-            specimenState: "液体",
-            sourceIds: ["a"],
-            poolCount: 1,
-            portionCount: 1,
-          },
-        ],
-        projects: ["MHV", "SV"].map((name) => ({
-          id: name,
-          name,
-          kit: `${name}试剂盒`,
-          lot: "LOT1",
-          sampleIds: ["s"],
-          results: { s: "negative" },
-          nc: "negative",
-          pc: "positive",
-          wells: {},
-        })),
+    });
+    expect(batchResponse.ok()).toBe(true);
+    const recordId = randomUUID();
+    const recordResponse = await page.request.post("/api/quarantine/tests", {
+      data: {
+        item: {
+          id: recordId,
+          batchId,
+          method: "elisa_mouse",
+          reportFormVersion: 2,
+          reportMaterial: "血清",
+          reportSpecimenState: "液体",
+          samplingDate: "2026-09-02",
+          testDate: "2026-09-03",
+          samples: [
+            {
+              id: "s",
+              number: "1",
+              material: "血清",
+              specimenState: "液体",
+              sourceIds: ["a"],
+              poolCount: 1,
+              portionCount: 1,
+            },
+          ],
+          projects: ["MHV", "SV"].map((name) => ({
+            id: name,
+            name,
+            kit: `${name}试剂盒`,
+            lot: "LOT1",
+            sampleIds: ["s"],
+            results: { s: "negative" },
+            nc: "negative",
+            pc: "positive",
+            wells: {},
+          })),
+        },
       },
-    },
-  });
-  expect(recordResponse.ok()).toBe(true);
-  await openNavigationEntry(page, "检疫管理", "ELISA检测");
-  await page
-    .getByRole("row")
-    .filter({ hasText: batchName })
-    .first()
-    .getByRole("button", { name: "查看检测记录" })
-    .click();
-  await page.getByRole("tab", { name: "ELISA检测（小鼠） · 2026-09-03 · 草稿", exact: true }).click();
-  await page.getByRole("button", { name: "编辑检测", exact: true }).click();
-  await page.getByRole("button", { name: "添加样本", exact: true }).click();
-  const secondSource = page.getByRole("combobox", { name: "混样来源 2", exact: true });
-  await secondSource.click();
-  const secondDropdown = page.locator(".ant-select-dropdown").filter({ visible: true });
-  await expect(secondDropdown).not.toContainText("甲组张同学");
-  await expect(secondDropdown).toContainText("乙组李同学");
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "删除样本", exact: true }).last().click();
-  const deleteSampleDialog = page.getByRole("dialog", { name: "删除此实验组？", exact: true });
-  await expect(deleteSampleDialog).toBeVisible();
-  await expect(deleteSampleDialog).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
-  await deleteSampleDialog.getByRole("button", { name: "确认删除", exact: true }).click();
-  await expect(deleteSampleDialog).toBeHidden();
-  const source = page.getByRole("combobox", { name: "混样来源 1", exact: true });
-  await source.click();
-  const dropdown = page.locator(".ant-select-dropdown").filter({ visible: true });
-  await expect(dropdown).not.toContainText("江苏集萃");
-  await dropdown.getByText("乙组李同学", { exact: true }).click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByText("1样（2份血清）", { exact: true })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "结果判定", exact: true })).toHaveCount(0);
-  await page.getByRole("combobox", { name: "MHV 1 判定", exact: true }).click();
-  await expect(
-    page.locator(".ant-select-dropdown").filter({ visible: true }).locator(".ant-select-item-option-content"),
-  ).toHaveText(["/", "-", "＋", "±"]);
-  await page.keyboard.press("Escape");
-  const projects = page.getByRole("combobox", { name: "附件检测项目", exact: true });
-  await projects.click();
-  await page
-    .locator(".ant-select-dropdown")
-    .filter({ visible: true })
-    .locator(".ant-select-item-option-content")
-    .filter({ hasText: /^MHV$/ })
-    .click();
-  await page
-    .locator(".ant-select-dropdown")
-    .filter({ visible: true })
-    .locator(".ant-select-item-option-content")
-    .filter({ hasText: /^SV$/ })
-    .click();
-  await page.keyboard.press("Escape");
-  await expect(page.locator('input[type="file"]')).toHaveAttribute("accept", /\.tif/);
-  await page.locator('input[type="file"]').setInputFiles({
-    name: "gel.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
-      "base64",
-    ),
-  });
-  await expect(page.getByRole("textbox", { name: "gel.png 图注" })).toBeVisible();
-  await page.getByRole("textbox", { name: "gel.png 图注" }).fill("MHV和SV原始读数");
-  await page.getByRole("button", { name: "保存图片信息" }).click();
-  await expect
-    .poll(async () => {
-      const detail = await (await page.request.get(`/api/quarantine/batches/${batchId}`)).json();
-      return detail.attachments[0]?.caption;
-    })
-    .toBe("MHV和SV原始读数");
-  const detail = await (await page.request.get(`/api/quarantine/batches/${batchId}`)).json();
-  expect(detail.attachments[0].projectIds).toEqual(["MHV", "SV"]);
-  expect(detail.tests[0].samples[0].portionCount).toBe(2);
-  await expect
-    .poll(() =>
-      page
-        .getByRole("img", { name: "MHV和SV原始读数", exact: true })
-        .evaluate((el) => (el as HTMLImageElement).naturalWidth),
-    )
-    .toBe(1);
-  await page.screenshot({ path: testInfo.outputPath("elisa-record.png"), fullPage: true });
-  await page.getByRole("button", { name: "保存检测草稿" }).click();
-  await page.getByRole("button", { name: "返回批次" }).click();
-  await page.getByRole("button", { name: "出具报告", exact: true }).click();
-  const issuing = page.waitForResponse(
-    (response) => response.url().endsWith("/issue") && response.request().method() === "POST",
-  );
-  await page.getByRole("dialog").getByRole("button", { name: "确认出具" }).click();
-  expect((await issuing).ok()).toBe(true);
-  await expect(page.getByRole("button", { name: "创建更正草稿" })).toBeVisible();
-});
+    });
+    expect(recordResponse.ok()).toBe(true);
+    await openNavigationEntry(page, "检疫管理", "ELISA检测");
+    await page
+      .getByRole("row")
+      .filter({ hasText: batchName })
+      .first()
+      .getByRole("button", { name: "查看检测记录" })
+      .click();
+    await page.getByRole("tab", { name: "ELISA检测（小鼠） · 2026-09-03 · 草稿", exact: true }).click();
+    await page.getByRole("button", { name: "编辑检测", exact: true }).click();
+    await page.getByRole("button", { name: "添加样本", exact: true }).click();
+    const secondSource = page.getByRole("combobox", { name: "混样来源 2", exact: true });
+    await secondSource.click();
+    const secondDropdown = page.locator(".ant-select-dropdown").filter({ visible: true });
+    await expect(secondDropdown).not.toContainText("甲组张同学");
+    await expect(secondDropdown).toContainText("乙组李同学");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "删除样本", exact: true }).last().click();
+    const deleteSampleDialog = page.getByRole("dialog", { name: "删除此实验组？", exact: true });
+    await expect(deleteSampleDialog).toBeVisible();
+    await expect(deleteSampleDialog).not.toHaveClass(/ant-zoom-(?:appear|enter)/);
+    await deleteSampleDialog.getByRole("button", { name: "确认删除", exact: true }).click();
+    await expect(deleteSampleDialog).toBeHidden();
+    const source = page.getByRole("combobox", { name: "混样来源 1", exact: true });
+    await source.click();
+    const dropdown = page.locator(".ant-select-dropdown").filter({ visible: true });
+    await expect(dropdown).not.toContainText("江苏集萃");
+    await dropdown.getByText("乙组李同学", { exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText("1样（2份血清）", { exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "结果判定", exact: true })).toHaveCount(0);
+    await page.getByRole("combobox", { name: "MHV 1 判定", exact: true }).click();
+    await expect(
+      page.locator(".ant-select-dropdown").filter({ visible: true }).locator(".ant-select-item-option-content"),
+    ).toHaveText(["/", "-", "＋", "±"]);
+    await page.keyboard.press("Escape");
+    const projects = page.getByRole("combobox", { name: "附件检测项目", exact: true });
+    await projects.click();
+    await page
+      .locator(".ant-select-dropdown")
+      .filter({ visible: true })
+      .locator(".ant-select-item-option-content")
+      .filter({ hasText: /^MHV$/ })
+      .click();
+    await page
+      .locator(".ant-select-dropdown")
+      .filter({ visible: true })
+      .locator(".ant-select-item-option-content")
+      .filter({ hasText: /^SV$/ })
+      .click();
+    await page.keyboard.press("Escape");
+    await expect(page.locator('input[type="file"]')).toHaveAttribute("accept", /\.tif/);
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "gel.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+    await expect(page.getByRole("textbox", { name: "gel.png 图注" })).toBeVisible();
+    await page.getByRole("textbox", { name: "gel.png 图注" }).fill("MHV和SV原始读数");
+    await page.getByRole("button", { name: "保存图片信息" }).click();
+    await expect
+      .poll(async () => {
+        const detail = await (await page.request.get(`/api/quarantine/batches/${batchId}`)).json();
+        return detail.attachments[0]?.caption;
+      })
+      .toBe("MHV和SV原始读数");
+    const detail = await (await page.request.get(`/api/quarantine/batches/${batchId}`)).json();
+    expect(detail.attachments[0].projectIds).toEqual(["MHV", "SV"]);
+    expect(detail.tests[0].samples[0].portionCount).toBe(2);
+    await expect
+      .poll(() =>
+        page
+          .getByRole("img", { name: "MHV和SV原始读数", exact: true })
+          .evaluate((el) => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(1);
+    await page.screenshot({ path: testInfo.outputPath("elisa-record.png"), fullPage: true });
+    await page.getByRole("button", { name: "保存检测草稿" }).click();
+    await page.getByRole("button", { name: "返回批次" }).click();
+    await page.getByRole("button", { name: "出具报告", exact: true }).click();
+    const issuing = page.waitForResponse(
+      (response) => response.url().endsWith("/issue") && response.request().method() === "POST",
+    );
+    await page.getByRole("dialog").getByRole("button", { name: "确认出具" }).click();
+    expect((await issuing).ok()).toBe(true);
+    await expect(page.getByRole("button", { name: "创建更正草稿" })).toBeVisible();
+  },
+);

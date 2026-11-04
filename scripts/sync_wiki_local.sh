@@ -56,7 +56,9 @@ if [[ -z "$gitea_url" ]]; then
 fi
 
 git_args=()
-if [[ -n "${CAGELEDGER_GITEA_TOKEN:-}" ]]; then
+if [[ -n "${CAGELEDGER_GITEA_AUTHORIZATION:-}" ]]; then
+  git_args=(-c "http.extraHeader=Authorization: ${CAGELEDGER_GITEA_AUTHORIZATION}")
+elif [[ -n "${CAGELEDGER_GITEA_TOKEN:-}" ]]; then
   git_args=(-c "http.extraHeader=Authorization: token ${CAGELEDGER_GITEA_TOKEN}")
 fi
 
@@ -101,7 +103,7 @@ if [[ -z "$(git -C "$target" status --porcelain)" ]]; then
 fi
 
 git -C "$target" add .
-git -C "$target" commit -m "docs: update VitePress migration entry from $(git -C "$ROOT" rev-parse --short HEAD)"
+git -C "$target" -c commit.gpgsign=false commit --no-gpg-sign -m "docs: update VitePress migration entry from $(git -C "$ROOT" rev-parse --short HEAD)"
 git -C "$target" "${git_args[@]+"${git_args[@]}"}" push origin HEAD:main
 
 echo "Updated Gitea Wiki migration pages at ${gitea_url%/}/${repository}/wiki"

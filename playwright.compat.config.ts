@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 import base from "./playwright.config";
+import { compatibilityCatalog } from "./tests/e2e/compatibilityCases";
 
 const browser = process.env.CAGELEDGER_COMPAT_BROWSER;
 if (browser !== "firefox" && browser !== "webkit") {
@@ -21,57 +22,15 @@ export default defineConfig({
     ["json", { outputFile: resolve(evidence, "results.json") }],
     ["html", { outputFolder: resolve(evidence, "report"), open: "never" }],
   ],
-  testMatch: [
-    "desktop-compat.spec.ts",
-    "workflow-actions.spec.ts",
-    "settlement-desktop-ux.spec.ts",
-    "zz-ant-system-audit.spec.ts",
-    "filter-motion.spec.ts",
-    "date-column-filters.spec.ts",
-    "quantity.spec.ts",
-    "async-feedback.spec.ts",
-    "quarantine-toolbar.spec.ts",
-    "quarantine.spec.ts",
-    "quarantine-experience.spec.ts",
-    "inspection-catalog.spec.ts",
-    "settings-inspection-resilience.spec.ts",
-    "permissions.spec.ts",
-    "loading-feedback.spec.ts",
-    "accessibility.spec.ts",
-  ],
-  grep: [
-    /desktop compatibility:/,
-    /desktop list restores/,
-    /settlement desktop/,
-    /desktop tables expose all columns/,
-    /partial batch lock retains/,
-    /desktop page size and scroll restore/,
-    /shrinking data corrects/,
-    /Ant system page inventory (1440|1180)$/,
-    /column filters stay onscreen: (no-preference|reduce) (1440|1180)$/,
-    /intake date tree submits/,
-    /month and datetime column trees/,
-    /date filter tree stays contained/,
-    /saved quantity filters remain clickable/,
-    /save and delete a quantity sheet/,
-    /selects every saved quantity sheet/,
-    /failed settlement list has a retry/,
-    /manual selection wins over a slow select-all/,
-    /workflow details open immediately/,
-    /quarantine selection survives pagination/,
-    /ELISA report form links sources/,
-    /elisa_mouse record preserves failed save/,
-    /admin edits the catalog/,
-    /finding actions serialize requests/,
-    /inspection detail shows loading/,
-    /room administrator keeps the server-side permission boundary/,
-    /batch search retains rows/,
-    /core workspaces and dialogs retain accessible semantics/,
-  ],
+  grep: /@compat-[a-z0-9-]+/,
   projects: [
     {
       name: browser,
-      metadata: { desktopOnly: true, scope: "Desktop engine compatibility; not physical-device certification" },
+      metadata: {
+        desktopOnly: true,
+        scope: "Desktop engine compatibility; not physical-device certification",
+        compatibilityCatalog,
+      },
       use: {
         ...devices[browser === "firefox" ? "Desktop Firefox" : "Desktop Safari"],
         viewport: { width: 1440, height: 900 },

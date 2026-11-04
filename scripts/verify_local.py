@@ -9,6 +9,7 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from release_browsers import managed_pdf_browser
 from release_host_guard import HostGuard
 from release_runtime import ROOT, Runner, atomic_json, isolation_environment, require
 from release_tools import release_converter
@@ -90,7 +91,8 @@ def main():
         / (datetime.now(UTC).strftime("%Y%m%dT%H%M%S") + "-" + uuid4().hex[:8])
     )
     converter = release_converter(ROOT) if args.mode in {"check", "full"} else nullcontext()
-    with host_task_lock(), converter:
+    browser = managed_pdf_browser(ROOT) if args.mode in {"check", "full", "e2e", "compat"} else nullcontext()
+    with host_task_lock(), converter, browser:
         guard = HostGuard(directory / "host")
         runner = Runner(ROOT, guard)
         for sig in (signal.SIGINT, signal.SIGTERM):

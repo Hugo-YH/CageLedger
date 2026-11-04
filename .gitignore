@@ -47,3 +47,4 @@ tmp/
 
 # Developer-local release converters and verified installation media.
 /.codex-run/release-tools/
+/.codex-run/release-engineering-*/

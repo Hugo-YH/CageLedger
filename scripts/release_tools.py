@@ -78,6 +78,7 @@ def release_converter(repo):
         existing = mounted_image(mount)
         owned = False
         device = None
+        session = {"mount": str(mount), "owned": False, "detached": False}
         try:
             if existing:
                 require(existing == image, "发布转换器挂载点属于其他镜像，未执行替换。")
@@ -91,12 +92,13 @@ def release_converter(repo):
                     timeout=60,
                 )
                 owned = True
+                session["owned"] = True
                 entities = plistlib.loads(output.encode())["system-entities"]
                 device = next(entity["dev-entry"] for entity in entities if entity.get("mount-point") == str(mount))
             binary = mount / "LibreOffice.app/Contents/MacOS/soffice"
             require(binary.is_file(), "缓存镜像中未找到正式 LibreOffice 应用。")
             os.environ["CAGELEDGER_LIBREOFFICE_BIN"] = str(binary)
-            yield
+            yield session
         finally:
             os.environ.pop("CAGELEDGER_LIBREOFFICE_BIN", None)
             if owned:
@@ -104,6 +106,7 @@ def release_converter(repo):
                 # user-supplied mount; do not force-close another process's files.
                 try:
                     command(["diskutil", "eject", device or str(mount)], repo, timeout=30)
+                    session["detached"] = True
                     print("[release] 临时转换器已卸载，安装包继续保留", flush=True)
                 except (OSError, RuntimeError, subprocess.SubprocessError):
                     print(f"[release] 转换器挂载点仍保留，请在使用结束后卸载：{mount}", flush=True)

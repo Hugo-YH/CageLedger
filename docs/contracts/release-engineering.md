@@ -11,6 +11,8 @@ npm run release:local -- --version X.Y.Z --push --dry-run
 npm run release:local -- --version X.Y.Z --push
 ```
 
+从隔离发布检出运行时，可加 `--source-checkout /absolute/development/CageLedger`。入口只读记录该开发目录的 `.env` 和 `data/` 指纹，续跑继续使用原基线；发布后比对文件，并仅对干净且分支一致的源检出做快进同步。脏目录保留并在汇总说明，不覆盖改动。正式 `main` 发布同时快进远端 `beta`，分叉时停止收尾，不强推。
+
 `doctor` 汇总 Node、Python、Git 身份、隔离检出、内存压力、锁定版本浏览器、Docker 和转换器的就绪状态。`--online` 额外只读检查 Git 远端与 Gitea API 仓库权限，不上传制品。它不是测试通过证明，也不能提前保证 Registry 写权限或未来网络可用。正式入口仍校验分支、版本占用、完整门禁和发布后的制品。
 
 阶段顺序为：环境预检与资源准入 → 版本和更新记录 → 转换器冒烟 → 基础质量检查 → 应用与文档构建 → 浏览器完整门禁 → 离线包 → 发布提交与标签 → 镜像、Git 引用、Release、Wiki → 交付回读与冒烟 → `latest`。同版本输入、运行环境和产物完整匹配的通过结果自动复用；失败或结果不明不能当成通过。
@@ -38,6 +40,8 @@ npm run release:local -- --version X.Y.Z --push --sign
 | Git、Gitea、Registry 认证  | 获取代码、推送和上传制品的权限        | 需要；不因关闭签名而取消                     |
 | LibreOffice 应用签名与公证 | 核实测试转换器完整性与 macOS 可执行性 | 需要；使用供应商签名，不要求开发者自行签应用 |
 
+Git 传输优先使用当前有效 SSH agent，失效时只发现登录用户已有的 launchd / GUI agent；普通无签名发布不加载签名密钥。Gitea API、Release 上传和 Wiki 使用同一个凭据解析结果，按以下顺序选择：`CAGELEDGER_GITEA_TOKEN`、`CAGELEDGER_GITEA_TOKEN_FILE`、官方 HTTP 站点的 Git credential helper、Docker 配置中精确匹配 `ddns.cellnucle.us:3333` 的已有认证。token 文件须由当前用户拥有、权限为 600；显式文件错误不回退。凭据只传给发布子进程，不写入报告或隔离业务测试环境。Registry 继续使用 Docker 自己的认证；doctor 分别报告 Git、API 与 Registry 读取结果，只读预检不能保证之后写入一定成功。
+
 ## 开发目录中的测试工具
 
 `CAGELEDGER_LIBREOFFICE_BIN` 显式路径优先，其次 `/Applications/LibreOffice.app`，再使用开发目录 `.codex-run/release-tools/` 的缓存。显式路径错误不会悄悄换工具。
@@ -57,6 +61,8 @@ npm run release:local -- --version X.Y.Z --push --sign
 
 隔离发布检出可通过 `CAGELEDGER_RELEASE_TOOLS_DIR` 指向原开发目录的工具缓存。保持相同路径与版本有利于续跑；工具变化会使运行时凭据失效。浏览器从当前 Playwright 安装解析准确版本，覆盖 Chromium、headless shell、Firefox、WebKit 和 ffmpeg，不把历史缓存版本混入指纹。
 
+受管发布和浏览器检查还将后端 PDF 渲染绑定到当前 Node Playwright 的 Chromium，通过隔离环境注入 `CAGELEDGER_CHROMIUM_BIN`；路径和浏览器内容纳入运行时指纹及嵌套打包核验。系统 Chrome 不参与受管测试，正常开发和生产容器仍沿用自己的配置。
+
 ## 进度与恢复
 
 每个阶段显示开始、结束、耗时和日志路径；子进程运行期间约每 30 秒报告日志大小及最近输出时间。不会把可能含内部信息的子进程日志直接倾倒到终端。长时间没有新增输出不单独判失败；仍受资源保护和每阶段 60 分钟上限控制。
@@ -72,3 +78,7 @@ npm run release:local -- --version X.Y.Z --push --state-dir /absolute/path/to/re
 - 资源保护停止：等待主机恢复，先查看已有任务，不盲目重启整套测试或增加超时、并发。
 - 发布阶段 `unknown`：先核对远端。部分镜像、草稿、附件或冲突引用不得自动覆盖、重新 POST 或删除。
 - 只有远端提交、标签、Release 正文与附件哈希、镜像、Wiki 和隔离冒烟均验证完成，才报告交付成功。生产部署状态另行说明。
+
+受管镜像上传按架构先构建并加载本地镜像，核对平台、版本和来源提交，在 `image-publication/image-publication.json` 落盘 config digest 后才 push。config digest 从同次构建的临时 OCI 导出读取，并与 Buildx 元数据和加载身份交叉核对；不把 Docker inspect 的 ID 一律当作 config digest。身份落盘后删除额外 OCI tar，保留小型凭据。恢复时逐项核对远端 config digest；已一致的架构不重建、不重推，只继续缺失部分。合并索引也核对两个架构的构建身份。远端已有但没有预 push 凭据、摘要冲突、未知网络响应、待推送本地镜像已变更/丢失或历史旧上传状态继续停止，不收养、不覆盖。离线镜像导出可以重新执行，不改变远端标签；`latest` 仍在完整交付核验后更新。手工 `publish:container:local` 入口保持独立，正式续传使用受管入口。
+
+每个受管子进程保存 `*-cleanup.json`，按 PID 和启动时间记录拥有的进程及退出核对，不按名称结束其他 Chrome。成功、失败或中断均生成 `release-summary.json`，包含阶段、资源采样、进程/临时容器退出、转换器挂载、可选原件比对和同步结果。收尾失败保留已发布事实并标记 `finalization_incomplete`；不能只凭制品已上传就声称整轮收尾成功。没有指定源检出时，汇总不声明已核对开发目录原件。

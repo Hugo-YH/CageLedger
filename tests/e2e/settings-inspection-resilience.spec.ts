@@ -1,3 +1,4 @@
+import { compatibilityCase } from "./compatibilityCases";
 import { writeFile } from "node:fs/promises";
 import type { Locator, Page, Route, TestInfo } from "@playwright/test";
 import { ensureTestInfrastructure, expect, openNavigationEntry, openSettingsView, test } from "./fixtures";
@@ -188,105 +189,113 @@ const finding = {
   events: [],
 };
 
-test("finding actions serialize requests, keep failed input and announce successful retry", async ({
-  page,
-}, testInfo) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  let refreshFailed = false;
-  await page.route("**/api/animal-inspection-findings?*", (route) =>
-    refreshFailed
-      ? route.fulfill({ status: 409, json: { error: "巡检刷新暂不可用" } })
-      : route.fulfill({ json: { items: [finding], page: { limit: 10, offset: 0, total: 1 } } }),
-  );
-  let actionRoute: Route | undefined;
-  let resolveRoute: Route | undefined;
-  let saves = 0;
-  let closes = 0;
-  await page.route("**/api/animal-inspection-findings/resilient-finding/actions", (route) => {
-    saves += 1;
-    actionRoute = route;
-  });
-  await page.route("**/api/animal-inspection-findings/resilient-finding/resolve", (route) => {
-    closes += 1;
-    resolveRoute = route;
-  });
-  await openNavigationEntry(page, "动物管理", "异常处置");
-  await page.getByRole("button", { name: "处置", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("实际措施", { exact: true }).fill("保留的处置草稿");
-  await dialog.getByLabel("责任人", { exact: true }).fill("巡检人员");
-  await dialog.getByLabel("关闭结论", { exact: true }).fill("复查记录仍需核对");
-  await dialog.getByRole("button", { name: "保存处置", exact: true }).click();
-  await expect.poll(() => saves).toBe(1);
-  await expect(dialog.getByRole("button", { name: "取消", exact: true })).toBeDisabled();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "确认关闭", exact: true })).toBeDisabled();
-  await expect(dialog.getByLabel("实际措施", { exact: true })).toBeDisabled();
-  await expect(dialog.getByLabel("复查日期", { exact: true })).toBeDisabled();
-  expect(closes).toBe(0);
-  await actionRoute?.fulfill({ status: 409, json: { error: "处置保存冲突，请核对后重试" } });
-  await expect(dialog.getByRole("alert").filter({ hasText: "处置保存冲突" })).toHaveClass(/ant-alert-error/);
-  await expect(dialog.getByLabel("实际措施", { exact: true })).toHaveValue("保留的处置草稿");
-  await captureFormEvidence(page, testInfo, "finding-save-error", dialog);
-  // WebKit rounds fractional font metrics to 1/64px; retain the 32px contract
-  // without requiring identical CSS serialization across engines.
-  await expect
-    .poll(() => dialog.getByLabel("责任人", { exact: true }).evaluate((el) => parseFloat(getComputedStyle(el).height)))
-    .toBeCloseTo(32, 1);
-  await expect(dialog.getByLabel("实际措施", { exact: true })).toBeEnabled();
-  refreshFailed = true;
-  await dialog.getByRole("button", { name: "保存处置", exact: true }).click();
-  await expect.poll(() => saves).toBe(2);
-  await actionRoute?.fulfill({ json: { item: finding } });
-  await expect(page.getByRole("status").filter({ hasText: "处置记录已保存" })).toBeVisible();
-  await expect(page.getByRole("alert").filter({ hasText: "巡检信息更新失败" })).toBeAttached();
-  await expect(dialog.getByLabel("关闭结论", { exact: true })).toHaveValue("复查记录仍需核对");
-  await dialog.getByRole("button", { name: "确认关闭", exact: true }).click();
-  await expect.poll(() => closes).toBe(1);
-  await expect(dialog.getByRole("button", { name: "保存处置", exact: true })).toBeDisabled();
-  await resolveRoute?.fulfill({ status: 409, json: { error: "关闭暂未成功，请重试" } });
-  await expect(dialog.getByRole("alert").filter({ hasText: "关闭暂未成功" })).toHaveClass(/ant-alert-error/);
-  await dialog.getByRole("button", { name: "取消", exact: true }).click();
-  refreshFailed = false;
-  await page.getByRole("button", { name: "重试", exact: true }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "巡检信息更新失败" })).toBeHidden();
-});
+test(
+  "finding actions serialize requests, keep failed input and announce successful retry",
+  compatibilityCase("inspection-action-retry"),
+  async ({ page }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    let refreshFailed = false;
+    await page.route("**/api/animal-inspection-findings?*", (route) =>
+      refreshFailed
+        ? route.fulfill({ status: 409, json: { error: "巡检刷新暂不可用" } })
+        : route.fulfill({ json: { items: [finding], page: { limit: 10, offset: 0, total: 1 } } }),
+    );
+    let actionRoute: Route | undefined;
+    let resolveRoute: Route | undefined;
+    let saves = 0;
+    let closes = 0;
+    await page.route("**/api/animal-inspection-findings/resilient-finding/actions", (route) => {
+      saves += 1;
+      actionRoute = route;
+    });
+    await page.route("**/api/animal-inspection-findings/resilient-finding/resolve", (route) => {
+      closes += 1;
+      resolveRoute = route;
+    });
+    await openNavigationEntry(page, "动物管理", "异常处置");
+    await page.getByRole("button", { name: "处置", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("实际措施", { exact: true }).fill("保留的处置草稿");
+    await dialog.getByLabel("责任人", { exact: true }).fill("巡检人员");
+    await dialog.getByLabel("关闭结论", { exact: true }).fill("复查记录仍需核对");
+    await dialog.getByRole("button", { name: "保存处置", exact: true }).click();
+    await expect.poll(() => saves).toBe(1);
+    await expect(dialog.getByRole("button", { name: "取消", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "确认关闭", exact: true })).toBeDisabled();
+    await expect(dialog.getByLabel("实际措施", { exact: true })).toBeDisabled();
+    await expect(dialog.getByLabel("复查日期", { exact: true })).toBeDisabled();
+    expect(closes).toBe(0);
+    await actionRoute?.fulfill({ status: 409, json: { error: "处置保存冲突，请核对后重试" } });
+    await expect(dialog.getByRole("alert").filter({ hasText: "处置保存冲突" })).toHaveClass(/ant-alert-error/);
+    await expect(dialog.getByLabel("实际措施", { exact: true })).toHaveValue("保留的处置草稿");
+    await captureFormEvidence(page, testInfo, "finding-save-error", dialog);
+    // WebKit rounds fractional font metrics to 1/64px; retain the 32px contract
+    // without requiring identical CSS serialization across engines.
+    await expect
+      .poll(() =>
+        dialog.getByLabel("责任人", { exact: true }).evaluate((el) => parseFloat(getComputedStyle(el).height)),
+      )
+      .toBeCloseTo(32, 1);
+    await expect(dialog.getByLabel("实际措施", { exact: true })).toBeEnabled();
+    refreshFailed = true;
+    await dialog.getByRole("button", { name: "保存处置", exact: true }).click();
+    await expect.poll(() => saves).toBe(2);
+    await actionRoute?.fulfill({ json: { item: finding } });
+    await expect(page.getByRole("status").filter({ hasText: "处置记录已保存" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "巡检信息更新失败" })).toBeAttached();
+    await expect(dialog.getByLabel("关闭结论", { exact: true })).toHaveValue("复查记录仍需核对");
+    await dialog.getByRole("button", { name: "确认关闭", exact: true }).click();
+    await expect.poll(() => closes).toBe(1);
+    await expect(dialog.getByRole("button", { name: "保存处置", exact: true })).toBeDisabled();
+    await resolveRoute?.fulfill({ status: 409, json: { error: "关闭暂未成功，请重试" } });
+    await expect(dialog.getByRole("alert").filter({ hasText: "关闭暂未成功" })).toHaveClass(/ant-alert-error/);
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    refreshFailed = false;
+    await page.getByRole("button", { name: "重试", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "巡检信息更新失败" })).toBeHidden();
+  },
+);
 
-test("inspection detail shows loading before an actual error and supports retry", async ({ page }) => {
-  await page.route("**/api/animal-inspections?*", (route) =>
-    route.fulfill({
-      json: {
-        items: [
-          {
-            id: "resilient-inspection",
-            roomName: "8014",
-            moduleCodes: ["basicAssessment"],
-            status: "submitted",
-            createdByName: "巡检人员",
-            updatedAt: "2026-09-12T08:00:00Z",
-          },
-        ],
-        page: { limit: 10, offset: 0, total: 1 },
-        filterOptions: { rooms: ["8014"] },
-      },
-    }),
-  );
-  let detailRoute: Route | undefined;
-  await page.route("**/api/animal-inspections/resilient-inspection", (route) => {
-    detailRoute = route;
-  });
-  await openNavigationEntry(page, "动物管理", "巡检记录");
-  await page.getByRole("button", { name: "详情", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("status")).toBeVisible();
-  await expect(dialog.getByText("巡检记录详情加载失败", { exact: true })).toBeHidden();
-  await expect.poll(() => Boolean(detailRoute)).toBe(true);
-  await detailRoute?.fulfill({ status: 409, json: { error: "详情暂不可用" } });
-  await expect(dialog.getByText("巡检记录详情加载失败", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "重试", exact: true }).click();
-  await expect(dialog.getByRole("status")).toBeVisible();
-  await expect(dialog.getByText("巡检记录详情加载失败", { exact: true })).toBeHidden();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-});
+test(
+  "inspection detail shows loading before an actual error and supports retry",
+  compatibilityCase("inspection-detail-retry"),
+  async ({ page }) => {
+    await page.route("**/api/animal-inspections?*", (route) =>
+      route.fulfill({
+        json: {
+          items: [
+            {
+              id: "resilient-inspection",
+              roomName: "8014",
+              moduleCodes: ["basicAssessment"],
+              status: "submitted",
+              createdByName: "巡检人员",
+              updatedAt: "2026-09-12T08:00:00Z",
+            },
+          ],
+          page: { limit: 10, offset: 0, total: 1 },
+          filterOptions: { rooms: ["8014"] },
+        },
+      }),
+    );
+    let detailRoute: Route | undefined;
+    await page.route("**/api/animal-inspections/resilient-inspection", (route) => {
+      detailRoute = route;
+    });
+    await openNavigationEntry(page, "动物管理", "巡检记录");
+    await page.getByRole("button", { name: "详情", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("status")).toBeVisible();
+    await expect(dialog.getByText("巡检记录详情加载失败", { exact: true })).toBeHidden();
+    await expect.poll(() => Boolean(detailRoute)).toBe(true);
+    await detailRoute?.fulfill({ status: 409, json: { error: "详情暂不可用" } });
+    await expect(dialog.getByText("巡检记录详情加载失败", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "重试", exact: true }).click();
+    await expect(dialog.getByRole("status")).toBeVisible();
+    await expect(dialog.getByText("巡检记录详情加载失败", { exact: true })).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  },
+);

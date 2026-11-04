@@ -1,3 +1,5 @@
+import { openAuthenticatedAuditPage } from "./auditSession";
+import { compatibilityCase } from "./compatibilityCases";
 import { captureUiAudit } from "./uiAudit";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
@@ -40,208 +42,210 @@ for (const viewport of [
   { width: 760, height: 900 },
   { width: 844, height: 390 },
 ]) {
-  test(`Ant system page inventory ${viewport.width}`, async ({ page }, testInfo) => {
-    test.setTimeout(180000);
-    page.setDefaultTimeout(10000);
-    await page.setViewportSize(viewport);
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto("/app");
-    await page.getByLabel("用户名", { exact: true }).fill("admin");
-    await page.getByLabel("密码", { exact: true }).fill("admin123");
-    await page.getByRole("button", { name: "登录", exact: true }).click();
-    await expect(page.getByLabel("用户名", { exact: true })).toBeHidden();
-    for (const [group, label] of entries) {
-      if (viewport.width <= 760) {
-        if (label === "总览" || label === "笼位管理") {
-          await page.getByRole("tab", { name: label === "总览" ? "总览" : "笼位", exact: true }).click();
+  test(
+    `Ant system page inventory ${viewport.width}`,
+    compatibilityCase(`page-inventory-${viewport.width}`, viewport.width >= 1180),
+    async ({ page }, testInfo) => {
+      test.setTimeout(180000);
+      page.setDefaultTimeout(10000);
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await openAuthenticatedAuditPage(page);
+      for (const [group, label] of entries) {
+        if (viewport.width <= 760) {
+          if (label === "总览" || label === "笼位管理") {
+            await page.getByRole("tab", { name: label === "总览" ? "总览" : "笼位", exact: true }).click();
+          } else {
+            await page.getByRole("tab", { name: "更多", exact: true }).click();
+            await page.locator(".ant-mobile-navigation-sheet .adm-list-item").getByText(label, { exact: true }).click();
+            await expect(page.locator(".ant-mobile-navigation-sheet")).toBeHidden();
+          }
+        } else if (group) {
+          await openNavigationEntry(page, group, label);
         } else {
-          await page.getByRole("tab", { name: "更多", exact: true }).click();
-          await page.locator(".ant-mobile-navigation-sheet .adm-list-item").getByText(label, { exact: true }).click();
-          await expect(page.locator(".ant-mobile-navigation-sheet")).toBeHidden();
+          await page
+            .locator(".ant-main-menu")
+            .getByRole("menuitem", { name: new RegExp(label) })
+            .click();
         }
-      } else if (group) {
-        await openNavigationEntry(page, group, label);
-      } else {
-        await page
-          .locator(".ant-main-menu")
-          .getByRole("menuitem", { name: new RegExp(label) })
-          .click();
-      }
-      await expect(page.locator('[data-ui="page-skeleton"]')).toHaveCount(0);
-      await expect(page.locator(".app-command-bar-title-page")).toBeVisible();
-      const geometry = await page.evaluate(() => {
-        const main = document.querySelector("main.workspace") || document.querySelector("main");
-        const controls = [
-          ...(main?.querySelectorAll<HTMLElement>(
-            ".ant-btn, .ant-select, .ant-picker, .ant-input-affix-wrapper, .ant-input-number, input.ant-input, .adm-button",
-          ) ?? []),
-        ]
-          .filter((el) => el.getClientRects().length && !el.closest('[aria-hidden="true"]'))
-          .map((el) => {
-            const rect = el.getBoundingClientRect();
-            const style = getComputedStyle(el);
-            return {
-              label: el.getAttribute("aria-label") || el.innerText || el.getAttribute("placeholder"),
-              className: el.className,
-              width: rect.width,
-              height: rect.height,
-              font: style.fontSize,
-              radius: style.borderRadius,
-              color: style.color,
-              background: style.backgroundColor,
-              weight: style.fontWeight,
-              x: rect.x,
-              y: rect.y,
-            };
-          });
-        const toolbars = [...document.querySelectorAll<HTMLElement>('[data-ui="workspace-toolbar"]')].map((el) => {
-          const style = getComputedStyle(el);
-          return {
-            display: style.display,
-            position: style.position,
-            gap: style.gap,
-            minWidth: style.minWidth,
-            zIndex: style.zIndex,
-            overflow: style.overflow,
-            titleSize: el.dataset.titleSize,
-            minHeight: parseFloat(style.minHeight),
-            paddingInline: parseFloat(style.paddingInlineStart),
-            rect: el.getBoundingClientRect().toJSON(),
-          };
-        });
-        return {
-          controls,
-          toolbars,
-          typography: [
-            ...(main?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6, p, small, .ant-typography-secondary") ??
-              []),
-          ]
-            .filter((el) => el.getClientRects().length)
-            .map((el) => {
-              const style = getComputedStyle(el);
-              return {
-                text: el.textContent?.slice(0, 100),
-                tag: el.tagName,
-                className: el.className,
-                inCommandBar: !!el.closest('[data-ui="workspace-toolbar"]'),
-                supportingCaption:
-                  !!el.closest(".system-card-title") && el.classList.contains("ant-typography-secondary"),
-                diagnosticHeading: el.matches(".system-card-title > span > h3"),
-                formSectionHeading: el.matches(".quantity-field-cluster .field-cluster-head > h3"),
-                font: style.fontFamily,
-                size: style.fontSize,
-                lineHeight: style.lineHeight,
-                weight: style.fontWeight,
-              };
-            }),
-          toolbarButtonsMissingIcons: [
+        await expect(page.locator('[data-ui="page-skeleton"]')).toHaveCount(0);
+        await expect(page.locator(".app-command-bar-title-page")).toBeVisible();
+        const geometry = await page.evaluate(() => {
+          const main = document.querySelector("main.workspace") || document.querySelector("main");
+          const controls = [
             ...(main?.querySelectorAll<HTMLElement>(
-              ".app-command-bar-actions .ant-btn, .app-command-bar-context .ant-btn",
+              ".ant-btn, .ant-select, .ant-picker, .ant-input-affix-wrapper, .ant-input-number, input.ant-input, .adm-button",
             ) ?? []),
           ]
-            .filter((el) => el.getClientRects().length && !el.querySelector(".ant-btn-icon"))
-            .map((el) => el.getAttribute("aria-label") || el.textContent),
-          selectionLabels: [...document.querySelectorAll<HTMLElement>(".app-command-bar-context .ant-typography")]
-            .filter((el) => el.textContent?.startsWith("已选"))
-            .map((el) => ({
-              text: el.textContent,
-              height: el.getBoundingClientRect().height,
-              lineHeight: parseFloat(getComputedStyle(el).lineHeight),
-            })),
-          separatePageHeaders: main?.querySelectorAll(".adm-nav-bar").length ?? 0,
-          pageToolbar: (() => {
-            const heading = main?.querySelector<HTMLElement>(".app-command-bar-title-page");
-            const toolbar = heading?.closest<HTMLElement>('[data-ui="workspace-toolbar"]');
-            if (!toolbar || !main) return null;
-            const bounds = main.getBoundingClientRect();
-            const style = getComputedStyle(main);
+            .filter((el) => el.getClientRects().length && !el.closest('[aria-hidden="true"]'))
+            .map((el) => {
+              const rect = el.getBoundingClientRect();
+              const style = getComputedStyle(el);
+              return {
+                label: el.getAttribute("aria-label") || el.innerText || el.getAttribute("placeholder"),
+                className: el.className,
+                width: rect.width,
+                height: rect.height,
+                font: style.fontSize,
+                radius: style.borderRadius,
+                color: style.color,
+                background: style.backgroundColor,
+                weight: style.fontWeight,
+                x: rect.x,
+                y: rect.y,
+              };
+            });
+          const toolbars = [...document.querySelectorAll<HTMLElement>('[data-ui="workspace-toolbar"]')].map((el) => {
+            const style = getComputedStyle(el);
             return {
-              nestedInCard: !!toolbar.closest(".ant-card"),
-              x: toolbar.getBoundingClientRect().x,
-              width: toolbar.getBoundingClientRect().width,
-              expectedX: bounds.x + parseFloat(style.paddingLeft),
-              expectedWidth: bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+              display: style.display,
+              position: style.position,
+              gap: style.gap,
+              minWidth: style.minWidth,
+              zIndex: style.zIndex,
+              overflow: style.overflow,
+              titleSize: el.dataset.titleSize,
+              minHeight: parseFloat(style.minHeight),
+              paddingInline: parseFloat(style.paddingInlineStart),
+              rect: el.getBoundingClientRect().toJSON(),
             };
-          })(),
-          mobileHeaderGap: (() => {
-            const shell = document.querySelector('[data-ui="mobile-page"]');
-            const header = shell?.querySelector(".adm-nav-bar");
-            const body = shell?.querySelector(".ant-mobile-page-body");
-            return header && body ? body.getBoundingClientRect().top - header.getBoundingClientRect().bottom : null;
-          })(),
-          pageOverflow: document.documentElement.scrollWidth > innerWidth,
-          workspaceOverflow: !!main && main.scrollWidth > main.clientWidth + 1,
-          viewport: { width: innerWidth, height: innerHeight },
-        };
-      });
-      await testInfo.attach(`${label}-geometry`, { body: JSON.stringify(geometry), contentType: "application/json" });
-      await writeFile(testInfo.outputPath(`${label}-computed-style.json`), JSON.stringify(geometry, null, 2));
-      await page.screenshot({ path: testInfo.outputPath(`${label}.png`), animations: "disabled" });
-      for (const selection of geometry.selectionLabels)
-        expect
-          .soft(selection.height, `${label} ${selection.text} must stay readable`)
-          .toBeLessThanOrEqual(selection.lineHeight + 1);
-      expect.soft(geometry.pageOverflow, `${label} page overflow`).toBe(false);
-      expect.soft(geometry.workspaceOverflow, `${label} workspace overflow`).toBe(false);
-      expect.soft(geometry.toolbarButtonsMissingIcons, `${label} toolbar action icons`).toEqual([]);
-      for (const bar of geometry.toolbars) {
-        expect
-          .soft(bar.minHeight, `${label} ${bar.titleSize ?? "untitled"} toolbar minimum height`)
-          .toBe(bar.titleSize === "page" ? 64 : 48);
-        expect.soft(bar.rect.height, `${label} toolbar accommodates content`).toBeGreaterThanOrEqual(bar.minHeight);
-        if (bar.titleSize === "page")
+          });
+          return {
+            controls,
+            toolbars,
+            typography: [
+              ...(main?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6, p, small, .ant-typography-secondary") ??
+                []),
+            ]
+              .filter((el) => el.getClientRects().length)
+              .map((el) => {
+                const style = getComputedStyle(el);
+                return {
+                  text: el.textContent?.slice(0, 100),
+                  tag: el.tagName,
+                  className: el.className,
+                  inCommandBar: !!el.closest('[data-ui="workspace-toolbar"]'),
+                  supportingCaption:
+                    !!el.closest(".system-card-title") && el.classList.contains("ant-typography-secondary"),
+                  diagnosticHeading: el.matches(".system-card-title > span > h3"),
+                  formSectionHeading: el.matches(".quantity-field-cluster .field-cluster-head > h3"),
+                  font: style.fontFamily,
+                  size: style.fontSize,
+                  lineHeight: style.lineHeight,
+                  weight: style.fontWeight,
+                };
+              }),
+            toolbarButtonsMissingIcons: [
+              ...(main?.querySelectorAll<HTMLElement>(
+                ".app-command-bar-actions .ant-btn, .app-command-bar-context .ant-btn",
+              ) ?? []),
+            ]
+              .filter((el) => el.getClientRects().length && !el.querySelector(".ant-btn-icon"))
+              .map((el) => el.getAttribute("aria-label") || el.textContent),
+            selectionLabels: [...document.querySelectorAll<HTMLElement>(".app-command-bar-context .ant-typography")]
+              .filter((el) => el.textContent?.startsWith("已选"))
+              .map((el) => ({
+                text: el.textContent,
+                height: el.getBoundingClientRect().height,
+                lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+              })),
+            separatePageHeaders: main?.querySelectorAll(".adm-nav-bar").length ?? 0,
+            pageToolbar: (() => {
+              const heading = main?.querySelector<HTMLElement>(".app-command-bar-title-page");
+              const toolbar = heading?.closest<HTMLElement>('[data-ui="workspace-toolbar"]');
+              if (!toolbar || !main) return null;
+              const bounds = main.getBoundingClientRect();
+              const style = getComputedStyle(main);
+              return {
+                nestedInCard: !!toolbar.closest(".ant-card"),
+                x: toolbar.getBoundingClientRect().x,
+                width: toolbar.getBoundingClientRect().width,
+                expectedX: bounds.x + parseFloat(style.paddingLeft),
+                expectedWidth: bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+              };
+            })(),
+            mobileHeaderGap: (() => {
+              const shell = document.querySelector('[data-ui="mobile-page"]');
+              const header = shell?.querySelector(".adm-nav-bar");
+              const body = shell?.querySelector(".ant-mobile-page-body");
+              return header && body ? body.getBoundingClientRect().top - header.getBoundingClientRect().bottom : null;
+            })(),
+            pageOverflow: document.documentElement.scrollWidth > innerWidth,
+            workspaceOverflow: !!main && main.scrollWidth > main.clientWidth + 1,
+            viewport: { width: innerWidth, height: innerHeight },
+          };
+        });
+        await testInfo.attach(`${label}-geometry`, { body: JSON.stringify(geometry), contentType: "application/json" });
+        await writeFile(testInfo.outputPath(`${label}-computed-style.json`), JSON.stringify(geometry, null, 2));
+        await page.screenshot({ path: testInfo.outputPath(`${label}.png`), animations: "disabled" });
+        for (const selection of geometry.selectionLabels)
           expect
-            .soft(bar.paddingInline, `${label} page toolbar horizontal padding`)
-            .toBe(viewport.width < 768 ? 16 : 24);
-      }
-      expect.soft(geometry.pageToolbar?.nestedInCard, `${label} title bar outside content card`).toBe(false);
-      expect
-        .soft(geometry.pageToolbar?.x, `${label} title bar left edge`)
-        .toBeCloseTo(geometry.pageToolbar?.expectedX ?? 0, 0);
-      expect
-        .soft(geometry.pageToolbar?.width, `${label} title bar width`)
-        .toBeCloseTo(geometry.pageToolbar?.expectedWidth ?? 0, 0);
-      const pageTitles = geometry.typography.filter((item) => item.className.includes("app-command-bar-title-page"));
-      expect.soft(geometry.separatePageHeaders, `${label} has no separate page title bar`).toBe(0);
-      expect.soft(pageTitles.length, `${label} has one page title`).toBe(1);
-      expect
-        .soft(
-          pageTitles.every((item) => item.inCommandBar),
-          `${label} title shares its action bar`,
-        )
-        .toBe(true);
-      for (const title of pageTitles) {
-        expect.soft(title.size, `${label} page heading size`).toBe("24px");
-        expect.soft(parseFloat(title.lineHeight), `${label} page heading line height`).toBeCloseTo(32, 1);
-      }
-      if (viewport.width >= 768 && ["录入数量统计表", "已保存数量统计表", "关于系统"].includes(label)) {
-        const title = geometry.typography.find((item) =>
-          label === "关于系统" ? item.text === "系统状态" : item.text === label,
-        );
-        expect.soft(title?.size, `${label} page title size`).toBe("24px");
-        expect.soft(parseFloat(title?.lineHeight ?? "0"), `${label} page title line height`).toBeCloseTo(32, 1);
-        expect.soft(title?.weight, `${label} page title weight`).toBe("600");
-      }
-      for (const section of geometry.typography.filter(
-        (item) =>
-          item.tag === "H4" ||
-          item.formSectionHeading ||
-          item.diagnosticHeading ||
-          item.className.includes("app-command-bar-title-section"),
-      )) {
-        expect.soft(section.size, `${label} ${section.text} section size`).toBe("16px");
-        expect.soft(parseFloat(section.lineHeight), `${label} ${section.text} section line height`).toBeCloseTo(24, 1);
-      }
-      if (label === "关于系统") {
-        for (const caption of geometry.typography.filter((item) => item.supportingCaption)) {
-          expect.soft(caption.size, `${caption.text} caption size`).toBe("12px");
-          expect.soft(parseFloat(caption.lineHeight), `${caption.text} caption line height`).toBeCloseTo(20, 1);
+            .soft(selection.height, `${label} ${selection.text} must stay readable`)
+            .toBeLessThanOrEqual(selection.lineHeight + 1);
+        expect.soft(geometry.pageOverflow, `${label} page overflow`).toBe(false);
+        expect.soft(geometry.workspaceOverflow, `${label} workspace overflow`).toBe(false);
+        expect.soft(geometry.toolbarButtonsMissingIcons, `${label} toolbar action icons`).toEqual([]);
+        for (const bar of geometry.toolbars) {
+          expect
+            .soft(bar.minHeight, `${label} ${bar.titleSize ?? "untitled"} toolbar minimum height`)
+            .toBe(bar.titleSize === "page" ? 64 : 48);
+          expect.soft(bar.rect.height, `${label} toolbar accommodates content`).toBeGreaterThanOrEqual(bar.minHeight);
+          if (bar.titleSize === "page")
+            expect
+              .soft(bar.paddingInline, `${label} page toolbar horizontal padding`)
+              .toBe(viewport.width < 768 ? 16 : 24);
         }
+        expect.soft(geometry.pageToolbar?.nestedInCard, `${label} title bar outside content card`).toBe(false);
+        expect
+          .soft(geometry.pageToolbar?.x, `${label} title bar left edge`)
+          .toBeCloseTo(geometry.pageToolbar?.expectedX ?? 0, 0);
+        expect
+          .soft(geometry.pageToolbar?.width, `${label} title bar width`)
+          .toBeCloseTo(geometry.pageToolbar?.expectedWidth ?? 0, 0);
+        const pageTitles = geometry.typography.filter((item) => item.className.includes("app-command-bar-title-page"));
+        expect.soft(geometry.separatePageHeaders, `${label} has no separate page title bar`).toBe(0);
+        expect.soft(pageTitles.length, `${label} has one page title`).toBe(1);
+        expect
+          .soft(
+            pageTitles.every((item) => item.inCommandBar),
+            `${label} title shares its action bar`,
+          )
+          .toBe(true);
+        for (const title of pageTitles) {
+          expect.soft(title.size, `${label} page heading size`).toBe("24px");
+          expect.soft(parseFloat(title.lineHeight), `${label} page heading line height`).toBeCloseTo(32, 1);
+        }
+        if (viewport.width >= 768 && ["录入数量统计表", "已保存数量统计表", "关于系统"].includes(label)) {
+          const title = geometry.typography.find((item) =>
+            label === "关于系统" ? item.text === "系统状态" : item.text === label,
+          );
+          expect.soft(title?.size, `${label} page title size`).toBe("24px");
+          expect.soft(parseFloat(title?.lineHeight ?? "0"), `${label} page title line height`).toBeCloseTo(32, 1);
+          expect.soft(title?.weight, `${label} page title weight`).toBe("600");
+        }
+        for (const section of geometry.typography.filter(
+          (item) =>
+            item.tag === "H4" ||
+            item.formSectionHeading ||
+            item.diagnosticHeading ||
+            item.className.includes("app-command-bar-title-section"),
+        )) {
+          expect.soft(section.size, `${label} ${section.text} section size`).toBe("16px");
+          expect
+            .soft(parseFloat(section.lineHeight), `${label} ${section.text} section line height`)
+            .toBeCloseTo(24, 1);
+        }
+        if (label === "关于系统") {
+          for (const caption of geometry.typography.filter((item) => item.supportingCaption)) {
+            expect.soft(caption.size, `${caption.text} caption size`).toBe("12px");
+            expect.soft(parseFloat(caption.lineHeight), `${caption.text} caption line height`).toBeCloseTo(20, 1);
+          }
+        }
+        if (geometry.mobileHeaderGap !== null)
+          expect.soft(geometry.mobileHeaderGap, `${label} navigation gap`).toBeLessThanOrEqual(24);
       }
-      if (geometry.mobileHeaderGap !== null)
-        expect.soft(geometry.mobileHeaderGap, `${label} navigation gap`).toBeLessThanOrEqual(24);
-    }
-  });
+    },
+  );
 }
 
 test("quarantine detail actions share one toolbar and remain reachable while scrolling", async ({ page }, testInfo) => {

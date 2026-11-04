@@ -144,6 +144,7 @@ def runtime_fingerprint(repo):
             "node_binary": digest(command(["node", "-p", "process.execPath"], repo)),
             "platform": command(["uname", "-a"], repo),
             "browsers": browsers,
+            "pdf_chromium": os.environ.get("CAGELEDGER_RELEASE_PDF_CHROMIUM"),
             "converter": converter_identity(),
             "npm_install": tree(repo / "node_modules/.package-lock.json"),
             "environment": {k: os.environ.get(k, "") for k in ("TZ", "LANG", "LC_ALL")},
@@ -275,6 +276,7 @@ def cases(report, engine, executed):
 
 def isolation_environment():
     converter = converter_executable(required=False)
+    pdf_browser = os.environ.get("CAGELEDGER_RELEASE_PDF_CHROMIUM")
     env = dict(os.environ)
     # Do not allow inherited application configuration to select production data/services.
     for key in list(env):
@@ -295,6 +297,9 @@ def isolation_environment():
     )
     if converter is not None:
         env["CAGELEDGER_LIBREOFFICE_BIN"] = str(converter)
+    if pdf_browser:
+        env["CAGELEDGER_CHROMIUM_BIN"] = pdf_browser
+        env["CAGELEDGER_RELEASE_PDF_CHROMIUM"] = pdf_browser
     return env
 
 
@@ -427,7 +432,21 @@ class Runner:
                     time.sleep(1)
                 require(process.returncode == 0, f"Command failed; see {output}")
             finally:
-                ownership.close(grace_seconds=10 if self.guard.reason else 160)
+                cleaned = False
+                try:
+                    ownership.close(grace_seconds=10 if self.guard.reason else 160)
+                    cleaned = True
+                finally:
+                    atomic_json(
+                        output.with_name(output.stem + "-cleanup.json"),
+                        {
+                            "leader": process.pid,
+                            "identities": ownership.identities,
+                            "remaining": sorted(ownership.live),
+                            "complete": cleaned,
+                            "ended": datetime.now(UTC).isoformat(),
+                        },
+                    )
 
 
 def ports_available(port):

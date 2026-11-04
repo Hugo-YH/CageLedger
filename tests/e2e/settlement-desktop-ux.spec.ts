@@ -1,3 +1,4 @@
+import { compatibilityCase } from "./compatibilityCases";
 import type { Page } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { expect, openBillingNavigation, openWorkflowCenter, test } from "./fixtures";
@@ -72,145 +73,157 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole("button", { name: "登录", exact: true }).click();
 });
 
-test("settlement desktop restores context and discards selections across navigation", async ({ page }) => {
-  const data = await mockCandidates(page);
-  await openSettlement(page);
-  const panel = page.getByRole("region", { name: "结算管理列表", exact: true });
-  await page.getByText("紧凑", { exact: true }).click();
-  await page.getByRole("button", { name: "项目负责人姓名，点击切换排序", exact: true }).click();
-  await page.getByLabel("每页显示条数").click();
-  await page.keyboard.press("ArrowUp");
-  await page.keyboard.press("Enter");
-  await page.locator(".ant-pagination-next").click();
-  const checkbox = page.getByRole("checkbox", { name: "选择 合成结算负责人 06 2026-09 结算项", exact: true });
-  await checkbox.check();
-  await page.getByRole("menuitem", { name: /总览/ }).click();
-  await openSettlement(page);
-  await expect(checkbox).not.toBeChecked();
-  await expect(page.locator(".ant-pagination-item-active")).toHaveText("2");
-  await expect(page.locator(".ant-pagination-options")).toContainText("5 条/页");
-  await expect(page.getByRole("radio", { name: "紧凑", exact: true })).toBeChecked();
-  expect(data.lastQuery().get("sortKey")).toBe("pi");
-  expect(data.lastQuery().get("sortDir")).toBe("asc");
-  await page.getByRole("button", { name: "筛选项目负责人姓名", exact: true }).click();
-  const filter = page.locator(".table-filter-panel:visible");
-  await filter.getByRole("checkbox", { name: /合成结算负责人 12/ }).click();
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
-  await expect(page.getByLabel("已应用筛选")).toContainText("负责人：合成结算负责人 12");
-  await page.getByRole("menuitem", { name: /总览/ }).click();
-  await openSettlement(page);
-  await expect(page.getByLabel("已应用筛选")).toContainText("负责人：合成结算负责人 12");
-  await expect(page.locator(".ant-pagination-item-active")).toHaveText("1");
-  await page.getByRole("button", { name: "清除全部筛选", exact: true }).click();
-  await expect(panel.locator(".ant-table-tbody > tr[data-row-key]")).toHaveCount(5);
-});
+test(
+  "settlement desktop restores context and discards selections across navigation",
+  compatibilityCase("settlement-context"),
+  async ({ page }) => {
+    const data = await mockCandidates(page);
+    await openSettlement(page);
+    const panel = page.getByRole("region", { name: "结算管理列表", exact: true });
+    await page.getByText("紧凑", { exact: true }).click();
+    await page.getByRole("button", { name: "项目负责人姓名，点击切换排序", exact: true }).click();
+    await page.getByLabel("每页显示条数").click();
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Enter");
+    await page.locator(".ant-pagination-next").click();
+    const checkbox = page.getByRole("checkbox", { name: "选择 合成结算负责人 06 2026-09 结算项", exact: true });
+    await checkbox.check();
+    await page.getByRole("menuitem", { name: /总览/ }).click();
+    await openSettlement(page);
+    await expect(checkbox).not.toBeChecked();
+    await expect(page.locator(".ant-pagination-item-active")).toHaveText("2");
+    await expect(page.locator(".ant-pagination-options")).toContainText("5 条/页");
+    await expect(page.getByRole("radio", { name: "紧凑", exact: true })).toBeChecked();
+    expect(data.lastQuery().get("sortKey")).toBe("pi");
+    expect(data.lastQuery().get("sortDir")).toBe("asc");
+    await page.getByRole("button", { name: "筛选项目负责人姓名", exact: true }).click();
+    const filter = page.locator(".table-filter-panel:visible");
+    await filter.getByRole("checkbox", { name: /合成结算负责人 12/ }).click();
+    await filter.getByRole("button", { name: "应用", exact: true }).click();
+    await expect(page.getByLabel("已应用筛选")).toContainText("负责人：合成结算负责人 12");
+    await page.getByRole("menuitem", { name: /总览/ }).click();
+    await openSettlement(page);
+    await expect(page.getByLabel("已应用筛选")).toContainText("负责人：合成结算负责人 12");
+    await expect(page.locator(".ant-pagination-item-active")).toHaveText("1");
+    await page.getByRole("button", { name: "清除全部筛选", exact: true }).click();
+    await expect(panel.locator(".ant-table-tbody > tr[data-row-key]")).toHaveCount(5);
+  },
+);
 
-test("settlement desktop partial batch failure retains only failures for confirmed retry", async ({ page }) => {
-  const data = await mockCandidates(page);
-  const writes: string[] = [];
-  await page.route("**/api/billing-statements/generate-by-pi", (route) => {
-    const body = route.request().postDataJSON() as { pi: string };
-    writes.push(body.pi);
-    if (body.pi === data.items[1].pi && writes.filter((pi) => pi === body.pi).length === 1) {
-      return route.fulfill({ status: 409, json: { error: "合成冲突，请核对后重试" } });
-    }
-    return route.fulfill({ json: { statement: { pi: body.pi, month: "2026-09", totalAmount: 1234.56 }, lines: [] } });
-  });
-  await openSettlement(page);
-  const first = page.getByRole("checkbox", { name: `选择 ${data.items[0].pi} 2026-09 结算项`, exact: true });
-  const second = page.getByRole("checkbox", { name: `选择 ${data.items[1].pi} 2026-09 结算项`, exact: true });
-  await first.check();
-  await second.check();
-  await page.getByRole("button", { name: "批量发起结算", exact: true }).click();
-  const confirm = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
-  // Firefox may expose the dialog before its enter transform reaches the final geometry.
-  await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
-  await confirm.getByRole("button", { name: "发起 2 个流程", exact: true }).click();
-  await expect(page.getByText(/已发起 1 个结算流程；1 个未完成/)).toBeVisible();
-  await expect(page.getByText(/合成冲突，请核对后重试/)).toBeVisible();
-  await expect(confirm).toBeHidden();
-  await expect(first).not.toBeChecked();
-  await expect(second).toBeChecked();
-  await expect(page.getByRole("group", { name: "结算批量操作", exact: true })).toContainText(
-    "已选 1 项：饲养费 1 项、技术服务费 0 项",
-  );
-  expect(writes).toEqual([data.items[0].pi, data.items[1].pi]);
-  await page.getByRole("button", { name: "发起结算流程", exact: true }).click();
-  await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
-  await confirm.getByRole("button", { name: "取消", exact: true }).click();
-  await expect(confirm).toBeHidden();
-  expect(writes).toHaveLength(2);
-  await page.getByRole("button", { name: "发起结算流程", exact: true }).click();
-  await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
-  // Ant can retain the leaving loading icon in the accessible name after reuse.
-  const retry = confirm.getByRole("button", { name: /发起 1 个流程$/ });
-  await expect(retry).not.toHaveClass(/ant-btn-loading/);
-  await retry.click();
-  await expect(page.getByRole("status").filter({ hasText: "结算流程已批量发起" })).toContainText(
-    "已发起 1 个结算流程。",
-  );
-  expect(writes).toEqual([data.items[0].pi, data.items[1].pi, data.items[1].pi]);
-  await expect(second).not.toBeChecked();
-});
+test(
+  "settlement desktop partial batch failure retains only failures for confirmed retry",
+  compatibilityCase("settlement-partial-retry"),
+  async ({ page }) => {
+    const data = await mockCandidates(page);
+    const writes: string[] = [];
+    await page.route("**/api/billing-statements/generate-by-pi", (route) => {
+      const body = route.request().postDataJSON() as { pi: string };
+      writes.push(body.pi);
+      if (body.pi === data.items[1].pi && writes.filter((pi) => pi === body.pi).length === 1) {
+        return route.fulfill({ status: 409, json: { error: "合成冲突，请核对后重试" } });
+      }
+      return route.fulfill({ json: { statement: { pi: body.pi, month: "2026-09", totalAmount: 1234.56 }, lines: [] } });
+    });
+    await openSettlement(page);
+    const first = page.getByRole("checkbox", { name: `选择 ${data.items[0].pi} 2026-09 结算项`, exact: true });
+    const second = page.getByRole("checkbox", { name: `选择 ${data.items[1].pi} 2026-09 结算项`, exact: true });
+    await first.check();
+    await second.check();
+    await page.getByRole("button", { name: "批量发起结算", exact: true }).click();
+    const confirm = page.getByRole("dialog", { name: "批量发起结算流程", exact: true });
+    // Firefox may expose the dialog before its enter transform reaches the final geometry.
+    await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
+    await confirm.getByRole("button", { name: "发起 2 个流程", exact: true }).click();
+    await expect(page.getByText(/已发起 1 个结算流程；1 个未完成/)).toBeVisible();
+    await expect(page.getByText(/合成冲突，请核对后重试/)).toBeVisible();
+    await expect(confirm).toBeHidden();
+    await expect(first).not.toBeChecked();
+    await expect(second).toBeChecked();
+    await expect(page.getByRole("group", { name: "结算批量操作", exact: true })).toContainText(
+      "已选 1 项：饲养费 1 项、技术服务费 0 项",
+    );
+    expect(writes).toEqual([data.items[0].pi, data.items[1].pi]);
+    await page.getByRole("button", { name: "发起结算流程", exact: true }).click();
+    await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
+    await confirm.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(confirm).toBeHidden();
+    expect(writes).toHaveLength(2);
+    await page.getByRole("button", { name: "发起结算流程", exact: true }).click();
+    await expect(confirm).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:[-\s]|$)/);
+    // Ant can retain the leaving loading icon in the accessible name after reuse.
+    const retry = confirm.getByRole("button", { name: /发起 1 个流程$/ });
+    await expect(retry).not.toHaveClass(/ant-btn-loading/);
+    await retry.click();
+    await expect(page.getByRole("status").filter({ hasText: "结算流程已批量发起" })).toContainText(
+      "已发起 1 个结算流程。",
+    );
+    expect(writes).toEqual([data.items[0].pi, data.items[1].pi, data.items[1].pi]);
+    await expect(second).not.toBeChecked();
+  },
+);
 
 for (const width of [1180, 1440]) {
   for (const theme of ["light", "dark"] as const) {
-    test(`desktop tables expose all columns through horizontal scrolling ${width} ${theme}`, async ({ page }, info) => {
-      await page.setViewportSize({ width, height: 900 });
-      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-      await mockCandidates(page);
-      const evidence = [];
-      for (const view of ["settlement", "workflow"] as const) {
-        if (view === "settlement") await openSettlement(page);
-        else await openWorkflowCenter(page);
-        const panel = page.getByRole("region", {
-          name: view === "settlement" ? "结算管理列表" : "结算流程列表",
-          exact: true,
-        });
-        await expect(panel.locator(".ant-table-tbody > tr[data-row-key]").first()).toBeVisible();
-        const geometry = await panel.evaluate((element) => {
-          const content = element.querySelector<HTMLElement>(".ant-table-content")!;
-          content.scrollLeft = content.scrollWidth - content.clientWidth;
-          const headers = [...element.querySelectorAll<HTMLElement>("thead th")];
-          const amount = headers.find((header) => header.innerText.includes("金额"))!;
-          const actions = headers.find((header) => header.innerText === "操作")!;
-          const text = document.querySelector<HTMLElement>("[aria-label='已应用筛选'] .ant-typography")!;
-          const icon = element.querySelector<HTMLElement>(".filterable-column-title button:last-child .anticon")!;
-          const colors = (target: HTMLElement) => {
-            const layers = [];
-            for (let node: HTMLElement | null = target; node; node = node.parentElement) {
-              const style = getComputedStyle(node);
-              layers.push({ color: style.color, background: style.backgroundColor, opacity: style.opacity });
-            }
-            return layers;
-          };
-          return {
-            viewport: innerWidth,
-            pageWidth: document.documentElement.scrollWidth,
-            scrollWidth: content.scrollWidth,
-            clientWidth: content.clientWidth,
-            scrollLeft: content.scrollLeft,
-            amount: amount.getBoundingClientRect().toJSON(),
-            actions: actions.getBoundingClientRect().toJSON(),
-            table: content.getBoundingClientRect().toJSON(),
-            secondaryText: colors(text),
-            filterIcon: colors(icon),
-          };
-        });
-        expect(geometry.pageWidth).toBeLessThanOrEqual(width);
-        expect(geometry.amount.left).toBeGreaterThanOrEqual(geometry.table.left - 1);
-        expect(geometry.amount.right).toBeLessThanOrEqual(geometry.actions.left + 1);
-        expect(geometry.actions.right).toBeLessThanOrEqual(geometry.table.right + 1);
-        expect(geometry.actions.left).toBeGreaterThanOrEqual(geometry.table.left);
-        const secondaryContrast = contrastFromLayers(geometry.secondaryText);
-        const filterContrast = contrastFromLayers(geometry.filterIcon);
-        expect(secondaryContrast).toBeGreaterThanOrEqual(4.5);
-        expect(filterContrast).toBeGreaterThanOrEqual(3);
-        evidence.push({ view, width, theme, ...geometry, secondaryContrast, filterContrast });
-      }
-      const path = info.outputPath("table-geometry-and-colors.json");
-      await writeFile(path, JSON.stringify(evidence, null, 2));
-      await info.attach("table geometry and computed colors", { path, contentType: "application/json" });
-    });
+    test(
+      `desktop tables expose all columns through horizontal scrolling ${width} ${theme}`,
+      compatibilityCase(`settlement-columns-${width}-${theme}`),
+      async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+        await mockCandidates(page);
+        const evidence = [];
+        for (const view of ["settlement", "workflow"] as const) {
+          if (view === "settlement") await openSettlement(page);
+          else await openWorkflowCenter(page);
+          const panel = page.getByRole("region", {
+            name: view === "settlement" ? "结算管理列表" : "结算流程列表",
+            exact: true,
+          });
+          await expect(panel.locator(".ant-table-tbody > tr[data-row-key]").first()).toBeVisible();
+          const geometry = await panel.evaluate((element) => {
+            const content = element.querySelector<HTMLElement>(".ant-table-content")!;
+            content.scrollLeft = content.scrollWidth - content.clientWidth;
+            const headers = [...element.querySelectorAll<HTMLElement>("thead th")];
+            const amount = headers.find((header) => header.innerText.includes("金额"))!;
+            const actions = headers.find((header) => header.innerText === "操作")!;
+            const text = document.querySelector<HTMLElement>("[aria-label='已应用筛选'] .ant-typography")!;
+            const icon = element.querySelector<HTMLElement>(".filterable-column-title button:last-child .anticon")!;
+            const colors = (target: HTMLElement) => {
+              const layers = [];
+              for (let node: HTMLElement | null = target; node; node = node.parentElement) {
+                const style = getComputedStyle(node);
+                layers.push({ color: style.color, background: style.backgroundColor, opacity: style.opacity });
+              }
+              return layers;
+            };
+            return {
+              viewport: innerWidth,
+              pageWidth: document.documentElement.scrollWidth,
+              scrollWidth: content.scrollWidth,
+              clientWidth: content.clientWidth,
+              scrollLeft: content.scrollLeft,
+              amount: amount.getBoundingClientRect().toJSON(),
+              actions: actions.getBoundingClientRect().toJSON(),
+              table: content.getBoundingClientRect().toJSON(),
+              secondaryText: colors(text),
+              filterIcon: colors(icon),
+            };
+          });
+          expect(geometry.pageWidth).toBeLessThanOrEqual(width);
+          expect(geometry.amount.left).toBeGreaterThanOrEqual(geometry.table.left - 1);
+          expect(geometry.amount.right).toBeLessThanOrEqual(geometry.actions.left + 1);
+          expect(geometry.actions.right).toBeLessThanOrEqual(geometry.table.right + 1);
+          expect(geometry.actions.left).toBeGreaterThanOrEqual(geometry.table.left);
+          const secondaryContrast = contrastFromLayers(geometry.secondaryText);
+          const filterContrast = contrastFromLayers(geometry.filterIcon);
+          expect(secondaryContrast).toBeGreaterThanOrEqual(4.5);
+          expect(filterContrast).toBeGreaterThanOrEqual(3);
+          evidence.push({ view, width, theme, ...geometry, secondaryContrast, filterContrast });
+        }
+        const path = info.outputPath("table-geometry-and-colors.json");
+        await writeFile(path, JSON.stringify(evidence, null, 2));
+        await info.attach("table geometry and computed colors", { path, contentType: "application/json" });
+      },
+    );
   }
 }

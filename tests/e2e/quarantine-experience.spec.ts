@@ -1,3 +1,4 @@
+import { compatibilityCase } from "./compatibilityCases";
 import { randomUUID } from "node:crypto";
 import type { Page, Route } from "@playwright/test";
 import { expect, openNavigationEntry, test } from "./fixtures";
@@ -222,94 +223,98 @@ test("quarantine detail and catalog failures retain navigation and retry", async
 });
 
 for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
-  test(`${method} record preserves failed save and reports upload and download progress`, async ({ page }) => {
-    test.setTimeout(60_000);
-    await login(page);
-    const { batchName, record } = await seed(page, method);
-    await openRecord(page, batchName, method);
-    let releaseDownload!: () => void;
-    const downloadGate = new Promise<void>((resolve) => {
-      releaseDownload = resolve;
-    });
-    let failDownload = true;
-    let downloads = 0;
-    await page.route(`**/api/quarantine/tests/${record.id}/preview`, async (route) => {
-      downloads += 1;
-      await downloadGate;
-      await route.fulfill(
-        failDownload
-          ? { status: 500, json: { error: "测试下载失败" } }
-          : {
-              status: 200,
-              contentType: "application/pdf",
-              headers: { "Content-Disposition": 'attachment; filename="report.pdf"' },
-              body: "test download",
-            },
+  test(
+    `${method} record preserves failed save and reports upload and download progress`,
+    compatibilityCase("elisa-upload-download", method === "elisa_mouse"),
+    async ({ page }) => {
+      test.setTimeout(60_000);
+      await login(page);
+      const { batchName, record } = await seed(page, method);
+      await openRecord(page, batchName, method);
+      let releaseDownload!: () => void;
+      const downloadGate = new Promise<void>((resolve) => {
+        releaseDownload = resolve;
+      });
+      let failDownload = true;
+      let downloads = 0;
+      await page.route(`**/api/quarantine/tests/${record.id}/preview`, async (route) => {
+        downloads += 1;
+        await downloadGate;
+        await route.fulfill(
+          failDownload
+            ? { status: 500, json: { error: "测试下载失败" } }
+            : {
+                status: 200,
+                contentType: "application/pdf",
+                headers: { "Content-Disposition": 'attachment; filename="report.pdf"' },
+                body: "test download",
+              },
+        );
+      });
+      await page.getByRole("button", { name: "下载PDF草稿", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "正在生成 PDF 草稿" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "下载PDF草稿", exact: true })).toHaveClass(/ant-btn-loading/);
+      expect(downloads).toBe(1);
+      releaseDownload();
+      await expect(page.getByRole("alert").filter({ hasText: "测试下载失败" })).toBeVisible();
+      failDownload = false;
+      const download = page.waitForEvent("download");
+      await page.getByRole("button", { name: "重试下载", exact: true }).click();
+      expect((await download).suggestedFilename()).toBe("report.pdf");
+      await expect(page.getByRole("status").filter({ hasText: "检疫报告已生成，下载已开始" })).toContainText(
+        "report.pdf",
       );
-    });
-    await page.getByRole("button", { name: "下载PDF草稿", exact: true }).click();
-    await expect(page.getByRole("status").filter({ hasText: "正在生成 PDF 草稿" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "下载PDF草稿", exact: true })).toHaveClass(/ant-btn-loading/);
-    expect(downloads).toBe(1);
-    releaseDownload();
-    await expect(page.getByRole("alert").filter({ hasText: "测试下载失败" })).toBeVisible();
-    failDownload = false;
-    const download = page.waitForEvent("download");
-    await page.getByRole("button", { name: "重试下载", exact: true }).click();
-    expect((await download).suggestedFilename()).toBe("report.pdf");
-    await expect(page.getByRole("status").filter({ hasText: "检疫报告已生成，下载已开始" })).toContainText(
-      "report.pdf",
-    );
-    await page.getByRole("button", { name: "编辑检测", exact: true }).click();
-    const material = page.getByRole("textbox", { name: "样品名称", exact: true });
-    await material.fill("测试材料");
-    let failSave = true;
-    await page.route(`**/api/quarantine/tests/${record.id}`, (route) =>
-      failSave && route.request().method() === "PUT"
-        ? route.fulfill({ status: 500, json: { error: "测试保存失败" } })
-        : route.fallback(),
-    );
-    await page.getByRole("button", { name: "保存检测草稿", exact: true }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "测试保存失败" })).toBeVisible();
-    await expect(material).toHaveValue("测试材料");
-    await expect(material).toBeEnabled();
-    failSave = false;
-    await page.getByRole("button", { name: "保存检测草稿", exact: true }).click();
-    await expect(page.getByText("当前内容已保存", { exact: true })).toBeVisible();
-    let releaseUpload!: () => void;
-    const uploadGate = new Promise<void>((resolve) => {
-      releaseUpload = resolve;
-    });
-    let failUpload = true;
-    await page.route(`**/api/quarantine/tests/${record.id}/attachments?**`, async (route) => {
-      await uploadGate;
-      if (failUpload) await route.fulfill({ status: 500, json: { error: "测试上传失败" } });
-      else await route.fallback();
-    });
-    const file = {
-      name: "record.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
-        "base64",
-      ),
-    };
-    await page.locator('input[type="file"]').setInputFiles(file);
-    await expect(page.getByRole("status").filter({ hasText: "正在保存草稿并上传原始资料" })).toBeVisible();
-    await expect(material).toBeDisabled();
-    await expect(page.getByRole("button", { name: "上传原始资料", exact: true })).toHaveClass(/ant-btn-loading/);
-    releaseUpload();
-    await expect(page.getByRole("alert").filter({ hasText: "测试上传失败" })).toBeVisible();
-    await expect(material).toHaveValue("测试材料");
-    await expect(material).toBeEnabled();
-    failUpload = false;
-    await page.locator('input[type="file"]').setInputFiles(file);
-    await expect(page.getByRole("status").filter({ hasText: "检疫原始资料已上传" })).toContainText("record.png");
-    await page.getByRole("textbox", { name: "record.png 图注", exact: true }).fill("已核对原始资料");
-    await page.getByRole("button", { name: "保存图片信息", exact: true }).click();
-    await expect(page.getByRole("status").filter({ hasText: "检疫图片信息已保存" })).toContainText("record.png");
-    await expect(page.getByRole("textbox", { name: "record.png 图注", exact: true })).toHaveValue("已核对原始资料");
-  });
+      await page.getByRole("button", { name: "编辑检测", exact: true }).click();
+      const material = page.getByRole("textbox", { name: "样品名称", exact: true });
+      await material.fill("测试材料");
+      let failSave = true;
+      await page.route(`**/api/quarantine/tests/${record.id}`, (route) =>
+        failSave && route.request().method() === "PUT"
+          ? route.fulfill({ status: 500, json: { error: "测试保存失败" } })
+          : route.fallback(),
+      );
+      await page.getByRole("button", { name: "保存检测草稿", exact: true }).click();
+      await expect(page.getByRole("alert").filter({ hasText: "测试保存失败" })).toBeVisible();
+      await expect(material).toHaveValue("测试材料");
+      await expect(material).toBeEnabled();
+      failSave = false;
+      await page.getByRole("button", { name: "保存检测草稿", exact: true }).click();
+      await expect(page.getByText("当前内容已保存", { exact: true })).toBeVisible();
+      let releaseUpload!: () => void;
+      const uploadGate = new Promise<void>((resolve) => {
+        releaseUpload = resolve;
+      });
+      let failUpload = true;
+      await page.route(`**/api/quarantine/tests/${record.id}/attachments?**`, async (route) => {
+        await uploadGate;
+        if (failUpload) await route.fulfill({ status: 500, json: { error: "测试上传失败" } });
+        else await route.fallback();
+      });
+      const file = {
+        name: "record.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+      };
+      await page.locator('input[type="file"]').setInputFiles(file);
+      await expect(page.getByRole("status").filter({ hasText: "正在保存草稿并上传原始资料" })).toBeVisible();
+      await expect(material).toBeDisabled();
+      await expect(page.getByRole("button", { name: "上传原始资料", exact: true })).toHaveClass(/ant-btn-loading/);
+      releaseUpload();
+      await expect(page.getByRole("alert").filter({ hasText: "测试上传失败" })).toBeVisible();
+      await expect(material).toHaveValue("测试材料");
+      await expect(material).toBeEnabled();
+      failUpload = false;
+      await page.locator('input[type="file"]').setInputFiles(file);
+      await expect(page.getByRole("status").filter({ hasText: "检疫原始资料已上传" })).toContainText("record.png");
+      await page.getByRole("textbox", { name: "record.png 图注", exact: true }).fill("已核对原始资料");
+      await page.getByRole("button", { name: "保存图片信息", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "检疫图片信息已保存" })).toContainText("record.png");
+      await expect(page.getByRole("textbox", { name: "record.png 图注", exact: true })).toHaveValue("已核对原始资料");
+    },
+  );
 }
 
 test("supplier history retains populated results while filtering and can retry and open reports", async ({

@@ -67,6 +67,9 @@ class VerificationScopeTests(unittest.TestCase):
                 patch.object(runtime, "OwnedProcesses") as ownership,
             ):
                 start.return_value.poll.return_value = None
+                start.return_value.pid = 123
+                ownership.return_value.identities = {}
+                ownership.return_value.live = set()
                 with self.assertRaisesRegex(RuntimeError, "memory pressure"):
                     runner.run(["test-command"], root / "command.log")
                 ownership.return_value.close.assert_called_once_with(grace_seconds=10)

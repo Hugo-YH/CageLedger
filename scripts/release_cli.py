@@ -7,7 +7,9 @@ import sys
 import tarfile
 from pathlib import Path
 
-from release_credentials import noninteractive_credentials
+from release_browsers import managed_pdf_browser
+from release_completion import Completion
+from release_credentials import noninteractive_credentials, release_api_credentials
 from release_reporting import show_status
 from release_runtime import ROOT, atomic_json, command, digest, release_lock, require, validate_build
 from release_tools import release_converter
@@ -36,6 +38,11 @@ def main(pipeline_class):
         help="Maximum independent browser groups (default: 1; resource guard may reduce 2)",
     )
     parser.add_argument("--state-dir", type=Path)
+    parser.add_argument(
+        "--source-checkout",
+        type=Path,
+        help="Protect originals and fast-forward a clean source checkout after publishing",
+    )
     parser.add_argument("--validate-build", type=Path)
     parser.add_argument(
         "--verify-only", action="store_true", help="Prepare and verify without committing/tagging/pushing"
@@ -84,40 +91,52 @@ def main(pipeline_class):
         "State must be outside checkout",
     )
     check_browser_slots(args.browser_slots, ROOT)
-    with host_task_lock(), release_lock(ROOT), noninteractive_credentials(), release_converter(ROOT):
-        guard = HostGuard(directory / "host")
-        pipeline = pipeline_class(ROOT, version, directory, guard, browser_slots=args.browser_slots, sign=args.sign)
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            signal.signal(sig, lambda _s, _f: pipeline.runner.stopping.set())
-        pipeline.preflight()
-        require(guard.admit(), guard.reason)
-        pipeline.prepare()
-        frozen = pipeline.journal.data.get("release_input")
-        require(
-            not frozen or frozen == pipeline.fingerprint(),
-            "Release input/runtime changed after commit; use a new version",
-        )
-        pipeline.stage("converter-smoke", [sys.executable, "scripts/check_release_converter.py"])
-        pipeline.stage("check", ["npm", "run", "check:steps"])
-        pipeline.stage("build", ["npm", "run", "build"], [ROOT / "web-dist", ROOT / ".vitepress/dist"])
-        pipeline.browsers()
-        package = ROOT / "dist" / f"CageLedger-offline-{version}.tar.gz"
-        pipeline.stage(
-            "package",
-            ["bash", "scripts/package_offline.sh"],
-            [package],
-            env={**pipeline.environment, "CAGELEDGER_RELEASE_BUILD_RECEIPT": str(pipeline.journal.path)},
-            inputs=[ROOT / "web-dist", ROOT / ".vitepress/dist"],
-        )
-        from release_verify_offline import archive_check
+    completed, completion = False, None
+    with host_task_lock(), release_lock(ROOT), noninteractive_credentials(), release_api_credentials(ROOT):
+        try:
+            with release_converter(ROOT) as converter_session, managed_pdf_browser(ROOT):
+                guard = HostGuard(directory / "host")
+                pipeline = pipeline_class(
+                    ROOT, version, directory, guard, browser_slots=args.browser_slots, sign=args.sign
+                )
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    signal.signal(sig, lambda _s, _f: pipeline.runner.stopping.set())
+                completion = Completion(pipeline, args.source_checkout)
+                completion.converter = converter_session
+                pipeline.preflight()
+                require(guard.admit(), guard.reason)
+                pipeline.prepare()
+                frozen = pipeline.journal.data.get("release_input")
+                require(
+                    not frozen or frozen == pipeline.fingerprint(),
+                    "Release input/runtime changed after commit; use a new version",
+                )
+                pipeline.stage("converter-smoke", [sys.executable, "scripts/check_release_converter.py"])
+                pipeline.stage("check", ["npm", "run", "check:steps"])
+                pipeline.stage("build", ["npm", "run", "build"], [ROOT / "web-dist", ROOT / ".vitepress/dist"])
+                pipeline.browsers()
+                package = ROOT / "dist" / f"CageLedger-offline-{version}.tar.gz"
+                pipeline.stage(
+                    "package",
+                    ["bash", "scripts/package_offline.sh"],
+                    [package],
+                    env={**pipeline.environment, "CAGELEDGER_RELEASE_BUILD_RECEIPT": str(pipeline.journal.path)},
+                    inputs=[ROOT / "web-dist", ROOT / ".vitepress/dist"],
+                )
+                from release_verify_offline import archive_check
 
-        with tarfile.open(package) as bundle:
-            package_safety = archive_check(bundle, ROOT)
-        atomic_json(directory / "package-safety.json", {"sha256": digest(package), **package_safety})
-        if not args.verify_only:
-            pipeline.journal.data["release_input"] = pipeline.fingerprint()
-            pipeline.journal.save()
-            pipeline.commit_and_tag()
-            if args.push:
-                pipeline.publish()
-        print(f"Release stages complete; evidence: {directory}")
+                with tarfile.open(package) as bundle:
+                    package_safety = archive_check(bundle, ROOT)
+                atomic_json(directory / "package-safety.json", {"sha256": digest(package), **package_safety})
+                if not args.verify_only:
+                    pipeline.journal.data["release_input"] = pipeline.fingerprint()
+                    pipeline.journal.save()
+                    pipeline.commit_and_tag()
+                    if args.push:
+                        pipeline.publish()
+                completed = True
+                print(f"Release stages complete; evidence: {directory}")
+        finally:
+            if completion:
+                published = completion.journal.data["stages"].get("latest", {}).get("status") == "passed"
+                completion.finish(completed, published)
