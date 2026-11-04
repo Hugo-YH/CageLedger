@@ -9,6 +9,7 @@ from server_app.domains.feedback.repository import ensure_schema as ensure_feedb
 from server_app.domains.quarantine.repository import ensure_schema as ensure_quarantine_schema
 from server_app.domains.reception.certificate_repository import ensure_schema as ensure_reception_schema
 from server_app.domains.reimbursement.migration import migrate_reimbursement_record_schema
+from server_app.domains.researchers.repository import ensure_schema as ensure_researchers_schema
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.occupancy import occupancy_structured_values, occupancy_with_snapshots
 from server_app.domains.state.persistence import assemble_state, read_applications_by_iacuc
@@ -83,6 +84,7 @@ def initialize_schema(conn):
             SchemaStep("intake-identifier-source-backfill", backfill_intake_identifiers),
             SchemaStep("intake-identifier-groups", ensure_intake_identifier_groups),
             SchemaStep("system-feature-settings", ensure_system_features),
+            SchemaStep("researcher-contacts", ensure_researchers_schema),
             SchemaStep("data-quality-registry", ensure_data_quality_schema),
             SchemaStep("quantity-transfer-links", initialize_quantity_transfer_links),
             SchemaStep("quarantine", ensure_quarantine_schema),

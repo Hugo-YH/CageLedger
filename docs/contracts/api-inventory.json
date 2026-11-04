@@ -293,12 +293,26 @@
       "transaction": "BEGIN IMMEDIATE内重读图片预约及全部编号匹配，服务端重算图片优先补充；原件引用、状态与单据主键保留",
       "audit": "原intake_batch.updated；合并另记intake_batch.recognition_merged的来源文字与字段对照，审计失败整体回滚",
       "effects": "business_write"
+    },
+    "researcher_edit": {
+      "version": "expectedUpdatedAt必填且精确匹配；冲突409",
+      "idempotency": "未变不重复审计，不自动重试过期编辑",
+      "transaction": "BEGIN IMMEDIATE内重读目标、校验版本、写人员及前后审计；失败回滚",
+      "audit": "researcher.updated保存账号及完整前后字段",
+      "effects": "business_write"
+    },
+    "researcher_import": {
+      "version": "预览令牌绑定原文件SHA及账号匹配结果的ID/版本；确认时重算，变化409",
+      "idempotency": "按actor/requestId/文件及令牌签名重放原结果，不重复新增/审计；不同内容409",
+      "transaction": "文件解析在事务外；写锁内复核全部行后整体写入，错误行/审计失败整体回滚；空白字段保留旧值，不删除文件外人员",
+      "audit": "逐人created/updated前后快照与researcher_directory.imported统计同事务写入",
+      "effects": "business_write"
     }
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
     "server_app/web/router_registry.py": "bb294930286617051da1c8cc054c698cfb73e112104be0575c5229e5cb78e4d4",
-    "server_app/web/route_registration.py": "d05acfff6e18583855cdcdc896f44a8963b0653aac470bc8312806c3fee72009",
+    "server_app/web/route_registration.py": "4ccfd221b7233e3a75ecb1bfa4ecfe9d306fcb6b23139fa1479a389ce30ceadc",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "0f2737bacd52aa9bb111c46c177d9972019ceb6fa9e8152de59dc0f8bbc4f776",
     "server_app/web/write_routes.py": "24da022f8716d711ab9769582ec1fe156317aa0eec2daacdc323a84dac4638b7",
@@ -307,6 +321,7 @@
     "server_app/web/technical_services.py": "1e1366584826fbba027c0317fb6824ae648586fc26cbac1226407c30c6e20610",
     "server_app/web/data_quality.py": "1358fd2965baae6e913f6dfd94ab8007f64a6ea23906add4b8bbb5aef1d8aa4c",
     "server_app/web/system_features.py": "841504e28e9a794d88cd9bb2c6bfa01c12458f15f71aab9db6ec6d1d5069ec89",
+    "server_app/web/researchers.py": "cc45c24c07570828ac4a8404c9e4b555fb0197e09c5ee80f73d66ee75864a8ff",
     "server_app/web/feedback.py": "5f3c5ae8649e67d0ecd3487968115d483f35ed93b229e9e776743a092e0ef6bf",
     "server_app/web/quarantine.py": "93afc305ef434e8850005181aff4eb504e4666061137c215b2bf7c663a9e85f3",
     "server_app/web/animal_inspection.py": "b92761ddca49e7bddb3814234107473db180e1b0e12e79019699ac5eb3f30493",
@@ -318,7 +333,7 @@
     "server_app/repositories/filter_options.py": "b5a05b279918d936dd7f9c99816a2f123da4fd0cb5e68199f137c2f270901774",
     "server_app/web/route_definitions/__init__.py": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     "server_app/web/route_definitions/operations.py": "92ac8da3c37c2ef9284e7e6554b5170f5b2732cd7c4ca9906af92baf6a1ef0e5",
-    "server_app/web/route_definitions/platform.py": "06c41bd29a1eb9af455115e1890a10cd52836453aceab4a0787f44cca3c338f3",
+    "server_app/web/route_definitions/platform.py": "6746910f672f9bbf86672a0737630e278cba79a82c664481b21dbd7c7f6b8653",
     "server_app/web/route_definitions/settlement.py": "6204780e4c4b085d94dc6168f670793f7f284da27dc6eab540c1fce3b83d22ed",
     "server_app/web/route_definitions/support.py": "10a50855a098b0c21dcefbaa7dd72407f05024e101b071bd245447e2be13fed9"
   },
@@ -346,6 +361,66 @@
           "response": "{item:{enabled,updatedAt}}；权限403，版本冲突409",
           "permission": "admin",
           "protection": "system_feature_write"
+        }
+      ]
+    },
+    {
+      "id": "researchers",
+      "title": "实验人员信息",
+      "permission": "login",
+      "clients": ["src/react/api/researchers.ts"],
+      "lifecycle": "supported",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/researchers",
+          "purpose": "查询独立人员目录，供页面检索和后续业务选择；同名保留多条候选",
+          "request": "q?,department?,limit:1..200,offset>=0；关键词匹配姓名/别名/账号/手机/座机/邮箱/英文名",
+          "response": "{items:Researcher[],page:{limit,offset,total},departments:string[]}；包含稳定id、通讯录账号、联系方式及updatedAt",
+          "protection": "read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/researchers/{id}",
+          "purpose": "按稳定人员ID读取最新联系方式；不修改业务历史快照",
+          "request": "人员ID",
+          "response": "{item:Researcher}；不存在404",
+          "protection": "read"
+        },
+        {
+          "method": "POST",
+          "path": "/api/researchers/contacts/resolve",
+          "purpose": "只读精确匹配姓名或完整别名，供普通笼卡打印查询最新电话；重名不自动选择",
+          "request": "{names:string[1..200]}；去首尾空白并去重，不作模糊匹配",
+          "response": "{items:[{name,status:matched|not_found|ambiguous|missing_phone,phone}]}；优先手机，其次座机；异常400；不写预约或目录",
+          "protection": "read"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/researchers/{id}",
+          "permission": "admin",
+          "purpose": "管理员更新人员资料；通讯录账号与ID不变，不创建登录账号",
+          "request": "{item:可编辑资料,expectedUpdatedAt:string}；可显式清空可选联系方式",
+          "response": "{item:Researcher}；版本缺失/冲突409",
+          "protection": "researcher_edit"
+        },
+        {
+          "method": "POST",
+          "path": "/api/researchers/import/preview",
+          "permission": "admin",
+          "purpose": "只读解析Excel并比较新增、更新、未变、异常行",
+          "request": "{filename:*.xlsx,data:纯base64}；文件<=10MiB，最多5000人，必须有姓名和账号表头",
+          "response": "{fileName,total,counts:{created,updated,unchanged,invalid},rows:[{row,sheet,account,name,action,changes,warnings,errors}],confirmationToken,canImport}；不写库",
+          "protection": "read"
+        },
+        {
+          "method": "POST",
+          "path": "/api/researchers/import",
+          "permission": "admin",
+          "purpose": "管理员确认预览后原子更新独立目录；规范账号唯一匹配，原ID保留",
+          "request": "{filename,data,confirmationToken,requestId}；再次解析并核对全部行，异常整批拒绝",
+          "response": "{total,counts,updatedAt,replayed}；过期预览/请求签名冲突409；异常输入400",
+          "protection": "researcher_import"
         }
       ]
     },
@@ -1291,7 +1366,7 @@
           "path": "/api/intake/ai-parse",
           "purpose": "解析文字及多图预约信息，按饲养需求和采购信息分别提取后核对合并",
           "request": "{rawMessage,roomNames,images?:[{name,dataUrl}]}；图片≤4张、单张≤5MiB、合计≤15MiB",
-          "response": "{item,usage,recognition?}；图片返回分类来源、提取文本、字段依据与核对提示；item分别返回purchaseOrderNo与orderNo，完整保留DC后缀",
+          "response": "{item,usage,recognition?}；图片返回分类来源、提取文本、字段依据与核对提示；item分别返回purchaseOrderNo与orderNo，完整保留DC后缀；新图片识别可含recognition.review(version=1,comparisons,reminders)，历史依据缺少该字段时兼容原展示",
           "protection": "ai"
         },
         {

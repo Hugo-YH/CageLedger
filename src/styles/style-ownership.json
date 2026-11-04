@@ -25,9 +25,16 @@
     "src/styles/features/feedback.css",
     "src/styles/features/project-home.css",
     "src/styles/features/quarantine.css",
-    "src/styles/features/technical-services.css"
+    "src/styles/features/technical-services.css",
+    "src/styles/features/researchers.css"
   ],
   "stylesheets": {
+    "src/styles/features/researchers.css": {
+      "owner": "researchers",
+      "status": "complete",
+      "scopeRoots": [".researchers-workspace", ".researcher-import-dialog", ".researcher-detail-dialog"],
+      "selectorPrefixes": [".researchers-", ".researcher-"]
+    },
     "src/styles/brand-tokens.css": {
       "owner": "shared-brand",
       "status": "complete"

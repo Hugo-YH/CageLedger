@@ -1,6 +1,25 @@
 """Platform API registrations, preserving existing matchers and handlers."""
 
 ROUTE_GROUPS = {
+    "researchers": [
+        {
+            "method": "GET",
+            "paths": ("/api/researchers", "/api/researchers/{id}"),
+            "prefix": "/api/researchers",
+            "delegate": "researchers",
+        },
+        {
+            "method": "POST",
+            "paths": (
+                "/api/researchers/import/preview",
+                "/api/researchers/import",
+                "/api/researchers/contacts/resolve",
+            ),
+            "prefix": "/api/researchers",
+            "delegate": "researchers",
+        },
+        {"method": "PUT", "paths": ("/api/researchers/{id}",), "prefix": "/api/researchers", "delegate": "researchers"},
+    ],
     "system_features": [
         {"method": "GET", "paths": ("/api/system/features",), "delegate": "system_features"},
         {"method": "PUT", "paths": ("/api/system/features",), "delegate": "system_features"},

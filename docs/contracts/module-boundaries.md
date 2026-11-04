@@ -114,6 +114,10 @@ graph TD
 
 完整逐项对照及验证边界见[本轮验收记录](../archives/hotspot-decomposition-2026-10-24/acceptance.md)。
 
+## 实验人员信息职责边界
+
+实验人员信息前端位于 `features/researchers/`，typed接口与共享类型位于 `api/researchers.ts`、`contracts/researchers.ts`。后端 `domains/researchers/` 分离表格解析、字段校验、目录查询与事务；`web/researchers.py` 先鉴权再解析文件或读取数据库。持久业务关联使用稳定人员ID，不建立第二份联系方式缓存。
+
 ## 验收标准
 
 - 页面组件通过 typed API hooks 获取服务端数据。

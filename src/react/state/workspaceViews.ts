@@ -30,6 +30,7 @@ export const WORKSPACE_VIEW_MODULES = {
   "billing-monthly-summary": "settlement",
   "workflow-center": "settlement",
   feedback: null,
+  researchers: null,
   rooms: null,
   data: null,
   "data-quality": null,

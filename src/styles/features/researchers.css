@@ -1,0 +1,45 @@
+.researchers-workspace .researchers-workspace-body,
+.researchers-workspace .researchers-list-card {
+  min-width: 0;
+}
+
+.researchers-workspace .researchers-filters {
+  width: 100%;
+  margin-bottom: var(--space-4);
+}
+
+.researchers-workspace .researchers-filters .ant-input-search {
+  width: min(360px, 100%);
+}
+
+.researchers-workspace .researchers-filters .ant-select {
+  min-width: 200px;
+}
+
+.researcher-import-dialog .researcher-dialog-content,
+.researcher-detail-dialog .researcher-dialog-content,
+.researcher-import-dialog .researcher-row-details {
+  width: 100%;
+}
+
+.researcher-detail-dialog .researcher-edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-4);
+}
+
+@media (width < 768px) {
+  .researcher-detail-dialog .researcher-edit-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .researchers-workspace .researchers-filters > .ant-space-item {
+    width: 100%;
+  }
+
+  .researchers-workspace .researchers-filters .ant-select,
+  .researchers-workspace .researchers-filters .ant-input-search {
+    width: 100%;
+    min-width: 0;
+  }
+}

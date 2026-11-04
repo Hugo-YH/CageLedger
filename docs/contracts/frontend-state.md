@@ -53,6 +53,7 @@ IACUC 搜索先去除首尾空白并转大写，再做 250ms 防抖；查询键�
 | `reimbursement-records` | 报销台账列表与详情                   |
 | `reimbursement-ledger`  | 结算应收、报销单、核销分摊和历史迁入 |
 | `users`                 | 账号                                 |
+| `researchers`           | 独立实验人员目录、检索列表及按ID详情 |
 | `principal-identities`  | PI 身份与减免配置                    |
 | `iacuc-index`           | IACUC 数据和状态                     |
 | `audit-events`          | 操作日志分页                         |

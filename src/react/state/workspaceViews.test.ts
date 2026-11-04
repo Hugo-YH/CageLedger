@@ -15,6 +15,7 @@ describe("workspace feature visibility", () => {
       expect(isViewVisible(view, hidden)).toBe(module === null);
     }
     expect(isViewVisible("system-features", hidden)).toBe(true);
+    expect(isViewVisible("researchers", hidden)).toBe(true);
     expect(isWorkspaceView("quantity-sheet-entry")).toBe(false);
   });
 
@@ -45,6 +46,7 @@ describe("workspace feature visibility", () => {
       "technical-service-saved",
       "system-features",
       "reception-list",
+      "researchers",
     ] as const) {
       persistWorkspaceView(view);
       expect(readStoredWorkspaceView()).toBe(view);

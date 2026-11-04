@@ -84,6 +84,9 @@ const SystemView = lazy(() => import("../settings/SystemView").then((module) => 
 const FeedbackView = lazy(() =>
   import("../feedback/FeedbackView").then((module) => ({ default: module.FeedbackView })),
 );
+const ResearchersView = lazy(() =>
+  import("../researchers/ResearchersView").then((module) => ({ default: module.ResearchersView })),
+);
 
 type NavIcon =
   | "tag"
@@ -175,6 +178,7 @@ function Workspace({ user }: { user: SessionUser }) {
 
   const settingsViews: Array<[WorkspaceView, string, NavIcon]> = [
     ["rooms", "房间管理", "building"],
+    ["researchers", "实验人员信息", "users"],
     ["system", "关于系统", "info"],
     ...(user.role === "admin"
       ? ([
@@ -489,6 +493,7 @@ function renderActiveView(
     return <BillingView mode="monthly-summary" user={user} navigate={navigate} />;
   if (view === "workflow-center") return <WorkflowCenterView user={user} />;
   if (view === "feedback") return <FeedbackView user={user} page={feedbackPage} />;
+  if (view === "researchers") return <ResearchersView user={user} />;
   if (view === "rooms") return <RoomsView user={user} />;
   if (view === "users") return <UsersView currentUser={user} />;
   if (view === "data") return <DataView user={user} />;
