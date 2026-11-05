@@ -9,7 +9,10 @@ const command = process.platform === "win32" ? "npx.cmd" : "npx";
 const docsPublic = path.join(root, "wiki", "public");
 
 function run(args) {
-  const result = spawnSync(command, args, { cwd: root, stdio: "inherit" });
+  const result =
+    args[0] === "node"
+      ? spawnSync(process.execPath, args.slice(1), { cwd: root, stdio: "inherit" })
+      : spawnSync(command, args, { cwd: root, stdio: "inherit" });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }

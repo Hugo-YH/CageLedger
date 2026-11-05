@@ -19,6 +19,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from release_credentials import config, record_signing, verify_signing
+from release_images import IMAGE_PLATFORMS
 from release_runtime import (
     RELEASE_FILES,
     Journal,
@@ -69,6 +70,13 @@ class Pipeline:
         self.browser_slots = browser_slots
         self.repo, self.version = repo, version
         self.journal = Journal(directory, {"repo": str(repo.resolve()), "version": version})
+        if self.journal.data["stages"].get("images") or self.journal.data.get("image_manifest"):
+            require(
+                self.journal.data.get("image_platforms") == IMAGE_PLATFORMS,
+                "Image publication state uses an obsolete architecture policy; inspect before resuming",
+            )
+        self.journal.data["image_platforms"] = list(IMAGE_PLATFORMS)
+        self.journal.save()
         self.sign = sign
         record_signing(self.journal, sign)
         self.runner = Runner(repo, guard)
@@ -172,7 +180,7 @@ class Pipeline:
             self.journal.data["latest_baseline"] = manifest_identity(self.repo, f"{IMAGE}:latest")
             self.journal.save()
         if not self.journal.data["stages"].get("images"):
-            for suffix in ("", "-arm64", "-amd64"):
+            for suffix in ("", "-arm64"):
                 require(
                     manifest_identity(self.repo, f"{IMAGE}:{self.version}{suffix}") is None,
                     "Version image already exists; inspect before testing",

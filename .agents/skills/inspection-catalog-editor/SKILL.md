@@ -13,7 +13,7 @@ description: 维护 CageLedger 巡检目录的草稿、发布、校验、参考�
 - 单草稿模型，`expectedUpdatedAt` 乐观锁，目录写入仅限管理员。
 - 发布在事务中将旧 active 转 history、draft 转 active；保留现有 `manual-` 版本生成和冲突消解规则，并记录审计。
 - 历史答案快照继续引用原目录，不因发布或图片维护被改写。
-- 图片由应用接口写入 `data/animal-inspection-images/`，保留 Docker volume、首启幂等种子迁移、JPEG/PNG/WebP 白名单和 5MB 限制。
+- 图片由应用接口写入 `server_app/config.py` 的 `ANIMAL_INSPECTION_IMAGES_PATH`（可由 `CAGELEDGER_ANIMAL_INSPECTION_IMAGES` 覆盖），保留 Docker volume、首启幂等种子迁移、JPEG/PNG/WebP 白名单和 5MB 限制。
 - 分类、子分类 code 必须与当前 schema 和表单消费端一致；扩展分类时同步消费者，不套用归档 P0 阶段的限制。
 
 ## 验证

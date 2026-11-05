@@ -11,9 +11,7 @@ docker buildx build --target frontend-deps --platform linux/arm64 \
   --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim" \
   --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
   --output type=cacheonly .
-for architecture in arm64 amd64; do
-  docker buildx build --target runtime-deps --platform "linux/${architecture}" \
+docker buildx build --target runtime-deps --platform linux/arm64 \
     --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim" \
     --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
     --output type=cacheonly .
-done

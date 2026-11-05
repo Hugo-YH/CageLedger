@@ -1,6 +1,8 @@
 # 发布与 CI-CD
 
-正式发布由版本提交、tag、Gitea Release、容器镜像和 Wiki 同步组成。
+Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。只有明确交付任务才在云端构建并上传；普通修改与代码推送不自动打包。测试证据、源码和产物对应同一最终状态及来源 revision，旧版本制品不覆盖，NAS 不自动部署。普通产物可用 Gitea Packages 的唯一开发版本托管，操作见 `docs/contracts/cloud-development.md`。备用 Runner 见 `docs/contracts/macos-gitea-runner.md`，仅手动触发。
+
+下面保留 Mac mini 受管正式发布流程，仍有平台专用转换器信任校验；当前云端 WebKit 系统库也受限，不能宣称 Linux 完整正式发布管线已全部适配。这不是云端普通打包与开发包上传的前置入口。正式发布由版本提交、tag、Gitea Release、容器镜像和 Wiki 同步组成。
 
 ## 发布顺序
 
@@ -10,18 +12,19 @@ release notes
 -> offline package
 -> commit
 -> v<version> tag
--> local multi-arch container publish
--> update latest multi-arch manifest
+-> local ARM64 container publish
 -> push main and tag
 -> local upload to Gitea Release
 -> local Gitea Wiki sync
+-> delivery/offline verification
+-> update latest ARM64 manifest
 ```
 
 版本号、提交、tag、Release、离线包和镜像保持一一对应。
 
 Git tag 与容器镜像 tag 只带版本号：Git tag 使用 `v<version>`（例如 `v1.0.0-beta7`），容器镜像 tag 使用 `<version>`（例如 `1.0.0-beta7`）；`build` 不再进入软件包 tag。
 
-容器镜像构建与推送是发布产物的固定组成部分。`--skip-container-publish` 只在交互式终端输入 `yes` 明确确认后才生效；非交互环境（脚本、CI、代理）不允许跳过，缺少 Docker 时发布流程直接失败并提示先启动 Docker。
+后续生产目标为 DS223（aarch64），仅构建离线源码包、ARM64 镜像及离线镜像包；历史 AMD64 制品不删除。受管正式发布不提供跳过必需产物的旁路；缺少 Docker 时明确失败，不将不完整构建报告为成功。
 
 ## 版本与构建标识
 
@@ -55,7 +58,7 @@ npm run release:local -- --version X.Y.Z --push
 4. `npm run package:offline`
 5. Git commit
 6. annotated tag
-7. Mac mini 本地执行多架构镜像发布并导出离线镜像包
+7. Mac mini 本地执行 ARM64 镜像发布并导出离线镜像包
 8. 推送 `main` 和新 tag
 9. 创建或更新 Gitea Release，并上传本地生成的离线包
 10. 将 Gitea Wiki 同步为 VitePress 文档迁移入口
@@ -75,9 +78,9 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 这条命令会：
 
 1. 同步 `cageledger-base` 的多架构 tag
-2. 从干净的 tag 或 HEAD worktree 构建 `amd64` 和 `arm64`
+2. 从干净的 tag 或 HEAD worktree 构建 `linux/arm64`
 3. 推送 `ddns.cellnucle.us:3333/hugo/cageledger:X.Y.Z`
-4. 将已验证的 `X.Y.Z` 多架构 manifest 同步为 `latest`
+4. 将已验证的 `X.Y.Z` ARM64 manifest 同步为 `latest`
 5. 导出 `dist/` 下的离线镜像 tar.gz
 
 构建器使用 BuildKit 缓存 npm、pip 和系统包下载；系统包与 Python 缓存按目标架构隔离。版本号或依赖变化导致安装步骤重新执行时，可复用已下载的包；缓存不进入发布镜像，清理构建器缓存或更换构建器后需要重新下载。系统包安装仍执行 `apt-get update`，基础镜像更新和依赖更新仍可能下载新版本。
@@ -90,19 +93,17 @@ npm run publish:container:local -- --version X.Y.Z --export-offline-images
 | ------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `CAGELEDGER_GITEA_TOKEN` | 本地环境变量                                | 本地创建 Release、上传离线包和同步 Wiki；缺省时复用 Git HTTPS 凭据                                                    |
 | Git HTTPS 凭据文件       | `~/.git-cageledger-credentials`（权限 600） | 后台会话与代理执行 Git fetch/push；已配置 per-host `credential.http://ddns.cellnucle.us:3333.helper store --file=...` |
-| 容器仓库凭据             | Mac mini 本地凭据                           | 本地发布多架构容器镜像                                                                                                |
+| 容器仓库凭据             | Mac mini 本地凭据                           | 本地发布 ARM64 容器镜像                                                                                               |
 
-MacBook 默认负责代码修改、针对性验证、提交和推送到 Gitea；简单修改不运行完整检查、生产构建或打包，推送不自动触发发布。Mac mini 同步待发布代码，是发布前完整检查、打标签、生产构建、制品生成与上传及 Wiki 同步的执行端。Gitea 保存 Git 代码、Wiki、Release 离线包和容器镜像，不运行 CI、打包、镜像校验或 Wiki 同步任务。
+Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。云端网络密钥通过 HTTPS 主机限定注入，使用仓库 Git 包装器；不复制到本地凭据文件。
 
-后台会话（`launchctl managername` 返回 `Background`）无法读取 macOS 登录钥匙串（`-25308`），
-因此代理或非交互终端执行发布前，确认 `~/.git-cageledger-credentials` 存在且权限为 600。
-容器镜像发布依赖 Docker 运行时：`colima status` 未运行时报错时先执行 `colima start`。
+表中 HTTP credential store、macOS 钥匙串和 Colima 仅属于原 Mac mini 发布兼容环境，不作为云端要求。镜像仓库认证独立配置，不能把 API 网络密钥当作 Docker 原始密码。
 
 ## 本地发布门禁
 
-发布脚本默认执行 `npm run verify:full`，覆盖基础质量检查、生产构建、Chromium 完整回归和 Firefox／WebKit 桌面兼容专项。Chromium 使用独立的 `5183/5184` 端口和临时 SQLite，桌面兼容专项使用另外两组独立端口，详见 `docs/contracts/testing-strategy.md`。Mac mini 继续执行 API 冒烟、PDF/打印验收和多架构镜像构建。
+发布脚本默认执行 `npm run verify:full`，覆盖基础质量检查、生产构建、Chromium 完整回归和 Firefox／WebKit 桌面兼容专项。Chromium 使用独立的 `5183/5184` 端口和临时 SQLite，桌面兼容专项使用另外两组独立端口，详见 `docs/contracts/testing-strategy.md`。Mac mini 继续执行 API 冒烟、PDF/打印验收和ARM64 镜像构建。
 
-`--skip-full-verify` 只将发布前验证改为 `npm run check`，仍会打包、提交和创建标签；仅在同一最终代码状态已完成完整验证且尚未创建目标 tag 时使用。本地或远端已有同版本 tag 时，发布脚本会退出，不能用此参数续传。
+受管入口按输入指纹复用完整且有效的成功证据，不提供跳过门禁的旁路。失败、运行时改变或远端结果不明时按状态目录续接和核对，不覆盖已有标签或制品。
 
 ## 上传中断后的续传
 
@@ -131,7 +132,7 @@ bash scripts/sync_wiki_local.sh
 - `git tag --list 'vX.Y.Z'` 存在新 tag，且正式 tag 的提交位于 `main`。
 - Gitea Release 显示对应版本和离线包。
 - `ddns.cellnucle.us:3333/hugo/cageledger:X.Y.Z` 可以拉取。
-- `ddns.cellnucle.us:3333/hugo/cageledger:latest` 与最新正式版本具有相同的 `amd64`、`arm64` manifest。
+- `ddns.cellnucle.us:3333/hugo/cageledger:latest` 与最新正式版本具有相同的 `linux/arm64` manifest。
 - `/api/health` 返回对应版本和 revision。
 - 系统更新检查识别最新 Release。
 - `/docs/` 显示本次文档变更，Gitea Wiki 显示迁移入口。

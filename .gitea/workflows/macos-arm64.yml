@@ -1,0 +1,42 @@
+name: Optional Mac mini ARM64 development packages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: macos-arm64
+    timeout-minutes: 120
+    steps:
+      - uses: builtin:checkout
+      - name: Prepare pinned project tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:$PATH"
+          node -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a!==22||b<12) process.exit(1)'
+          npx --yes --package npm@11.21.1 npm ci --no-audit --no-fund
+          uv venv --python python3.13 --allow-existing .venv
+          uv pip install --python .venv/bin/python pip -r requirements-dev.txt
+      - name: Check and build development packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/opt/homebrew/opt/node@22/bin:$PWD/.venv/bin:/opt/homebrew/bin:$PATH"
+          export CAGELEDGER_PYTHON_BIN="$PWD/.venv/bin/python"
+          export CAGELEDGER_BUILDX_BUILDER="$(docker context show)"
+          export CAGELEDGER_BUILD_PRUNE=0
+          npm run typecheck
+          npm run check:architecture -- --enforce
+          npm run package:managed
+      - name: Save source and ARM64 packages
+        uses: https://github.com/actions/upload-artifact@v4
+        with:
+          name: cageledger-arm64-${{ gitea.sha }}
+          path: |
+            dist/CageLedger-offline-*.tar.gz
+            dist/CageLedger-image-*-arm64.tar.gz
+            dist/CageLedger-image-*-load.txt
+            dist/CageLedger-image-*-sha256.txt
+          if-no-files-found: error
+          compression-level: 0

@@ -392,11 +392,10 @@ class PipelineSimulationTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
     def test_publish_order_and_partial_remote_ref_resume(self):
+        image_manifest = {"schemaVersion": 2, "config": {"digest": "sha256:" + "a" * 64}}
         self.pipeline.branch = "main"
         self.pipeline.preflight_remote = "new"
-        self.pipeline.journal.data.update(
-            commit="new", image_manifest=rt.hashed({"version": "image"}), latest_baseline="old"
-        )
+        self.pipeline.journal.data.update(commit="new", image_manifest=rt.hashed(image_manifest), latest_baseline="old")
         (self.root / "package.json").write_text(json.dumps({"version": "1.2.3", "build": 1}))
         log = self.root / "image.log"
         log.write_text("passed")
@@ -417,7 +416,7 @@ class PipelineSimulationTests(unittest.TestCase):
 
         def command(args, *unused, **kwargs):
             if args[:4] == ["docker", "buildx", "imagetools", "inspect"]:
-                return json.dumps({"version": "image"})
+                return json.dumps(image_manifest)
             if args[:2] == ["git", "rev-parse"]:
                 return "tag-object"
             return ""
@@ -442,7 +441,7 @@ class PipelineSimulationTests(unittest.TestCase):
         with (
             patch.object(delivery, "Client", return_value=client),
             patch.object(delivery, "gitea_authorization", return_value="test"),
-            patch("release_images.remote_manifest", return_value={"version": "image"}),
+            patch("release_images.remote_manifest", return_value=image_manifest),
             patch.object(rp, "remote_ref", side_effect=lambda _repo, ref: remote[ref]),
             patch.object(rp, "command", side_effect=command),
             patch.object(
@@ -502,6 +501,20 @@ class PipelineSimulationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Partial image"):
                 self.pipeline.publish()
         self.pipeline.runner.run.assert_not_called()
+
+    def test_legacy_image_state_cannot_resume_under_arm64_policy(self):
+        self.pipeline.journal.begin("images", "source-runtime", mutation=True)
+        self.pipeline.journal.data.pop("image_platforms")
+        self.pipeline.journal.save()
+        with self.assertRaisesRegex(RuntimeError, "obsolete architecture policy"):
+            rp.Pipeline(self.root, "1.2.3", self.root / "evidence", Mock())
+
+    def test_explicit_old_dual_architecture_policy_cannot_resume(self):
+        self.pipeline.journal.begin("images", "source-runtime", mutation=True)
+        self.pipeline.journal.data["image_platforms"] = ["linux/arm64", "linux/amd64"]
+        self.pipeline.journal.save()
+        with self.assertRaisesRegex(RuntimeError, "obsolete architecture policy"):
+            rp.Pipeline(self.root, "1.2.3", self.root / "evidence", Mock())
 
 
 class RemoteAndProcessSafetyTests(unittest.TestCase):
@@ -646,19 +659,41 @@ class RemoteAndProcessSafetyTests(unittest.TestCase):
                 runner.run(["anything"], Path("/tmp/unused.log"))
             start.assert_not_called()
 
-    def test_dual_arch_and_annotated_tag_contracts(self):
+    def test_arm64_only_and_annotated_tag_contracts(self):
         manifest = {
             "manifests": [
                 {"platform": {"os": "linux", "architecture": arch}, "digest": "sha256:" + char * 64}
-                for arch, char in (("arm64", "a"), ("amd64", "b"))
+                for arch, char in (("arm64", "a"),)
             ]
         }
-        self.assertEqual(set(delivery.manifest_platforms(manifest)), {"arm64", "amd64"})
-        manifest["manifests"].pop()
+        self.assertEqual(set(delivery.manifest_platforms(manifest)), {"arm64"})
+        manifest["manifests"].append(
+            {"platform": {"os": "linux", "architecture": "amd64"}, "digest": "sha256:" + "b" * 64}
+        )
         with self.assertRaises(RuntimeError):
             delivery.manifest_platforms(manifest)
         with self.assertRaises(RuntimeError):
             delivery.parse_remote_refs("a" * 40 + "\trefs/tags/v1.2.3", "1.2.3", "a" * 40, ["main"])
+
+    def test_single_image_manifest_uses_its_verified_arm64_config_and_pinned_digest(self):
+        manifest = {"schemaVersion": 2, "config": {"digest": "sha256:" + "b" * 64}}
+        digest = "sha256:" + "a" * 64
+        with patch.object(
+            delivery,
+            "command",
+            side_effect=[
+                json.dumps(manifest),
+                digest,
+                json.dumps(manifest),
+                json.dumps({"os": "linux", "architecture": "arm64"}),
+            ],
+        ) as read:
+            self.assertEqual(delivery.release_platforms("registry:3333/hugo/cageledger:1.2.3"), {"arm64": digest})
+        self.assertEqual(read.call_args_list[-1].args[0][-1], "registry:3333/hugo/cageledger@" + digest)
+        with self.assertRaisesRegex(RuntimeError, "must be Linux ARM64"):
+            delivery.manifest_platforms(
+                manifest, image_config={"os": "linux", "architecture": "amd64"}, image_digest=digest
+            )
 
     def test_environment_template_must_be_committed_and_identical(self):
         offline.validate_public_env_template(b"PUBLIC=yes", b"PUBLIC=yes", tracked=True, committed=b"PUBLIC=yes")

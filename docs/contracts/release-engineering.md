@@ -1,6 +1,12 @@
 # 发布工程
 
-Mac mini 执行发布，MacBook 负责日常开发与针对性验证。发布不会操作生产服务、原始数据库或附件；生产部署需要单独授权。测试范围与资源预算以 [测试策略](testing-strategy.md) 为准。
+Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。新产物仅包含离线源码包和 `linux/arm64` 镜像／离线镜像包；历史 AMD64 版本保持不变。备用 Runner 见 [macos-gitea-runner.md](macos-gitea-runner.md)，只接受手动任务。云端本地打包、授权上传和生产部署分开处理，操作见 [cloud-development.md](cloud-development.md)。本文的 `release:local` 保留原 Mac mini 受管发布流程及其平台专用校验。发布不会操作生产服务、原始数据库或附件；生产部署需要单独授权。测试范围与资源预算以 [测试策略](testing-strategy.md) 为准。
+
+## 普通构建交付与正式发布
+
+普通修改按影响范围验证；只有明确交付任务才在云端构建并向 Gitea 上传软件包。测试证据、构建源码与产物必须对应同一最终状态和来源 revision。普通开发产物可使用 Gitea Packages 的唯一开发版本，附来源清单、源码包、ARM64 镜像包及 SHA256；同名远端文件仅在哈希一致时复用，冲突停止，不覆盖历史制品，不自动部署 NAS。
+
+下文的完整 `release:local` 管线保留 Mac 平台转换器信任校验；当前云端 WebKit 系统库受限，Linux 完整正式发布管线尚不能宣称已全部适配。开发包上传不能替代正式 Release 所需门禁、版本与标签核对。
 
 ## 先诊断，再发布
 
@@ -79,6 +85,6 @@ npm run release:local -- --version X.Y.Z --push --state-dir /absolute/path/to/re
 - 发布阶段 `unknown`：先核对远端。部分镜像、草稿、附件或冲突引用不得自动覆盖、重新 POST 或删除。
 - 只有远端提交、标签、Release 正文与附件哈希、镜像、Wiki 和隔离冒烟均验证完成，才报告交付成功。生产部署状态另行说明。
 
-受管镜像上传按架构先构建并加载本地镜像，核对平台、版本和来源提交，在 `image-publication/image-publication.json` 落盘 config digest 后才 push。config digest 从同次构建的临时 OCI 导出读取，并与 Buildx 元数据和加载身份交叉核对；不把 Docker inspect 的 ID 一律当作 config digest。身份落盘后删除额外 OCI tar，保留小型凭据。恢复时逐项核对远端 config digest；已一致的架构不重建、不重推，只继续缺失部分。合并索引也核对两个架构的构建身份。远端已有但没有预 push 凭据、摘要冲突、未知网络响应、待推送本地镜像已变更/丢失或历史旧上传状态继续停止，不收养、不覆盖。离线镜像导出可以重新执行，不改变远端标签；`latest` 仍在完整交付核验后更新。手工 `publish:container:local` 入口保持独立，正式续传使用受管入口。
+受管镜像上传按架构先构建并加载本地镜像，核对平台、版本和来源提交，在 `image-publication/image-publication.json` 落盘 config digest 后才 push。config digest 从同次构建的临时 OCI 导出读取，并与 Buildx 元数据和加载身份交叉核对；不把 Docker inspect 的 ID 一律当作 config digest。身份落盘后删除额外 OCI tar，保留小型凭据。恢复时逐项核对远端 config digest；已一致的架构不重建、不重推，只继续缺失部分。版本索引仅包含 `linux/arm64`，并核对该架构的构建身份。恢复状态必须匹配当前 ARM64 目标，不能复用旧双架构上传凭据。远端已有但没有预 push 凭据、摘要冲突、未知网络响应、待推送本地镜像已变更/丢失或历史旧上传状态继续停止，不收养、不覆盖。离线镜像导出可以重新执行，不改变远端标签；`latest` 仍在完整交付核验后更新。手工 `publish:container:local` 入口保持独立，正式续传使用受管入口。
 
 每个受管子进程保存 `*-cleanup.json`，按 PID 和启动时间记录拥有的进程及退出核对，不按名称结束其他 Chrome。成功、失败或中断均生成 `release-summary.json`，包含阶段、资源采样、进程/临时容器退出、转换器挂载、可选原件比对和同步结果。收尾失败保留已发布事实并标记 `finalization_incomplete`；不能只凭制品已上传就声称整轮收尾成功。没有指定源检出时，汇总不声明已核对开发目录原件。

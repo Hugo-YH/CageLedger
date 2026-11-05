@@ -26,7 +26,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 | 任务                     | 入口与按需契约                                                                                                                                                                                    |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 首次安装、启动、分支     | [CONTRIBUTING.md](CONTRIBUTING.md)；Node 版本见 `.nvmrc`，Python 见 `.python-version`                                                                                                             |
+| 首次安装、启动、分支     | [CONTRIBUTING.md](CONTRIBUTING.md)；Node 版本见 `.nvmrc`，Python 见 `.python-version`；云端入口见 [cloud-development.md](docs/contracts/cloud-development.md)                                     |
 | 模块定位、跨层修改       | [module-boundaries.md](docs/contracts/module-boundaries.md)；前端 `src/react/features/`，后端 `server_app/domains/`，`server.py` 为装配及兼容入口                                                 |
 | React 状态、Query、请求  | [frontend-state.md](docs/contracts/frontend-state.md)、[api-contracts.md](docs/contracts/api-contracts.md)；请求在 `src/react/api/`，新类型在 `src/contracts/`                                    |
 | UI、表单、弹窗、布局     | [ui-component-standard.md](docs/contracts/ui-component-standard.md)、[ui-interaction-system.md](docs/contracts/ui-interaction-system.md)、[style-ownership.md](docs/contracts/style-ownership.md) |
@@ -64,17 +64,17 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 - UI 使用 Ant Design 组件与唯一主题定义，视觉尺度、对比度及响应式规则见 `docs/contracts/antd-design-language.md`。布局以 `src/styles/style-ownership.json` 登记的唯一来源为准，`src/styles.css` 仅作导入入口。
 - UI 验证按测试契约区分局部小改与结构性改动；文案、间距、提示位置等小改默认只确认受影响页面，不默认四档视口、截图矩阵或完整回归。通知和确认使用站内组件。
 - 结算汇总表同时检查 `src/react/print/settlement.ts` 与 `server_app/pdf/documents.py`，保留前端和 Python 的等价回归，尤其是跨页汇总。
-- 日常修改、提交和推送只做与改动相关的验证；简单修改不运行完整 `npm run check`、`npm run verify:full`、生产构建或打包。结算、权限、迁移等高风险改动按影响范围补充回归，不因提交而自动升级为全量检查。完整检查放到发布前，由 Mac mini 执行；同一最终代码状态已通过的结果可复用，发布脚本必需的校验仍保留。所有文件修改完成后运行一次 `git diff --check`。具体范围以 [测试策略](docs/contracts/testing-strategy.md) 为准。
+- 日常修改、提交和推送只做与改动相关的验证；简单修改不运行完整 `npm run check`、`npm run verify:full`、生产构建或打包。结算、权限、迁移等高风险改动按影响范围补充回归，不因提交而自动升级为全量检查。完整检查放到发布前或明确要求时，由具备依赖的受管云端执行；Mac mini 可选手动备用；同一最终代码状态已通过的结果可复用，发布脚本必需的校验仍保留。所有文件修改完成后运行一次 `git diff --check`。具体范围以 [测试策略](docs/contracts/testing-strategy.md) 为准。
 
 ## Skill 与发布边界
 
-按实际能力选择技能，不固定串联。Ant API 查询用 `antd`；CageLedger UI 一致性审查用 `antd-ui-audit`；巡检目录草稿、发布或图片维护用 `inspection-catalog-editor`。动画审查、设计方案、选库等专项技能只在对应需求下使用，具体路由见各 Skill 描述。复杂跨模块工作可用 `spec-driven-develop`，普通修改不因关键词触发完整规划流程。
+按实际能力选择技能，不固定串联。Ant API 查询用 `antd`；CageLedger UI 一致性审查用 `antd-ui-audit`；巡检目录草稿、发布或图片维护用 `inspection-catalog-editor`。动画审查、设计方案、选库等专项技能只在对应需求下使用，具体路由见各 Skill 描述。复杂跨模块工作在会话提供时可用 `spec-driven-develop`，普通修改不因关键词触发完整规划流程。
 
-发布源头是 `package.json`，版本由 `scripts/set_version.mjs` 同步；更新说明写入 `wiki/更新日志.md`，运行 `npm run release:notes:sync` 生成系统记录。正式上游为 `http://ddns.cellnucle.us:3333/hugo/cageledger`，镜像为 `ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
+发布源头是 `package.json`，版本由 `scripts/set_version.mjs` 同步；更新说明写入 `wiki/更新日志.md`，运行 `npm run release:notes:sync` 生成系统记录。云端 Git/API 使用 `https://git.cellnucle.us/hugo/cageledger`，兼容原 HTTP 直连入口，镜像为 `ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
 
-MacBook 默认负责修改代码、针对性验证、提交并推送到 Gitea；推送代码不代表授权发布，不自动连接 Mac mini 执行完整检查或发布。交付时说明提交、验证结果及留待发布验证的项目。
+Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。按用户授权执行提交、推送和上传；推送代码、构建软件包、发布环境与生产部署是独立操作。云端流程见 [cloud-development.md](docs/contracts/cloud-development.md)。
 
-Mac mini 负责从 Gitea 同步待发布代码、发布前完整检查、版本与标签、构建打包、镜像及 Release 上传和 Wiki 同步。完整门禁按 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置受管执行，一次只运行一组浏览器，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
+生产目标为群晖 DS223（aarch64），后续只构建 `linux/arm64`：保留离线源码包、ARM64 镜像和离线镜像包，历史 AMD64 制品不删除。仅在明确交付任务中执行构建和上传，普通修改与代码推送不自动打包。构建、测试证据和上传产物对应同一源码状态及来源 revision；开发产物可用 Gitea Packages 的唯一开发版本托管，不覆盖旧版本，不自动部署 NAS。可选 Runner 见 [macos-gitea-runner.md](docs/contracts/macos-gitea-runner.md)，只接受手动触发。Mac mini 受管正式发布入口及平台专用校验保留，不能据此宣称 Linux 完整正式发布已适配；其资源配置见 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置。云端按 cgroup 配额受管执行，一次只运行一组浏览器，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。完整正式发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
 
 ## 测试执行约束
 

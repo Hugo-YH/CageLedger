@@ -7,9 +7,11 @@ FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend-deps
 WORKDIR /build
 
 COPY package.json package-lock.json ./
-COPY scripts/retry_command.sh ./scripts/retry_command.sh
+COPY scripts/retry_command.sh scripts/with_build_ca.sh ./scripts/
 RUN --mount=type=cache,id=cageledger-npm,target=/root/.npm,sharing=locked \
-    bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --no-audit \
+    --mount=type=secret,id=proxy_ca \
+    --mount=type=secret,id=ca_bundle \
+    bash scripts/with_build_ca.sh bash scripts/retry_command.sh npm ci --legacy-peer-deps --prefer-offline --no-audit \
     --fetch-retries=5 --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=120000
 
 FROM frontend-deps AS frontend
@@ -19,17 +21,23 @@ COPY assets ./assets
 COPY src ./src
 COPY server_app/resources/intake ./server_app/resources/intake
 COPY wiki ./wiki
-RUN CAGELEDGER_DOCS_LAST_UPDATED=false npm run build
+RUN --mount=type=secret,id=proxy_ca \
+    --mount=type=secret,id=ca_bundle \
+    bash scripts/with_build_ca.sh env CAGELEDGER_DOCS_LAST_UPDATED=false npm run build
 
 FROM ${PYTHON_IMAGE} AS runtime-deps
 ARG TARGETARCH
 
 WORKDIR /app
 
+COPY scripts/with_build_ca.sh ./scripts/with_build_ca.sh
 RUN --mount=type=cache,id=cageledger-apt-archives-${TARGETARCH},target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=cageledger-apt-lists-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=secret,id=proxy_ca \
+    --mount=type=secret,id=ca_bundle \
+    bash scripts/with_build_ca.sh bash -c '\
     if [ -f /etc/apt/apt.conf.d/docker-clean ]; then mv /etc/apt/apt.conf.d/docker-clean /tmp/cageledger-docker-clean; fi \
-    && sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i "s|http://deb.debian.org|https://deb.debian.org|g" /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         chromium \
@@ -37,12 +45,14 @@ RUN --mount=type=cache,id=cageledger-apt-archives-${TARGETARCH},target=/var/cach
         poppler-utils \
         fontconfig \
         fonts-noto-cjk \
-    && if [ -f /tmp/cageledger-docker-clean ]; then mv /tmp/cageledger-docker-clean /etc/apt/apt.conf.d/docker-clean; fi
+    && if [ -f /tmp/cageledger-docker-clean ]; then mv /tmp/cageledger-docker-clean /etc/apt/apt.conf.d/docker-clean; fi'
 
 COPY requirements.txt ./
 COPY scripts/retry_command.sh ./scripts/retry_command.sh
 RUN --mount=type=cache,id=cageledger-pip-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
-    bash scripts/retry_command.sh pip install --retries 5 --timeout 60 \
+    --mount=type=secret,id=proxy_ca \
+    --mount=type=secret,id=ca_bundle \
+    bash scripts/with_build_ca.sh bash scripts/retry_command.sh pip install --retries 5 --timeout 60 \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     -r requirements.txt
 

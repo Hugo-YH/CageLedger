@@ -25,6 +25,7 @@ from functools import lru_cache
 from pathlib import Path
 from uuid import uuid4
 
+from release_endpoints import DEFAULT_GITEA_URL, HTTPS_GITEA_URL, REPOSITORY_PATH, gitea_url
 from release_reporting import progress
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -483,7 +484,9 @@ def database_probe(port, receipt):
 
 def official_origin(url):
     return url.removesuffix(".git") in {
-        "http://ddns.cellnucle.us:3333/hugo/cageledger",
+        DEFAULT_GITEA_URL + REPOSITORY_PATH,
+        HTTPS_GITEA_URL + REPOSITORY_PATH,
+        gitea_url() + REPOSITORY_PATH,
         "git@git.cellnucle.us:hugo/cageledger",
         "ssh://git@git.cellnucle.us/hugo/cageledger",
     }

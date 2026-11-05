@@ -1,6 +1,6 @@
 # 参与 CageLedger 开发
 
-本文说明本地环境、代码边界、质量检查和提交要求。业务口径以 `AGENTS.md` 和 `docs/contracts/` 为准。
+本文说明开发环境、代码边界、质量检查和提交要求。日常开发、验收和定向测试以 [Codex 云端开发](docs/contracts/cloud-development.md) 为入口；明确交付任务的软件包也由云端构建，代码及 ARM64 产物推送到 Gitea。[Mac mini Runner](docs/contracts/macos-gitea-runner.md) 仅作可选手动备用。业务口径以 `AGENTS.md` 和 `docs/contracts/` 为准。
 
 ## 环境
 
@@ -83,11 +83,11 @@ npm run typecheck
 
 ## 验证
 
-按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 分级验收、结算双渲染和性能历史要求。相关小改集中完成后统一验证；纯文档修改只检查相关文档。日常提交和推送不要求完整检查，简单修改不执行全量测试、生产构建或打包；高风险改动保留受影响业务的回归。完整检查在 Mac mini 发布前执行，未受后续改动影响的成功结果可复用。
+按 [测试策略](docs/contracts/testing-strategy.md) 选择与改动相关的检查；该文件统一维护验证矩阵、UI 分级验收、结算双渲染和性能历史要求。相关小改集中完成后统一验证；纯文档修改只检查相关文档。日常提交和推送不要求完整检查，简单修改不执行全量测试、生产构建或打包；高风险改动保留受影响业务的回归。完整检查在 Codex 云端发布前或明确要求时执行，未受后续改动影响的成功结果可复用。
 
 代理指令与 Skills 的维护约定见 [agent-instructions.md](docs/contracts/agent-instructions.md)。
 
-Mac mini 发布前的基础质量检查：
+发布前的受管基础质量检查：
 
 ```bash
 npm run check
@@ -105,7 +105,7 @@ Mac mini（M4 16GB）固定单组浏览器和单 worker；`check`、`verify:full
 
 共享 Python 启动入口会先验证3.13，再执行测试、核查或开发任务；显式覆盖不能绕过版本要求。同一Node进程对同一路径只探测一次，避免开发启动重复探测。
 
-MacBook 默认完成修改、针对性验证、提交并推送到 Gitea。Mac mini 同步待发布代码，负责完整检查、标签、构建、打包、Release 和镜像发布。Gitea 托管代码和发布产物，不承担发布验证与构建；代码推送不自动触发 Mac mini 完整检查或发布。
+Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。备用 Runner 部署见 [Mac mini Gitea Runner](docs/contracts/macos-gitea-runner.md)，工作流仅手动触发。提交、推送、上传、发布与部署按各自授权执行；构建入口和现有 Mac mini 发布兼容边界见 [云端开发](docs/contracts/cloud-development.md)。
 
 ## 可访问性
 
@@ -117,7 +117,7 @@ MacBook 默认完成修改、针对性验证、提交并推送到 Gitea。Mac mi
 
 ## 发布
 
-以下步骤在 Mac mini 执行；MacBook 日常提交和推送不执行这些步骤。
+明确交付任务使用 `npm run package:managed` 受管打包，串行生成离线源码包和 ARM64 离线镜像；普通开发修改不自动打包。测试、构建与上传必须对应同一源码状态和来源 revision，旧版本产物不覆盖，NAS 不自动部署。普通开发产物可保存到 Gitea Packages 的唯一开发版本，不等同于正式 Release。单项入口为 `package:offline`、`package:container`。以下为保留的 Mac mini 受管发布流程；其平台专用转换器校验仍然有效，不作为云端普通构建的前置条件。
 
 1. 在 `wiki/更新日志.md` 增加版本、日期和面向使用者的说明，再运行 `npm run release:notes:sync`。
 2. 正式版本在 `main` 上发布，预发布经 `beta → rc → main` 推进。

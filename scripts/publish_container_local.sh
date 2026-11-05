@@ -144,34 +144,29 @@ docker buildx build \
   --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
   --build-arg CAGELEDGER_APP_VERSION="${VERSION}" \
   --build-arg CAGELEDGER_REVISION="${REVISION}" \
+  --provenance=false \
   -t "${IMAGE_REPO}:${IMAGE_TAG}-arm64" \
-  --push \
-  "${WORKTREE_DIR}"
-
-docker buildx build \
-  --platform linux/amd64 \
-  --build-arg NODE_IMAGE="${BASE_REPO}:node-22-bookworm-slim" \
-  --build-arg PYTHON_IMAGE="${BASE_REPO}:python-3.13-slim" \
-  --build-arg CAGELEDGER_APP_VERSION="${VERSION}" \
-  --build-arg CAGELEDGER_REVISION="${REVISION}" \
-  -t "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
   --push \
   "${WORKTREE_DIR}"
 
 docker buildx imagetools create \
   -t "${IMAGE_REPO}:${IMAGE_TAG}" \
-  "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
   "${IMAGE_REPO}:${IMAGE_TAG}-arm64" >/dev/null
 
-verify_multi_arch_manifest() {
+verify_arm64_manifest() {
   local image_ref="$1"
-  local manifest
-  manifest="$(docker buildx imagetools inspect "${image_ref}")"
-  grep -q 'Platform:.*linux/amd64' <<<"${manifest}"
-  grep -q 'Platform:.*linux/arm64' <<<"${manifest}"
+  docker buildx imagetools inspect --raw "${image_ref}" | node --input-type=module -e '
+    let text = "";
+    for await (const chunk of process.stdin) text += chunk;
+    const entries = JSON.parse(text).manifests || [];
+    const images = entries.filter(({ platform = {} }) => platform.os !== "unknown" || platform.architecture !== "unknown");
+    if (images.length !== 1 || images[0].platform?.os !== "linux" || images[0].platform?.architecture !== "arm64") {
+      throw new Error("Release image must contain only Linux ARM64");
+    }
+  '
 }
 
-verify_multi_arch_manifest "${IMAGE_REPO}:${IMAGE_TAG}"
+verify_arm64_manifest "${IMAGE_REPO}:${IMAGE_TAG}"
 
 # Managed releases advance latest only after Git, Release and delivery verification.
 if [[ "${DEFER_LATEST}" -eq 0 ]]; then
@@ -179,7 +174,7 @@ if [[ "${DEFER_LATEST}" -eq 0 ]]; then
     -t "${IMAGE_REPO}:${LATEST_TAG}" \
     "${IMAGE_REPO}:${IMAGE_TAG}" >/dev/null
 
-  verify_multi_arch_manifest "${IMAGE_REPO}:${LATEST_TAG}"
+  verify_arm64_manifest "${IMAGE_REPO}:${LATEST_TAG}"
 fi
 
 if [[ "${EXPORT_OFFLINE_IMAGES}" -eq 1 ]]; then
@@ -191,8 +186,7 @@ if [[ "${EXPORT_OFFLINE_IMAGES}" -eq 1 ]]; then
     --image-name "${IMAGE_NAME}" >/dev/null
 fi
 
-printf '%s\n%s\n%s\n%s\n' \
+printf '%s\n%s\n%s\n' \
   "${IMAGE_REPO}:${IMAGE_TAG}" \
-  "${IMAGE_REPO}:${IMAGE_TAG}-amd64" \
   "${IMAGE_REPO}:${IMAGE_TAG}-arm64" \
   "${IMAGE_REPO}:${LATEST_TAG}"

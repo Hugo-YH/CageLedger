@@ -13,7 +13,7 @@
 - 首次启动立即修改缺省管理员密码 `admin / admin123`。
 - 生产环境通过环境变量设置 `CAGELEDGER_ADMIN_USERNAME` 和 `CAGELEDGER_ADMIN_PASSWORD`。
 - Gitea Token、容器凭据和反向代理证书保存在部署环境或 Gitea Secrets。
-- `CAGELEDGER_GITEA_TOKEN` 使用只读仓库权限，仅供私有仓库更新检查。
+- 应用更新检查使用只读仓库权限；反馈同步按功能授予所需工单权限。云端开发及发布凭据与应用凭据分别配置，遵循最小权限；网络密钥限定 HTTPS 目标主机，不写入 Git 配置、报告或制品。
 - `/app/data` 挂载到受控目录并纳入备份；SQLite、WAL 和 SHM 文件按同一备份策略处理。
 - 公网部署启用 HTTPS、安全 Cookie 边界和可信反向代理。
 
@@ -31,4 +31,4 @@
 - API 输入按类型、范围和权限校验，错误响应避免泄露路径、SQL 和堆栈。
 - SQL 使用参数绑定。
 - 日志记录业务动作和必要标识，避免写入口令、Session Cookie 和 Token。
-- 安全相关改动运行 `npm run check`、API 冒烟和相关 Playwright 回归。
+- 安全相关改动按 `docs/contracts/testing-strategy.md` 覆盖受影响权限、API、持久化及相关 Playwright 回归；跨域风险或发布前执行完整受管检查。

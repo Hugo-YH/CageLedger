@@ -295,13 +295,16 @@ class ImagePublicationRecoveryTests(unittest.TestCase):
             ]
         )
 
-    def test_one_completed_architecture_resumes_only_missing_architecture(self):
-        self.harness.fail_build = "amd64"
+    def test_arm64_interrupted_build_resumes_without_touching_historical_amd64(self):
+        historical = self.harness.reference("amd64")
+        historical_manifest = self.harness.manifest("sha256:" + "b" * 64)
+        self.harness.remote[historical] = copy.deepcopy(historical_manifest)
+        self.harness.fail_build = "arm64"
         with self.assertRaisesRegex(RuntimeError, "build interruption"):
             self.harness.publisher().publish()
         persisted = json.loads((self.harness.directory / "image-publication.json").read_text())
-        self.assertTrue(persisted["architectures"]["arm64"]["verified"])
-        self.assertNotIn("amd64", persisted["architectures"])
+        self.assertEqual(persisted["architectures"], {})
+        self.assertEqual(persisted["identity"]["platforms"], ["linux/arm64"])
         self.assertTrue(any(args[:3] == ["git", "worktree", "remove"] for args in self.harness.commands))
         previous = len(self.harness.executions)
         self.harness.fail_build = None
@@ -310,10 +313,51 @@ class ImagePublicationRecoveryTests(unittest.TestCase):
         resumed = self.harness.executions[previous:]
         builds = [args for args in resumed if args[:3] == ["docker", "buildx", "build"]]
         pushes = [args for args in resumed if args[:2] == ["docker", "push"]]
-        self.assertEqual([args[args.index("--platform") + 1] for args in builds], ["linux/amd64"])
-        self.assertEqual(pushes, [["docker", "push", self.harness.reference("amd64")]])
+        self.assertEqual([args[args.index("--platform") + 1] for args in builds], ["linux/arm64"])
+        self.assertEqual(pushes, [["docker", "push", self.harness.reference("arm64")]])
+        self.assertEqual(self.harness.remote[historical], historical_manifest)
         self.assertTrue(publisher.data["manifest_verified"])
         self.assertEqual(len(self.harness.mutations(["bash", "scripts/package_offline_image.sh"])), 1)
+
+    def test_legacy_dual_architecture_receipt_is_rejected_before_any_operation(self):
+        publisher = self.harness.publisher()
+        publisher.data["identity"].pop("platforms")
+        publisher.data["architectures"] = {"arm64": {}, "amd64": {}}
+        publisher.save()
+        with self.assertRaisesRegex(RuntimeError, "architecture policy"):
+            self.harness.publisher()
+        self.assertEqual(self.harness.commands, [])
+        self.assertEqual(self.harness.executions, [])
+
+    def test_receipt_with_extra_architecture_is_not_accepted_under_new_identity(self):
+        publisher = self.harness.publisher()
+        publisher.data["architectures"]["amd64"] = {"verified": True}
+        publisher.save()
+        with self.assertRaisesRegex(RuntimeError, "obsolete architecture policy"):
+            self.harness.publisher()
+
+    def test_amd64_publication_is_refused_before_reading_or_building(self):
+        with self.assertRaisesRegex(RuntimeError, "Only Linux ARM64"):
+            self.harness.publisher().architecture("amd64", self.harness.repo)
+        self.assertEqual(self.harness.commands, [])
+        self.assertEqual(self.harness.executions, [])
+
+    def test_old_multi_architecture_source_tag_cannot_be_republished(self):
+        publisher = self.harness.publisher()
+        publisher.data["architectures"]["arm64"] = {"expected_config": self.harness.digest("arm64")}
+        publisher.save()
+        reference = self.harness.reference("arm64")
+        self.harness.remote[reference] = {
+            "manifests": [
+                {"platform": {"os": "linux", "architecture": architecture}, "digest": "sha256:" + str(index) * 64}
+                for index, architecture in enumerate(("arm64", "amd64"), 1)
+            ]
+        }
+        before = copy.deepcopy(self.harness.remote)
+        with self.assertRaisesRegex(RuntimeError, "only Linux ARM64"):
+            self.harness.publisher().architecture("arm64", self.harness.repo)
+        self.assertEqual(self.harness.remote, before)
+        self.assertEqual(self.harness.executions, [])
 
     def test_existing_architecture_without_pre_push_receipt_is_not_adopted(self):
         self.harness.remote[self.harness.reference("arm64")] = self.harness.manifest(self.harness.digest("arm64"))
@@ -366,11 +410,11 @@ class ImagePublicationRecoveryTests(unittest.TestCase):
             self.harness.remote[self.harness.reference(arch)] = self.harness.manifest(self.harness.digest(arch))
         publisher.save()
         self.harness.create_index(self.harness.reference())
-        self.harness.remote[self.harness.reference() + "@sha256:" + "2" * 64] = self.harness.manifest(
+        self.harness.remote[self.harness.reference() + "@sha256:" + "1" * 64] = self.harness.manifest(
             "sha256:" + "f" * 64
         )
         foreign = copy.deepcopy(self.harness.remote)
-        with self.assertRaisesRegex(RuntimeError, "Combined manifest conflicts"):
+        with self.assertRaisesRegex(RuntimeError, "Release manifest conflicts"):
             self.harness.publisher().publish()
         self.assertEqual(self.harness.remote, foreign)
         self.assertEqual(self.harness.executions, [])

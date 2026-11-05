@@ -23,7 +23,7 @@
 
 ## Docker 运行
 
-正式镜像支持 `linux/amd64` 和 `linux/arm64`，目标机器无需安装 Node.js 或 Python。
+后续正式镜像目标为群晖 DS223 的 `linux/arm64`；历史 AMD64 制品保留。容器部署无需安装 Node.js 或 Python。
 
 克隆仓库后，在项目目录复制 `.env.example` 为 `.env`，设置初始管理员用户名和密码，再启动：
 
@@ -53,6 +53,8 @@ docker run -d --name cageledger --restart unless-stopped \
 
 ## 本地开发
 
+日常开发、验收、测试和软件包构建以 [Codex 云端开发](docs/contracts/cloud-development.md) 为入口；Gitea 托管代码与产物。
+
 要求 Node.js `>=22.12.0 <23` 和 Python 3.13；版本文件分别为 `.nvmrc`、`.python-version`。克隆仓库并进入项目目录后执行：
 
 ```bash
@@ -77,17 +79,20 @@ npm run dev
 
 ## 常用命令
 
-| 命令                            | 用途                                       |
-| ------------------------------- | ------------------------------------------ |
-| `npm run dev`                   | 开发页面、API 和文档站                     |
-| `npm start`                     | 构建后启动本地生产服务                     |
-| `npm run build`                 | 构建业务页面和 VitePress 文档              |
-| `npm run check`                 | 格式、lint、类型、前后端测试与项目契约检查 |
-| `npm run test:e2e`              | Chromium 业务回归，默认使用隔离数据库      |
-| `npm run test:e2e:compat`       | Firefox／WebKit 桌面兼容性检查             |
-| `npm run verify:full`           | 统一检查、生产构建和三浏览器回归           |
-| `npm run package:offline`       | 生成包含 `web-dist/` 的离线源码包          |
-| `npm run package:offline:image` | 导出双架构离线镜像与校验文件               |
+| 命令                            | 用途                                                     |
+| ------------------------------- | -------------------------------------------------------- |
+| `npm run dev`                   | 开发页面、API 和文档站                                   |
+| `npm start`                     | 构建后启动本地生产服务                                   |
+| `npm run build`                 | 构建业务页面和 VitePress 文档                            |
+| `npm run check`                 | 格式、lint、类型、前后端测试与项目契约检查               |
+| `npm run test:e2e`              | Chromium 业务回归，默认使用隔离数据库                    |
+| `npm run test:e2e:compat`       | Firefox／WebKit 桌面兼容性检查                           |
+| `npm run verify:full`           | 统一检查、生产构建和三浏览器回归                         |
+| `npm run package:offline`       | 生成包含 `web-dist/` 的离线源码包                        |
+| `npm run package:managed`       | 受管串行构建离线源码包和 ARM64 镜像包                    |
+| `npm run publish:cloud`         | 将已核验的源码包和 ARM64 镜像包上传到 Gitea 私有软件包区 |
+| `npm run package:container`     | 构建 ARM64 镜像及离线镜像包，不上传                      |
+| `npm run package:offline:image` | 导出 ARM64 离线镜像与校验文件                            |
 
 本地生产服务在 `5173` 同时提供页面、文档和 `/api`。离线源码包在目标机器运行时无需 Node.js，仍需 Python 3.13 和运行依赖。
 
@@ -112,13 +117,15 @@ npm run dev
 - [参与开发](CONTRIBUTING.md)
 - [安全说明](SECURITY.md)
 
+云端负责开发、测试与交付构建，代码及 ARM64 产物推送到 Gitea；普通修改不自动打包，生产 NAS 不自动部署。Mac mini 仅作可选手动备用，安装与注册见 [Gitea Runner 部署](docs/contracts/macos-gitea-runner.md)。
+
 工程契约位于 `docs/contracts/`，其中包含[代码质量](docs/contracts/code-quality.md)、[UI 组件标准](docs/contracts/ui-component-standard.md)和[测试策略](docs/contracts/testing-strategy.md)。已完成迁移记录位于 `docs/archives/`。
 
 ## 项目地址
 
 - [Gitea 仓库](https://git.cellnucle.us/hugo/cageledger)
 - [版本与安装包](https://git.cellnucle.us/hugo/cageledger/releases)
-- 正式容器镜像：`ddns.cellnucle.us:3333/hugo/cageledger:<版本号>`，另提供 `latest`、`<版本号>-amd64` 和 `<版本号>-arm64`
+- 正式容器镜像：`ddns.cellnucle.us:3333/hugo/cageledger:<版本号>`，另提供 `latest` 和 `<版本号>-arm64`，历史 AMD64 版本保持不变
 
 ## 版权
 

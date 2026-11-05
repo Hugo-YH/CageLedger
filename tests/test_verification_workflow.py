@@ -40,13 +40,20 @@ class VerificationScopeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "没有测试"):
                 python_tests.run_targets(["tests.empty"])
 
+    def test_verification_guard_selects_native_metrics(self):
+        for platform, expected in (("linux", "LinuxTestGuard"), ("darwin", "HostGuard")):
+            with self.subTest(platform=platform), patch.object(verify.sys, "platform", platform):
+                with patch.object(verify, expected) as guard:
+                    verify.verification_guard(Path("/evidence"))
+                    guard.assert_called_once_with(Path("/evidence"))
+
     def test_pressure_admission_stops_before_test_process_start(self):
         with (
             tempfile.TemporaryDirectory() as directory,
             patch.object(verify, "ROOT", Path(directory) / "repo"),
             patch.object(verify.signal, "signal"),
             patch.object(verify, "host_task_lock", return_value=contextlib.nullcontext()),
-            patch.object(verify, "HostGuard") as guard,
+            patch.object(verify, "verification_guard") as guard,
             patch.object(verify, "Runner") as runner,
             patch.object(sys, "argv", ["verify", "python", "tests.example"]),
         ):
@@ -85,6 +92,17 @@ class VerificationScopeTests(unittest.TestCase):
             self.assertNotIn("--passWithNoTests", job)
         self.assertEqual(verify.commands("python", ["tests.test_example"])[0][-1], "tests.test_example")
         self.assertNotIn("discover", verify.commands("python", ["tests.test_example"])[0])
+
+    def test_package_scope_is_serial_and_does_not_publish(self):
+        self.assertEqual(
+            verify.commands("package", []),
+            [
+                ["npm", "run", "package:offline"],
+                ["npm", "run", "package:container"],
+            ],
+        )
+        with self.assertRaises(RuntimeError):
+            verify.commands("package", ["unrequested-target"])
 
     def test_full_and_browser_scope_preserve_serial_stages_single_worker(self):
         jobs = verify.commands("full", [])

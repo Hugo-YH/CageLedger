@@ -12,7 +12,22 @@ from release_runtime import atomic_json, command, manifest_result, require
 
 IMAGE = "ddns.cellnucle.us:3333/hugo/cageledger"
 BASE = "ddns.cellnucle.us:3333/hugo/cageledger-base"
-ARCHES = ("arm64", "amd64")
+ARCHES = ("arm64",)
+IMAGE_PLATFORMS = ["linux/arm64"]
+
+
+def require_release_manifest(manifest):
+    if "manifests" in manifest:
+        platforms = [entry.get("platform", {}) for entry in manifest["manifests"]]
+        platforms = [
+            value for value in platforms if value.get("os") != "unknown" or value.get("architecture") != "unknown"
+        ]
+        require(
+            len(platforms) == 1 and platforms[0].get("os") == "linux" and platforms[0].get("architecture") == "arm64",
+            "Release manifest must contain only Linux ARM64",
+        )
+    else:
+        require("config" in manifest, "Release image manifest unavailable")
 
 
 def archive_identity(path):
@@ -73,11 +88,23 @@ class ImagePublisher:
         self.repo, self.version, self.revision = repo, version, revision
         self.directory, self.execute = Path(directory), execute
         self.path = self.directory / "image-publication.json"
-        identity = {"repo": str(repo.resolve()), "version": version, "revision": revision, "image": IMAGE}
+        identity = {
+            "repo": str(repo.resolve()),
+            "version": version,
+            "revision": revision,
+            "image": IMAGE,
+            "platforms": list(IMAGE_PLATFORMS),
+        }
         self.data = (
             json.loads(self.path.read_text()) if self.path.exists() else {"identity": identity, "architectures": {}}
         )
-        require(self.data.get("identity") == identity, "Image receipt belongs to a different release")
+        require(
+            self.data.get("identity") == identity, "Image receipt belongs to a different release or architecture policy"
+        )
+        require(
+            set(self.data.get("architectures", {})) <= set(ARCHES),
+            "Image receipt uses an obsolete architecture policy; inspect before resuming",
+        )
         self.directory.mkdir(parents=True, exist_ok=True)
         self.save()
 
@@ -102,10 +129,12 @@ class ImagePublisher:
         return value["Id"]
 
     def architecture(self, arch, worktree):
+        require(arch in ARCHES, "Only Linux ARM64 publication is supported")
         reference = f"{IMAGE}:{self.version}-{arch}"
         receipt = self.data["architectures"].get(arch, {})
         remote = remote_manifest(self.repo, reference)
         if remote is not None:
+            require_release_manifest(remote)
             require(receipt.get("expected_config") is not None, "Existing image has no pre-push ownership receipt")
             require(
                 config_digest(self.repo, reference, remote, arch) == receipt["expected_config"],
@@ -165,6 +194,8 @@ class ImagePublisher:
             if remote is None:
                 self.run("push-" + arch, ["docker", "push", reference])
                 remote = remote_manifest(self.repo, reference)
+            if remote is not None:
+                require_release_manifest(remote)
             require(
                 remote is not None and config_digest(self.repo, reference, remote, arch) == receipt["expected_config"],
                 "Pushed image does not match local build",
@@ -182,6 +213,8 @@ class ImagePublisher:
             existing is None or all(self.data["architectures"].get(a, {}).get("expected_config") for a in ARCHES),
             "Existing manifest has no ownership receipt",
         )
+        if existing is not None:
+            require_release_manifest(existing)
         with tempfile.TemporaryDirectory(prefix="cageledger-image-source-") as temporary:
             worktree = Path(temporary) / "source"
             command(["git", "worktree", "add", "--detach", str(worktree), self.revision], self.repo)
@@ -216,18 +249,13 @@ class ImagePublisher:
                 ["docker", "buildx", "imagetools", "create", "-t", reference, *[f"{reference}-{a}" for a in ARCHES]],
             )
             existing = remote_manifest(self.repo, reference)
-        require(existing is not None and "manifests" in existing, "Combined image index unavailable")
-        actual_arches = [
-            m.get("platform", {}).get("architecture")
-            for m in existing["manifests"]
-            if m.get("platform", {}).get("os") == "linux"
-        ]
-        require(sorted(actual_arches) == sorted(ARCHES), "Unexpected combined image architectures")
+        require(existing is not None, "Release image unavailable")
+        require_release_manifest(existing)
         for arch in ARCHES:
             require(
                 config_digest(self.repo, reference, existing, arch)
                 == self.data["architectures"][arch]["expected_config"],
-                "Combined manifest conflicts with build receipt",
+                "Release manifest conflicts with build receipt",
             )
         self.data["manifest_verified"] = True
         self.save()
@@ -239,10 +267,18 @@ def publish_images(pipeline):
 
     journal, repo = pipeline.journal, pipeline.repo
     previous = journal.data["stages"].get("images")
+    require(
+        not previous or journal.data.get("image_platforms") == IMAGE_PLATFORMS,
+        "Image publication state uses an obsolete architecture policy; inspect before resuming",
+    )
+    journal.data["image_platforms"] = list(IMAGE_PLATFORMS)
+    journal.save()
     reference = f"{IMAGE}:{pipeline.version}"
     if previous and previous["status"] == "passed":
         require(journal.reusable("images", previous["fingerprint"]), "Image evidence changed/missing")
         manifest = remote_manifest(repo, reference)
+        if manifest is not None:
+            require_release_manifest(manifest)
         require(
             manifest is not None and hashed(manifest) == journal.data.get("image_manifest"), "Version manifest changed"
         )
@@ -261,12 +297,15 @@ def publish_images(pipeline):
         manifest = remote_manifest(repo, reference)
         journal.data["image_manifest"] = hashed(manifest)
         (attempt / "command.log").write_text(
-            "Architecture config digests and combined manifest verified; details in image-publication/.\n"
+            "ARM64 config digest and release manifest verified; details in image-publication/.\n"
         )
         outputs = [
             attempt / "command.log",
             directory,
-            *sorted((repo / "dist").glob(f"CageLedger-image-{pipeline.version}-*")),
+            *[
+                repo / "dist" / f"CageLedger-image-{pipeline.version}-{suffix}"
+                for suffix in ("arm64.tar.gz", "load.txt", "sha256.txt")
+            ],
         ]
         for output in outputs:
             tree(output)

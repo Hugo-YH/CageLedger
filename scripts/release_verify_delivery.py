@@ -21,11 +21,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from release_endpoints import gitea_git_remote, gitea_url
+
 ROOT = Path(__file__).resolve().parent
 REPO = Path(__file__).resolve().parent.parent
-BASE = "http://ddns.cellnucle.us:3333"
+BASE = gitea_url()
 IMAGE = "ddns.cellnucle.us:3333/hugo/cageledger"
-GIT_REMOTE = BASE + "/hugo/cageledger.git"
+GIT_REMOTE = gitea_git_remote()
 
 
 def require(condition, message):
@@ -334,21 +336,49 @@ def certificate_smoke(client):
     }
 
 
-def manifest_platforms(manifest):
+def manifest_platforms(manifest, *, image_config=None, image_digest=None):
+    if "manifests" not in manifest:
+        require("config" in manifest, "Release image manifest was unavailable")
+        require(
+            isinstance(image_config, dict)
+            and image_config.get("os") == "linux"
+            and image_config.get("architecture") == "arm64",
+            "Release image must be Linux ARM64",
+        )
+        require(bool(re.fullmatch(r"sha256:[a-f0-9]{64}", image_digest or "")), "Image digest was invalid")
+        return {"arm64": image_digest}
     platforms = {}
     for entry in manifest.get("manifests", []):
         platform = entry.get("platform", {})
         architecture = platform.get("architecture")
-        if platform.get("os") == "linux" and architecture in {"arm64", "amd64"}:
-            digest = entry.get("digest", "")
-            require(bool(re.fullmatch(r"sha256:[a-f0-9]{64}", digest)), "Manifest platform digest was invalid")
-            require(architecture not in platforms, "Manifest contained duplicate release architectures")
-            platforms[architecture] = digest
-    require(set(platforms) == {"arm64", "amd64"}, "Release manifest must contain Linux arm64 and amd64")
+        if platform.get("os") == "unknown" and architecture == "unknown":
+            continue  # BuildKit attestations are metadata, not runnable release platforms.
+        require(
+            platform.get("os") == "linux" and architecture == "arm64", "Release manifest must contain only Linux ARM64"
+        )
+        digest = entry.get("digest", "")
+        require(bool(re.fullmatch(r"sha256:[a-f0-9]{64}", digest)), "Manifest platform digest was invalid")
+        require(architecture not in platforms, "Manifest contained duplicate release architectures")
+        platforms[architecture] = digest
+    require(set(platforms) == {"arm64"}, "Release manifest must contain Linux ARM64")
     return platforms
 
 
+def release_platforms(image_ref):
+    inspect = ["docker", "buildx", "imagetools", "inspect"]
+    manifest = json.loads(command([*inspect, "--raw", image_ref]))
+    if "manifests" in manifest:
+        return manifest_platforms(manifest)
+    digest = command([*inspect, "--format", "{{.Manifest.Digest}}", image_ref])
+    require(bool(re.fullmatch(r"sha256:[a-f0-9]{64}", digest)), "Image digest was invalid")
+    pinned = image_ref.rsplit(":", 1)[0] + "@" + digest
+    require(json.loads(command([*inspect, "--raw", pinned])) == manifest, "Release image changed during verification")
+    config = json.loads(command([*inspect, "--format", "{{json .Image}}", pinned]))
+    return manifest_platforms(manifest, image_config=config, image_digest=digest)
+
+
 def container_smoke(architecture, digest, package, revision, output, features_expected):
+    require(architecture == "arm64", "Only Linux ARM64 delivery verification is supported")
     name = f"cageledger-release-{package['version'].replace('.', '')}-{architecture}-{uuid4().hex[:12]}"
     report = {
         "architecture": architecture,
@@ -591,10 +621,7 @@ def main():
         verify_remote(package, revision, output)
     if options.stage in {"all", "containers"}:
         features_expected = expected_features(REPO)
-        manifest = json.loads(
-            command(["docker", "buildx", "imagetools", "inspect", "--raw", f"{IMAGE}:{package['version']}"])
-        )
-        platforms = manifest_platforms(manifest)
+        platforms = release_platforms(f"{IMAGE}:{package['version']}")
         save(
             output,
             "oci-manifest-verification.json",
@@ -606,7 +633,7 @@ def main():
                 "platforms": {f"linux/{key}": value for key, value in platforms.items()},
             },
         )
-        for architecture in ("arm64", "amd64"):
+        for architecture in ("arm64",):
             container_smoke(architecture, platforms[architecture], package, revision, output, features_expected)
     print("Release artifacts verified; production deployment was not performed", flush=True)
 

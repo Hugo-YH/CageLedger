@@ -15,6 +15,9 @@ import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from release_endpoints import DEFAULT_GITEA_URL, gitea_url
 
 
 class CredentialError(RuntimeError):
@@ -170,6 +173,7 @@ def login_agent():
 
 def gitea_credentials(repo):
     """Resolve credentials for the official Gitea only; never log their values."""
+    endpoint = urlsplit(gitea_url())
     authorization = os.environ.get("CAGELEDGER_GITEA_AUTHORIZATION")
     if authorization:
         if not authorization.startswith(("Basic ", "token ")) or "\n" in authorization or "\r" in authorization:
@@ -197,7 +201,7 @@ def gitea_credentials(repo):
         result = subprocess.run(
             ["git", "credential", "fill"],
             cwd=repo,
-            input="protocol=http\nhost=ddns.cellnucle.us:3333\npath=hugo/cageledger\n\n",
+            input=f"protocol={endpoint.scheme}\nhost={endpoint.netloc}\npath=hugo/cageledger\n\n",
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "/usr/bin/false", "GCM_INTERACTIVE": "Never"},
             capture_output=True,
             text=True,
@@ -210,8 +214,9 @@ def gitea_credentials(repo):
             return "Basic " + auth
     except (OSError, subprocess.SubprocessError):
         pass
-    # Gitea hosts both API and registry. Only reuse the exact official host entry;
-    # credentials for arbitrary registries or similarly named hosts are excluded.
+    # Preserve the existing colocated registry fallback only for the default API.
+    if gitea_url() != DEFAULT_GITEA_URL:
+        raise CredentialError("所选 Gitea 站点缺少凭据；配置该站点的 Git 凭据或专用 token。")
     config = Path(os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))) / "config.json"
     try:
         auth = json.loads(config.read_text()).get("auths", {}).get("ddns.cellnucle.us:3333", {}).get("auth", "")

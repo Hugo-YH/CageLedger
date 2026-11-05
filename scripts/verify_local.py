@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -9,13 +10,14 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from linux_test_guard import LinuxTestGuard
 from release_browsers import managed_pdf_browser
 from release_host_guard import HostGuard
 from release_runtime import ROOT, Runner, atomic_json, isolation_environment, require
 from release_tools import release_converter
 from verification_host import host_task_lock
 
-MODES = ("check", "full", "all-unit", "all-python", "e2e", "compat", "unit", "related", "python")
+MODES = ("check", "full", "all-unit", "all-python", "e2e", "compat", "unit", "related", "python", "package")
 
 
 def commands(mode, targets, grep=None):
@@ -70,8 +72,15 @@ def commands(mode, targets, grep=None):
         return [e2e]
     if mode == "compat":
         return [compat]
+    if mode == "package":
+        return [["npm", "run", "package:offline"], ["npm", "run", "package:container"]]
     check = ["npm", "run", "check:steps"]
     return [check] if mode == "check" else [check, ["npm", "run", "build"], e2e, compat]
+
+
+def verification_guard(output):
+    """Use container metrics for Linux checks, preserving native macOS admission."""
+    return (LinuxTestGuard if sys.platform == "linux" else HostGuard)(output)
 
 
 def main():
@@ -93,7 +102,7 @@ def main():
     converter = release_converter(ROOT) if args.mode in {"check", "full"} else nullcontext()
     browser = managed_pdf_browser(ROOT) if args.mode in {"check", "full", "e2e", "compat"} else nullcontext()
     with host_task_lock(), converter, browser:
-        guard = HostGuard(directory / "host")
+        guard = verification_guard(directory / "host")
         runner = Runner(ROOT, guard)
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, lambda _s, _f: runner.stopping.set())
@@ -104,6 +113,17 @@ def main():
         )
         require(guard.check(admission=True) if focused else guard.admit(), guard.reason)
         environment = isolation_environment()
+        if args.mode == "package":
+            for key in (
+                "CAGELEDGER_BUILDX_BUILDER",
+                "CAGELEDGER_BUILD_PRUNE",
+                "CAGELEDGER_BUILD_CA_BUNDLE",
+                "CAGELEDGER_REGISTRY",
+                "CAGELEDGER_IMAGE_NAMESPACE",
+                "CAGELEDGER_IMAGE_NAME",
+            ):
+                if key in os.environ:
+                    environment[key] = os.environ[key]
         environment["NODE_OPTIONS"] = "--max-old-space-size=3072"
         environment["CAGELEDGER_E2E_OUTPUT_DIR"] = str(directory / "chromium")
         environment["CAGELEDGER_COMPAT_OUTPUT_DIR"] = str(directory / "compat")

@@ -45,6 +45,7 @@
     "smoke:api": "node scripts/smoke_api.mjs",
     "package:offline": "bash scripts/package_offline.sh",
     "package:offline:image": "bash scripts/package_offline_image.sh",
+    "package:container": "bash scripts/build_container_package.sh",
     "prewarm:container:local": "bash scripts/prewarm_container_deps.sh",
     "publish:container:local": "bash scripts/publish_container_local.sh",
     "release:local": "bash scripts/release_local.sh",
@@ -54,7 +55,9 @@
     "check:steps": "npm run format:check && npm run lint && npm run typecheck && node node_modules/vitest/vitest.mjs run --maxWorkers=1 && node scripts/run_python.mjs -m unittest discover -s tests -p 'test_*.py' && npm run check:architecture -- --enforce && npm run check:api && npm run check:ui-contract && npm run check:style-ownership && npm run check:antd-design && npm run check:docs",
     "test:target": "node scripts/run_python.mjs scripts/verify_local.py unit",
     "test:related": "node scripts/run_python.mjs scripts/verify_local.py related",
-    "test:python:target": "node scripts/run_python.mjs scripts/verify_local.py python"
+    "test:python:target": "node scripts/run_python.mjs scripts/verify_local.py python",
+    "package:managed": "node scripts/run_python.mjs scripts/verify_local.py package",
+    "publish:cloud": "node scripts/run_python.mjs scripts/cloud_package_delivery.py"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.2",
