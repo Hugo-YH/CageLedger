@@ -203,6 +203,7 @@ class PipelineSimulationTests(unittest.TestCase):
         self.active = 0
         self.maximum = 0
         self.calls = []
+        self.catalog_calls = []
         self.mutex = threading.Lock()
         self.fail_webkit = False
         self.interrupt_name = None
@@ -239,6 +240,7 @@ class PipelineSimulationTests(unittest.TestCase):
                 self.active -= 1
 
     def catalogs(self, _args, _cwd, env=None, **_kwargs):
+        self.catalog_calls.append(env["CAGELEDGER_COMPAT_BROWSER"])
         return json.dumps(report(env["CAGELEDGER_COMPAT_BROWSER"], executed=False))
 
     def probe(self, port, receipt):
@@ -261,6 +263,7 @@ class PipelineSimulationTests(unittest.TestCase):
         self.assertLess(self.calls.index("firefox"), self.calls.index("webkit"))
         self.run_browsers()
         self.assertEqual(len(self.calls), 5)
+        self.assertEqual(self.catalog_calls, ["chromium", "firefox", "webkit"])
 
     def test_default_single_slot_preserves_five_independent_databases(self):
         self.run_browsers()
@@ -269,12 +272,54 @@ class PipelineSimulationTests(unittest.TestCase):
         databases = [v["health"]["database"] for v in self.pipeline.journal.data["stages"].values()]
         self.assertEqual(len(set(databases)), 5)
 
-    def test_slot_configuration_change_invalidates_browser_receipts(self):
+    def test_slot_configuration_change_reuses_coverage_and_catalog_receipts(self):
         self.run_browsers()
         self.calls.clear()
+        self.catalog_calls.clear()
         self.pipeline.browser_slots = 2
         self.run_browsers()
-        self.assertEqual(len(self.calls), 5)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.catalog_calls, [])
+
+    def test_missing_or_tampered_catalog_rediscovers_and_reruns_only_affected_engine(self):
+        self.run_browsers()
+        for engine, expected in (
+            ("firefox", ["firefox"]),
+            ("webkit", ["webkit"]),
+            ("chromium", ["chromium-1", "chromium-2", "chromium-3"]),
+        ):
+            with self.subTest(engine=engine):
+                path = Path(self.pipeline.journal.data["browser_catalogs"]["reports"][engine]["path"])
+                if engine == "webkit":
+                    path.unlink()
+                else:
+                    path.write_text("{}")
+                self.calls.clear()
+                self.catalog_calls.clear()
+                self.run_browsers()
+                self.assertEqual(self.catalog_calls, [engine])
+                self.assertEqual(self.calls, expected)
+
+    def test_catalog_cache_requires_saved_hash_proof_and_valid_compatibility_coverage(self):
+        self.run_browsers()
+        self.pipeline.journal.data.pop("browser_catalogs")
+        self.calls.clear()
+        self.catalog_calls.clear()
+        self.run_browsers()
+        self.assertEqual(self.catalog_calls, ["chromium", "firefox", "webkit"])
+        self.assertEqual(self.calls, [])
+        entry = self.pipeline.journal.data["browser_catalogs"]["reports"]["firefox"]
+        path = Path(entry["path"])
+        invalid = report("firefox", executed=False)
+        invalid["suites"][0]["specs"][0]["tags"] = []
+        path.write_text(json.dumps(invalid))
+        entry["sha256"] = rt.digest(path)
+        self.calls.clear()
+        self.catalog_calls.clear()
+        self.run_browsers()
+        self.assertEqual(self.catalog_calls, ["firefox"])
+        # Existing executions still own earlier intact catalog evidence; only discovery was invalid.
+        self.assertEqual(self.calls, [])
 
     def test_resource_budget_reduces_requested_two_slots(self):
         self.pipeline.browser_slots = 2
@@ -335,8 +380,10 @@ class PipelineSimulationTests(unittest.TestCase):
         self.run_browsers()
         self.calls.clear()
         self.pipeline.fingerprint.return_value = "changed-runtime"
+        self.catalog_calls.clear()
         self.run_browsers()
         self.assertEqual(len(self.calls), 5)
+        self.assertEqual(self.catalog_calls, ["chromium", "firefox", "webkit"])
 
     def test_tampered_report_reruns_only_affected_engine(self):
         self.run_browsers()

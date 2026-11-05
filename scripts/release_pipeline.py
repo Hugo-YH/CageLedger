@@ -238,20 +238,56 @@ class Pipeline:
             return 2
         return 1
 
+    def browser_catalogs(self, fingerprint, cli):
+        cached = self.journal.data.get("browser_catalogs", {})
+        cached = cached if isinstance(cached, dict) and cached.get("fingerprint") == fingerprint else {}
+        previous = cached.get("reports", {})
+        previous = previous if isinstance(previous, dict) else {}
+        catalogs, paths, records = {}, {}, {}
+        directory = None
+        for engine in ("chromium", "firefox", "webkit"):
+            entry = previous.get(engine)
+            report = None
+            if isinstance(entry, dict):
+                try:
+                    path = Path(entry["path"])
+                    require(
+                        path.is_file()
+                        and not path.is_symlink()
+                        and path.resolve().is_relative_to(self.journal.directory.resolve()),
+                        "Missing or external browser catalog",
+                    )
+                    content = path.read_bytes()
+                    require(hashlib.sha256(content).hexdigest() == entry["sha256"], "Browser catalog changed")
+                    report = json.loads(content)
+                    verify_compatibility_catalog(self.repo, report)
+                    cases(report, engine, False)
+                except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+                    report = None
+            if report is None:
+                env = {**self.environment, "CAGELEDGER_COMPAT_BROWSER": engine}
+                args = cli + ([] if engine == "chromium" else ["--config", "playwright.compat.config.ts"])
+                report = json.loads(command(args + ["--list", "--reporter=json"], self.repo, env=env))
+                verify_compatibility_catalog(self.repo, report)
+                cases(report, engine, False)
+                if directory is None:
+                    directory = self.journal.directory / ("catalog-" + uuid4().hex)
+                    directory.mkdir()
+                path = directory / f"{engine}.json"
+                atomic_json(path, report)
+            catalogs[engine] = set(cases(report, engine, False))
+            paths[engine] = path
+            records[engine] = {"path": str(path), "sha256": digest(path)}
+        require(self.fingerprint() == fingerprint, "Source changed during browser catalog discovery")
+        self.journal.data["browser_catalogs"] = {"fingerprint": fingerprint, "reports": records}
+        self.journal.save()
+        return catalogs, paths
+
     def browsers(self):
         self.verify_runtime()
         fingerprint = self.fingerprint()
-        catalog_dir = self.journal.directory / ("catalog-" + uuid4().hex)
-        catalog_dir.mkdir()
         cli = ["node", "node_modules/@playwright/test/cli.js", "test", "--workers=1", "--retries=0"]
-        catalogs = {}
-        for engine in ("chromium", "firefox", "webkit"):
-            env = {**self.environment, "CAGELEDGER_COMPAT_BROWSER": engine}
-            args = cli + ([] if engine == "chromium" else ["--config", "playwright.compat.config.ts"])
-            text = command(args + ["--list", "--reporter=json"], self.repo, env=env)
-            atomic_json(catalog_dir / f"{engine}.json", json.loads(text))
-            verify_compatibility_catalog(self.repo, json.loads(text))
-            catalogs[engine] = set(cases(json.loads(text), engine, False))
+        catalogs, catalog_paths = self.browser_catalogs(fingerprint, cli)
         jobs = [(f"chromium-{i}", "chromium", i, 5613 + (i - 1) * 10) for i in range(1, 4)]
         jobs += [("firefox", "firefox", None, 5643), ("webkit", "webkit", None, 5653)]
 
@@ -264,7 +300,8 @@ class Pipeline:
                     "shard": shard,
                     "catalog": sorted(catalogs[engine]),
                     "topology": "3-shards-resource-slots-v2",
-                    "maximum_slots": self.browser_slots,
+                    "workers": 1,
+                    "retries": 0,
                 }
             )
             entry = self.journal.data["stages"].get(name, {})
@@ -303,7 +340,7 @@ class Pipeline:
                 self.journal.end(
                     name,
                     "passed",
-                    [report_path, attempt / "isolation.json", attempt / "command.log", catalog_dir / f"{engine}.json"],
+                    [report_path, attempt / "isolation.json", attempt / "command.log", catalog_paths[engine]],
                     exit_code=0,
                     command=args,
                     report=str(report_path),

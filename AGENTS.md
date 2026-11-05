@@ -38,7 +38,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 | 文档或代理指令维护       | [documentation-system.md](docs/contracts/documentation-system.md)、[agent-instructions.md](docs/contracts/agent-instructions.md)                                                                  |
 | 发布                     | [开发规范](wiki/开发规范.md)、[发布工程](docs/contracts/release-engineering.md)、[branching.md](docs/contracts/branching.md)、`scripts/release_local.sh`                                          |
 
-日常入口：`npm run dev`，按影响范围使用 `test:target`、`test:related`、`test:python:target` 并指定目标；全量 `check`、`verify:full` 留到发布前或明确要求全量时。开发页面 `http://localhost:5173`，API `http://127.0.0.1:5174`；页面异常先确认这两个端口的进程归属。项目 Python 命令通过 `scripts/run_python.mjs` 使用 `.venv`，可由 `CAGELEDGER_PYTHON_BIN` 覆盖。
+日常入口：`npm run dev`，按影响范围使用 `test:target`、`test:related`、`test:python:target` 并指定目标；交付按影响选择检查；`check`、`verify:full` 仅在明确选择该完整范围时执行。开发页面 `http://localhost:5173`，API `http://127.0.0.1:5174`；页面异常先确认这两个端口的进程归属。项目 Python 命令通过 `scripts/run_python.mjs` 使用 `.venv`，可由 `CAGELEDGER_PYTHON_BIN` 覆盖。
 
 ## 业务边界
 
@@ -64,7 +64,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 - UI 使用 Ant Design 组件与唯一主题定义，视觉尺度、对比度及响应式规则见 `docs/contracts/antd-design-language.md`。布局以 `src/styles/style-ownership.json` 登记的唯一来源为准，`src/styles.css` 仅作导入入口。
 - UI 验证按测试契约区分局部小改与结构性改动；文案、间距、提示位置等小改默认只确认受影响页面，不默认四档视口、截图矩阵或完整回归。通知和确认使用站内组件。
 - 结算汇总表同时检查 `src/react/print/settlement.ts` 与 `server_app/pdf/documents.py`，保留前端和 Python 的等价回归，尤其是跨页汇总。
-- 日常修改、提交和推送只做与改动相关的验证；简单修改不运行完整 `npm run check`、`npm run verify:full`、生产构建或打包。结算、权限、迁移等高风险改动按影响范围补充回归，不因提交而自动升级为全量检查。完整检查放到发布前或明确要求时，由具备依赖的受管云端执行；Mac mini 可选手动备用；同一最终代码状态已通过的结果可复用，发布脚本必需的校验仍保留。所有文件修改完成后运行一次 `git diff --check`。具体范围以 [测试策略](docs/contracts/testing-strategy.md) 为准。
+- 日常修改、提交和推送只做与改动相关的验证；简单修改不运行完整 `npm run check`、`npm run verify:full`、生产构建或打包。结算、权限、迁移等高风险改动按影响范围补充回归，不因提交而自动升级为全量检查。发布验收按风险补充缺失检查；完整回归仅在明确要求或共享基础变更需要时执行；Mac mini 可选手动备用；同一最终代码状态已通过的结果可复用，发布脚本必需的校验仍保留。所有文件修改完成后运行一次 `git diff --check`。具体范围以 [测试策略](docs/contracts/testing-strategy.md) 为准。
 
 ## Skill 与发布边界
 

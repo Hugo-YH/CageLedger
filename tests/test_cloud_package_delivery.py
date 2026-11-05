@@ -1,9 +1,11 @@
 import io
 import json
+import shutil
 import sys
 import tarfile
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
@@ -175,6 +177,7 @@ class LocalArtifacts(unittest.TestCase):
         receipt = json.loads(receipt_path.read_text())
         self.assertEqual({value["status"] for value in receipt["files"].values()}, {"reused"})
         self.assertTrue(client.verified)
+        self.assertEqual(receipt["verification"]["reused_hash_receipts"], len(plan.files()))
 
     def test_anonymous_readability_blocks_source_even_when_repository_metadata_is_private(self):
         client = MemoryRelease(public=True)
@@ -197,25 +200,142 @@ class LocalArtifacts(unittest.TestCase):
             delivery.deliver(plan, client, state)
         self.assertEqual(client.uploaded, previous)
 
-    def test_full_download_hash_is_required_for_existing_and_new_attachments(self):
-        plan, client = self.plan(), MemoryRelease()
-        state = self.directory / "immutable"
+    def test_boundary_checks_are_constant_and_new_uploads_hash_each_file_once(self):
+        outputs = [self.output, self.output / "many-pieces"]
+        outputs[1].mkdir()
+        for source in (self.source_archive, self.image, self.notes, self.output / "CageLedger-image-1.2.3-sha256.txt"):
+            shutil.copy2(source, outputs[1] / source.name)
+        file_counts = []
+        for index, output in enumerate(outputs):
+            plan = delivery.prepare(
+                self.repo, output, chunk_bytes=8 * 1024 * 1024 if index == 0 else 128, write_parts=True
+            )
+            client = MemoryRelease()
+            path = delivery.deliver(plan, client, self.directory / f"boundaries-{index}")
+            self.assertEqual(client.calls["repository"], 2)
+            self.assertEqual(client.calls["release"], 1)
+            self.assertEqual(client.calls["assets"], 2)
+            self.assertEqual(client.calls["anonymous"], 2)
+            reads = Counter(client.body_reads)
+            self.assertEqual(reads[delivery.PROBE_NAME], 2)
+            for artifact in plan.files():
+                self.assertEqual(reads[artifact.path.name], 1)
+            receipt = json.loads(path.read_text())
+            self.assertEqual(receipt["verification"]["fresh_full_hash_files"], len(plan.files()))
+            self.assertEqual(
+                receipt["verification"]["remote_artifact_bytes_verified_this_run"],
+                sum(file.size for file in plan.files()),
+            )
+            file_counts.append(len(plan.files()))
+        self.assertGreater(file_counts[1], file_counts[0])
+
+    def test_complete_receipts_and_legacy_complete_evidence_resume_without_artifact_downloads(self):
+        plan, client, state = self.plan(), MemoryRelease(), self.directory / "resume"
+        path = delivery.deliver(plan, client, state)
+        receipt = json.loads(path.read_text())
+        for record in receipt["files"].values():
+            for key in ("attachment_identity", "verification_scope", "remote_bytes_hashed_this_run"):
+                record.pop(key, None)
+        path.write_text(json.dumps(receipt))
+        client.body_reads.clear()
+        previous = list(client.uploaded)
         delivery.deliver(plan, client, state)
+        self.assertEqual(client.uploaded, previous)
+        self.assertEqual(client.body_reads, [delivery.PROBE_NAME, delivery.PROBE_NAME])
+        receipt = json.loads(path.read_text())
+        self.assertEqual(receipt["verification"]["remote_artifact_bytes_verified_this_run"], 0)
+        self.assertEqual(
+            {record["verification_scope"] for record in receipt["files"].values()}, {"prior_full_sha256_receipt"}
+        )
+        self.assertTrue(all(record["remote_bytes_hashed_this_run"] == 0 for record in receipt["files"].values()))
+
+    def test_unknown_or_incomplete_or_changed_expected_receipt_reverifies_only_that_file(self):
+        plan, client, state = self.plan(), MemoryRelease(), self.directory / "proof"
+        path = delivery.deliver(plan, client, state)
+        for change in ("unknown", "sha256", "size", "missing_url", "missing_record"):
+            with self.subTest(change=change):
+                receipt = json.loads(path.read_text())
+                record = receipt["files"][self.image.name]
+                if change == "unknown":
+                    record["status"] = "unknown"
+                elif change == "sha256":
+                    record["sha256"] = "b" * 64
+                elif change == "size":
+                    record["size"] += 1
+                elif change == "missing_url":
+                    record.pop("browser_download_url")
+                else:
+                    receipt["files"].pop(self.image.name)
+                path.write_text(json.dumps(receipt))
+                client.body_reads.clear()
+                delivery.deliver(plan, client, state)
+                self.assertEqual([name for name in client.body_reads if name != delivery.PROBE_NAME], [self.image.name])
+                repaired = json.loads(path.read_text())["files"][self.image.name]
+                self.assertEqual(repaired["verification_scope"], "full_remote_sha256")
+
+    def test_changed_remote_id_or_url_requires_fresh_hash_and_size_conflicts_fail(self):
+        plan, client, state = self.plan(), MemoryRelease(), self.directory / "identity"
+        path = delivery.deliver(plan, client, state)
+        remote = client.remote[self.image.name]
+        old_id = remote["id"]
+        for change in ("id", "url"):
+            if change == "id":
+                remote["id"] = 1000
+                client.contents[remote["id"]] = client.contents[old_id]
+            else:
+                remote["browser_download_url"] = delivery.ORIGIN + "/attachments/replacement"
+            client.body_reads.clear()
+            delivery.deliver(plan, client, state)
+            self.assertEqual([name for name in client.body_reads if name != delivery.PROBE_NAME], [self.image.name])
+            receipt = json.loads(path.read_text())["files"][self.image.name]
+            self.assertEqual(receipt["attachment_id"], 1000)
+        remote["size"] += 1
+        previous = list(client.uploaded)
+        with self.assertRaisesRegex(delivery.AssetError, "size/name conflict"):
+            delivery.deliver(plan, client, state)
+        self.assertEqual(client.uploaded, previous)
+        self.assertEqual(json.loads(path.read_text())["files"][self.image.name]["status"], "unknown")
+
+    def test_audit_detects_same_identity_corruption_and_invalidates_cached_proof(self):
+        plan, client, state = self.plan(), MemoryRelease(), self.directory / "audit"
+        path = delivery.deliver(plan, client, state)
         remote_id = client.remote[self.image.name]["id"]
         body = client.contents[remote_id]
         client.contents[remote_id] = b"X" + body[1:]
-        previous = list(client.uploaded)
+        client.body_reads.clear()
+        delivery.deliver(plan, client, state)
+        self.assertEqual(client.body_reads, [delivery.PROBE_NAME, delivery.PROBE_NAME])
+        with self.assertRaisesRegex(delivery.AssetError, "SHA256 conflict"):
+            delivery.deliver(plan, client, state, audit_remote=True)
+        receipt = json.loads(path.read_text())
+        self.assertTrue(receipt["verification"]["audit_remote"])
+        self.assertEqual(receipt["files"][self.image.name]["status"], "unknown")
         with self.assertRaisesRegex(delivery.AssetError, "SHA256 conflict"):
             delivery.deliver(plan, client, state)
-        self.assertEqual(client.uploaded, previous)
+
+    def test_new_upload_still_requires_full_remote_sha_and_final_metadata_must_match(self):
+        plan = self.plan()
         bad = MemoryRelease(corrupt=True)
-        failed_state = self.directory / "failed"
+        state = self.directory / "failed"
         with self.assertRaisesRegex(delivery.AssetError, "SHA256 conflict"):
-            delivery.deliver(plan, bad, failed_state)
-        receipt = json.loads((failed_state / "receipt.json").read_text())
-        self.assertEqual(receipt["status"], "incomplete")
-        self.assertEqual(receipt["files"][plan.manifest_path.name]["status"], "unknown")
+            delivery.deliver(plan, bad, state)
+        failure = json.loads((state / "receipt.json").read_text())
+        self.assertEqual(failure["files"][plan.manifest_path.name]["status"], "unknown")
         self.assertEqual(len(bad.uploaded), 2)
+        final_change = MemoryRelease()
+        original_assets = final_change.assets
+
+        def changed_assets(release_id):
+            values = original_assets(release_id)
+            if final_change.calls["assets"] == 2:
+                values[self.image.name]["id"] += 100
+            return values
+
+        with patch.object(final_change, "assets", side_effect=changed_assets):
+            with self.assertRaisesRegex(delivery.DeliveryError, "Final draft attachment identity changed"):
+                delivery.deliver(plan, final_change, self.directory / "final-change")
+        self.assertEqual(final_change.calls["anonymous"], 1)
+        self.assertEqual(json.loads((self.directory / "final-change/receipt.json").read_text())["status"], "incomplete")
 
     def test_receipt_must_stay_outside_checkout(self):
         with self.assertRaisesRegex(delivery.DeliveryError, "outside the repository"):
@@ -229,27 +349,34 @@ class MemoryRelease:
         self.contents = {}
         self.uploaded = []
         self.verified = []
+        self.body_reads = []
+        self.calls = Counter()
         self.events = []
         self.public = public
         self.corrupt = corrupt
 
     def repository(self):
+        self.calls["repository"] += 1
         return 1
 
     def actor(self):
+        self.calls["actor"] += 1
         return {"id": 7, "login": "hugo"}
 
     def find(self, tag):
+        self.calls["find"] += 1
         return self.value
 
     def create(self, payload):
-        self.value = {**payload, "id": 19, "author": self.actor()}
+        self.value = {**payload, "id": 19, "author": {"id": 7, "login": "hugo"}}
         return self.value
 
     def release(self, release_id):
+        self.calls["release"] += 1
         return self.value
 
     def assets(self, release_id):
+        self.calls["assets"] += 1
         return {name: dict(value) for name, value in self.remote.items()}
 
     def upload(self, release_id, artifact):
@@ -267,14 +394,19 @@ class MemoryRelease:
         if self.corrupt and name != delivery.PROBE_NAME:
             content = b"X" + content[1:]
         self.contents[asset_id] = content
+        return dict(self.remote[name])
 
     def verify(self, attachment, artifact):
         self.verified.append(attachment["name"])
+        if attachment["name"] != artifact.path.name or attachment["size"] != artifact.size:
+            raise delivery.AssetError("Immutable attachment size/name conflict")
+        self.body_reads.append(attachment["name"])
         body = self.contents[attachment["id"]]
         if len(body) != artifact.size or delivery.hashlib.sha256(body).hexdigest() != artifact.sha256:
             raise delivery.AssetError("Immutable attachment SHA256 conflict")
 
     def anonymous_denied(self, attachment):
+        self.calls["anonymous"] += 1
         self.events.append("anonymous")
         if self.public:
             raise delivery.AssetError("Raw attachment is anonymously accessible")

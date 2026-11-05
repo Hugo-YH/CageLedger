@@ -52,12 +52,15 @@
     "release:doctor": "bash scripts/release_local.sh --doctor",
     "release:status": "bash scripts/release_local.sh --status",
     "test:e2e:compat": "node scripts/run_python.mjs scripts/verify_local.py compat",
-    "check:steps": "npm run format:check && npm run lint && npm run typecheck && node node_modules/vitest/vitest.mjs run --maxWorkers=1 && node scripts/run_python.mjs -m unittest discover -s tests -p 'test_*.py' && npm run check:architecture -- --enforce && npm run check:api && npm run check:ui-contract && npm run check:style-ownership && npm run check:antd-design && npm run check:docs",
+    "check:steps": "npm run check:quality && node node_modules/vitest/vitest.mjs run --maxWorkers=1 --passWithNoTests=false && node scripts/run_python.mjs -m unittest discover -s tests -p 'test_*.py'",
     "test:target": "node scripts/run_python.mjs scripts/verify_local.py unit",
     "test:related": "node scripts/run_python.mjs scripts/verify_local.py related",
     "test:python:target": "node scripts/run_python.mjs scripts/verify_local.py python",
     "package:managed": "node scripts/run_python.mjs scripts/verify_local.py package",
-    "publish:cloud": "node scripts/run_python.mjs scripts/cloud_package_delivery.py"
+    "publish:cloud": "node scripts/run_python.mjs scripts/cloud_package_delivery.py",
+    "check:quality": "npm run format:check && npm run lint && npm run typecheck && npm run check:architecture -- --enforce && npm run check:api && npm run check:ui-contract && npm run check:style-ownership && npm run check:antd-design",
+    "verify:quality": "node scripts/run_python.mjs scripts/verify_local.py quality",
+    "build:shared": "node scripts/run_python.mjs scripts/frontend_build.py build"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.2",

@@ -8,7 +8,9 @@ OUT_DIR="${ROOT}/dist"
 PACKAGE_NAME="CageLedger-offline-${VERSION}.tar.gz"
 
 cd "${ROOT}"
-if [[ -n "${CAGELEDGER_RELEASE_BUILD_RECEIPT:-}" ]]; then
+if [[ -n "${CAGELEDGER_FRONTEND_BUILD_RECEIPT:-}" ]]; then
+  node scripts/run_python.mjs scripts/frontend_build.py validate --receipt "$CAGELEDGER_FRONTEND_BUILD_RECEIPT"
+elif [[ -n "${CAGELEDGER_RELEASE_BUILD_RECEIPT:-}" ]]; then
   node scripts/run_python.mjs scripts/release_pipeline.py --validate-build "$CAGELEDGER_RELEASE_BUILD_RECEIPT"
 else
   npm run build >/dev/null

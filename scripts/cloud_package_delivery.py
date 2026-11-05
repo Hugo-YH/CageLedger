@@ -407,19 +407,40 @@ def ensure_release(plan, client, receipt, path):
     return release_id, payload, actor
 
 
+def attachment_identity(value):
+    value = ReleaseAssets.attachment(value)
+    # download_count changes during verification; these fields identify the immutable stored file.
+    return {key: value.get(key) for key in ("id", "name", "size", "browser_download_url", "uuid", "created_at")}
+
+
+def reusable_verification(record, artifact, attachment):
+    if not isinstance(record, dict) or record.get("status") not in {"verified", "reused"}:
+        return False
+    if not all(record.get(key) == value for key, value in artifact.metadata().items()):
+        return False
+    if (
+        record.get("attachment_id") != attachment["id"]
+        or record.get("browser_download_url") != attachment["browser_download_url"]
+    ):
+        return False
+    # Legacy receipts are eligible only when all original complete-hash proof fields above exist.
+    return "attachment_identity" not in record or record["attachment_identity"] == attachment_identity(attachment)
+
+
 def probe_privacy(plan, client, release_id, assets):
     probe = plan.probe()
+    require(probe.size <= 256, "Permission probe must remain a tiny, source-free file.")
     if PROBE_NAME not in assets:
         require(probe.unchanged(), "Local permission probe changed.")
-        client.upload(release_id, probe)
-        assets = client.assets(release_id)
-    require(PROBE_NAME in assets, "Permission probe upload is not visible.")
-    client.verify(assets[PROBE_NAME], probe)
+        attachment = client.upload(release_id, probe)
+        require(attachment_identity(attachment)["name"] == PROBE_NAME, "Unexpected uploaded permission probe.")
+        assets[PROBE_NAME] = attachment
+    client.verify(assets[PROBE_NAME], probe)  # At most 256 authenticated bytes, only at run boundaries.
     proof = client.anonymous_denied(assets[PROBE_NAME])
     return proof, assets
 
 
-def deliver(plan, client, state):
+def deliver(plan, client, state, *, audit_remote=False):
     require(not state.resolve().is_relative_to(plan.repo.resolve()), "Delivery state must be outside the repository.")
     path = state / "receipt.json"
     identity = {
@@ -433,6 +454,12 @@ def deliver(plan, client, state):
     )
     require(receipt.get("identity") == identity, "Existing receipt belongs to different artifacts or transport.")
     receipt["status"] = "running"
+    receipt["verification"] = {
+        "audit_remote": audit_remote,
+        "fresh_full_hash_files": 0,
+        "reused_hash_receipts": 0,
+        "remote_artifact_bytes_verified_this_run": 0,
+    }
     save_receipt(path, receipt)
     active = None
     try:
@@ -442,45 +469,66 @@ def deliver(plan, client, state):
         assets = client.assets(release_id)
         allowed = {artifact.path.name for artifact in plan.files()} | {PROBE_NAME}
         require(set(assets) <= allowed, "Owned draft contains unknown attachments; inspect before resuming.")
-        receipt["privacy"] = {"status": "checking_raw_attachment"}
+        receipt["privacy"] = {"before": None, "after": None, "probe_size_bytes": plan.probe().size}
         save_receipt(path, receipt)
-        receipt["privacy"], assets = probe_privacy(plan, client, release_id, assets)
+        receipt["privacy"]["before"], assets = probe_privacy(plan, client, release_id, assets)
         save_receipt(path, receipt)
         for artifact in plan.files():
             active = artifact.path.name
             require(artifact.unchanged(), f"Local artifact changed: {active}")
-            verify_release(client.release(release_id), payload, receipt, actor)
-            require(client.repository() == receipt["repository_id"], "Private repository identity changed.")
-            receipt["privacy"], assets = probe_privacy(plan, client, release_id, assets)
-            if active in assets:
-                client.verify(assets[active], artifact)  # Re-read complete bytes; no server SHA is assumed.
-                status = "reused"
+            existing = active in assets
+            prior = receipt["files"].get(active)
+            if existing and not audit_remote and reusable_verification(prior, artifact, assets[active]):
+                scope = "prior_full_sha256_receipt"
+                read_bytes = 0
+                receipt["verification"]["reused_hash_receipts"] += 1
             else:
-                receipt["files"][active] = {**artifact.metadata(), "status": "uploading"}
+                pending = {**artifact.metadata(), "status": "verifying" if existing else "uploading"}
+                if existing:
+                    pending.update(
+                        attachment_id=assets[active]["id"], browser_download_url=assets[active]["browser_download_url"]
+                    )
+                receipt["files"][active] = pending
                 save_receipt(path, receipt)
-                client.upload(release_id, artifact)
-                assets = client.assets(release_id)
-                require(active in assets, "Uploaded attachment is not visible.")
-                client.verify(assets[active], artifact)
-                status = "verified"
+                if not existing:
+                    attachment = client.upload(release_id, artifact)
+                    require(
+                        attachment_identity(attachment)["name"] == active, "Unexpected uploaded attachment identity."
+                    )
+                    assets[active] = attachment
+                client.verify(assets[active], artifact)  # Exactly one full byte/SHA read for a new or untrusted file.
+                scope = "full_remote_sha256"
+                read_bytes = artifact.size
+                receipt["verification"]["fresh_full_hash_files"] += 1
+                receipt["verification"]["remote_artifact_bytes_verified_this_run"] += artifact.size
+            status = "reused" if existing else "verified"
             receipt["files"][active] = {
                 **artifact.metadata(),
                 "status": status,
                 "attachment_id": assets[active]["id"],
                 "browser_download_url": assets[active]["browser_download_url"],
+                "attachment_identity": attachment_identity(assets[active]),
+                "verification_scope": scope,
+                "remote_bytes_hashed_this_run": read_bytes,
             }
             save_receipt(path, receipt)
-            print(f"{status}: {active}", flush=True)
+            print(f"{status} ({scope}): {active}", flush=True)
         verify_release(client.release(release_id), payload, receipt, actor)
         require(client.repository() == receipt["repository_id"], "Private repository identity changed.")
         require(source_identity(plan.repo, check_remote=False) == plan.identity, "Source changed during upload.")
-        receipt["privacy"], _ = probe_privacy(plan, client, release_id, client.assets(release_id))
+        final_assets = client.assets(release_id)
+        require(set(final_assets) == allowed, "Final draft attachment set changed during delivery.")
+        require(
+            all(attachment_identity(final_assets[name]) == attachment_identity(assets[name]) for name in allowed),
+            "Final draft attachment identity changed during delivery.",
+        )
+        receipt["privacy"]["after"], _ = probe_privacy(plan, client, release_id, final_assets)
         receipt["status"] = "verified_draft"
         save_receipt(path, receipt)
         return path
     except BaseException:
         receipt["status"] = "incomplete"
-        if active and receipt["files"].get(active, {}).get("status") == "uploading":
+        if active and receipt["files"].get(active, {}).get("status") in {"uploading", "verifying"}:
             receipt["files"][active]["status"] = "unknown"
         save_receipt(path, receipt)
         raise
@@ -499,6 +547,11 @@ def main():
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate local artifacts/plan only; no network or generated-file writes"
+    )
+    parser.add_argument(
+        "--audit-remote",
+        action="store_true",
+        help="Re-download and SHA256-audit every remote artifact instead of reusing complete hash receipts",
     )
     options = parser.parse_args()
     require(1 <= options.chunk_mib <= 8, "--chunk-mib must be between 1 and 8.")
@@ -525,7 +578,7 @@ def main():
         )
         return
     state = options.state_dir or ROOT.parent / f"{ROOT.name}-delivery-state" / plan.version
-    path = deliver(plan, ReleaseAssets(), state.expanduser().resolve())
+    path = deliver(plan, ReleaseAssets(), state.expanduser().resolve(), audit_remote=options.audit_remote)
     print(f"Private development draft attachments verified; receipt: {path}")
     print(f"{ORIGIN}/hugo/cageledger/releases/tag/{plan.tag}")
 

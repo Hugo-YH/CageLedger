@@ -97,6 +97,7 @@ class VerificationScopeTests(unittest.TestCase):
         self.assertEqual(
             verify.commands("package", []),
             [
+                ["npm", "run", "build:shared"],
                 ["npm", "run", "package:offline"],
                 ["npm", "run", "package:container"],
             ],
@@ -108,7 +109,7 @@ class VerificationScopeTests(unittest.TestCase):
         jobs = verify.commands("full", [])
         self.assertEqual(len(jobs), 4)
         self.assertEqual(jobs[0], ["npm", "run", "check:steps"])
-        self.assertEqual(jobs[1], ["npm", "run", "build"])
+        self.assertEqual(jobs[1], ["npm", "run", "build:shared"])
         for job in jobs[2:]:
             self.assertIn("--workers=1", job)
             self.assertIn("--retries=0", job)

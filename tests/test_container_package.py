@@ -112,7 +112,13 @@ class DirectContainerPackageTests(unittest.TestCase):
             "CAGELEDGER_BUILD_PRUNE": "0",
             "MOCK_DOCKER_LOG": str(self.log),
         }
-        for variable in ("CAGELEDGER_REGISTRY", "CAGELEDGER_IMAGE_NAMESPACE", "CAGELEDGER_IMAGE_NAME"):
+        for variable in (
+            "CAGELEDGER_REGISTRY",
+            "CAGELEDGER_IMAGE_NAMESPACE",
+            "CAGELEDGER_IMAGE_NAME",
+            "CAGELEDGER_FRONTEND_BUILD_RECEIPT",
+            "CAGELEDGER_BUILD_CACHE_LIMIT",
+        ):
             self.env.pop(variable, None)
         git = binary_directory / "git"
         git.write_text(
@@ -177,6 +183,25 @@ class DirectContainerPackageTests(unittest.TestCase):
     def commands(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
 
+    def test_shared_frontend_is_selected_only_after_receipt_validation(self):
+        receipt = self.root / "build-receipt.json"
+        receipt.write_text("valid")
+        (self.root / "scripts/frontend_build.py").write_text(
+            "import sys\nfrom pathlib import Path\n"
+            "raise SystemExit(0 if Path(sys.argv[-1]).read_text() == 'valid' else 7)\n"
+        )
+        self.env["CAGELEDGER_FRONTEND_BUILD_RECEIPT"] = str(receipt)
+        result = self.run_package()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        builds = [args for args in self.commands() if args[:2] == ["buildx", "build"]]
+        self.assertEqual(len(builds), 1)
+        self.assertIn("FRONTEND_OUTPUT=frontend-artifact", builds[0])
+        self.assertIn(f"frontend-assets={self.root}/web-dist", builds[0])
+        receipt.write_text("stale")
+        result = self.run_package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len([args for args in self.commands() if args[:2] == ["buildx", "build"]]), 1)
+
     def previous_packages(self):
         output = self.root / "dist"
         output.mkdir()
@@ -187,6 +212,15 @@ class DirectContainerPackageTests(unittest.TestCase):
             path.write_bytes(content)
             packages[path] = content
         return packages
+
+    def test_cloud_cache_budget_keeps_dependencies_instead_of_unconditional_full_prune(self):
+        self.env.update(CAGELEDGER_BUILDX_BUILDER="cageledger-cloud", CAGELEDGER_BUILD_CACHE_LIMIT="12GB")
+        result = self.run_package()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        prunes = [args for args in self.commands() if args[:2] == ["buildx", "prune"]]
+        self.assertEqual(len(prunes), 1)
+        self.assertEqual(prunes[0][prunes[0].index("--max-used-space") + 1], "12GB")
+        self.assertNotIn("--all", prunes[0])
 
     def test_darwin_colima_export_produces_checked_archive_without_loading_or_pulling(self):
         uname = self.root / "bin/uname"

@@ -67,7 +67,7 @@
 
 ## 命令
 
-日常修改和提交按 [测试策略](testing-strategy.md) 只检查受影响文件与业务；简单修改不执行完整检查。下面的 `npm run check` 与 `npm run verify:full` 用于 Codex 云端发布前或明确要求时的完整开发验证，不作为每次提交和推送的前置条件。
+日常修改和提交按 [测试策略](testing-strategy.md) 只检查受影响文件与业务；简单修改不执行完整检查。`npm run verify:quality` 单独执行静态质量检查；下面的 `npm run check` 与 `npm run verify:full` 在明确选择完整范围时使用，不作为提交、推送或云端开发产物上传的默认前置条件。
 
 ```bash
 npm run format

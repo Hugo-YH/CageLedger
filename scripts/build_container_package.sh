@@ -26,6 +26,8 @@ Optional CA secrets: CODEX_PROXY_CERT and CAGELEDGER_BUILD_CA_BUNDLE.
 Docker proxy defaults and registry authentication are preserved.
 Set CAGELEDGER_BUILD_PRUNE=1 or --prune-cache to clear the dedicated cageledger-cloud
 builder's cache after export; default/unknown builders are refused.
+Set CAGELEDGER_BUILD_CACHE_LIMIT (cloud default 12GB) for bounded BuildKit GC instead
+of clearing reusable dependency layers after every build.
 EOF
 }
 
@@ -54,11 +56,16 @@ esac
 archive_tool() {
   node scripts/run_python.mjs scripts/container_archive.py "$@"
 }
-if [[ "$PRUNE_CACHE" -eq 1 ]]; then
+if [[ "$PRUNE_CACHE" -eq 1 || -n "${CAGELEDGER_BUILD_CACHE_LIMIT:-}" ]]; then
   docker_local buildx inspect "$BUILDER" | archive_tool check-builder --name "$BUILDER"
 fi
 REVISION="$(git rev-parse HEAD)"
 IMAGE_REPO="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}"
+frontend_options=()
+if [[ -n "${CAGELEDGER_FRONTEND_BUILD_RECEIPT:-}" ]]; then
+  node scripts/run_python.mjs scripts/frontend_build.py validate --receipt "$CAGELEDGER_FRONTEND_BUILD_RECEIPT"
+  frontend_options+=(--build-arg FRONTEND_OUTPUT=frontend-artifact --build-context "frontend-assets=${ROOT}/web-dist")
+fi
 secrets=()
 if [[ -n "${CODEX_PROXY_CERT:-}" ]]; then
   [[ -f "$CODEX_PROXY_CERT" ]] || { echo "Configured build proxy CA file is missing" >&2; exit 1; }
@@ -82,6 +89,7 @@ trap cleanup_package_staging EXIT
 archive_basename="CageLedger-image-${VERSION}-arm64"
 image_tar="${package_staging}/${archive_basename}.tar"
 docker_local buildx build --builder "$BUILDER" --platform linux/arm64 \
+  "${frontend_options[@]}" \
   "${secrets[@]}" \
   --build-arg "CAGELEDGER_APP_VERSION=${VERSION}" \
   --build-arg "CAGELEDGER_REVISION=${REVISION}" \
@@ -92,6 +100,8 @@ gzip -c "$image_tar" > "${package_staging}/${archive_basename}.tar.gz"
 rm -f "$image_tar"
 if [[ "$PRUNE_CACHE" -eq 1 ]]; then
   docker_local buildx prune --builder "$BUILDER" --all --force
+elif [[ -n "${CAGELEDGER_BUILD_CACHE_LIMIT:-}" ]]; then
+  docker_local buildx prune --builder "$BUILDER" --max-used-space "$CAGELEDGER_BUILD_CACHE_LIMIT" --force
 fi
 
 archive_tool finalize --staging "$package_staging" --output "${ROOT}/dist" \

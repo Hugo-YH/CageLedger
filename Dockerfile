@@ -1,6 +1,7 @@
 ARG NODE_IMAGE=node:22-bookworm-slim
 ARG PYTHON_IMAGE=python:3.13-slim
 ARG TARGETARCH
+ARG FRONTEND_OUTPUT=frontend
 
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend-deps
 
@@ -24,6 +25,13 @@ COPY wiki ./wiki
 RUN --mount=type=secret,id=proxy_ca \
     --mount=type=secret,id=ca_bundle \
     bash scripts/with_build_ca.sh env CAGELEDGER_DOCS_LAST_UPDATED=false npm run build
+
+# Managed cloud packaging supplies the already verified application/docs build.
+# The default still builds from source for standalone Docker builds.
+FROM scratch AS frontend-artifact
+COPY --from=frontend-assets / /build/web-dist/
+
+FROM ${FRONTEND_OUTPUT} AS web-assets
 
 FROM ${PYTHON_IMAGE} AS runtime-deps
 ARG TARGETARCH
@@ -59,7 +67,7 @@ RUN --mount=type=cache,id=cageledger-pip-${TARGETARCH},target=/root/.cache/pip,s
 FROM runtime-deps AS runtime
 COPY server.py package.json LICENSE NOTICE ./
 COPY server_app ./server_app
-COPY --from=frontend /build/web-dist ./web-dist
+COPY --from=web-assets /build/web-dist ./web-dist
 
 ARG CAGELEDGER_APP_VERSION=unknown
 ARG CAGELEDGER_REVISION=unknown

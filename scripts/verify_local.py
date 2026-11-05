@@ -10,6 +10,8 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import verification_cache
+from frontend_build import default_receipt
 from linux_test_guard import LinuxTestGuard
 from release_browsers import managed_pdf_browser
 from release_host_guard import HostGuard
@@ -17,7 +19,7 @@ from release_runtime import ROOT, Runner, atomic_json, isolation_environment, re
 from release_tools import release_converter
 from verification_host import host_task_lock
 
-MODES = ("check", "full", "all-unit", "all-python", "e2e", "compat", "unit", "related", "python", "package")
+MODES = ("quality", "check", "full", "all-unit", "all-python", "e2e", "compat", "unit", "related", "python", "package")
 
 
 def commands(mode, targets, grep=None):
@@ -73,9 +75,11 @@ def commands(mode, targets, grep=None):
     if mode == "compat":
         return [compat]
     if mode == "package":
-        return [["npm", "run", "package:offline"], ["npm", "run", "package:container"]]
+        return [["npm", "run", "build:shared"], ["npm", "run", "package:offline"], ["npm", "run", "package:container"]]
+    if mode == "quality":
+        return [["npm", "run", "check:quality"]]
     check = ["npm", "run", "check:steps"]
-    return [check] if mode == "check" else [check, ["npm", "run", "build"], e2e, compat]
+    return [check] if mode == "check" else [check, ["npm", "run", "build:shared"], e2e, compat]
 
 
 def verification_guard(output):
@@ -89,6 +93,9 @@ def main():
     parser.add_argument("targets", nargs="*")
     parser.add_argument("--grep")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--no-reuse", action="store_true", help="Rerun selected checks instead of using valid local evidence"
+    )
     args = parser.parse_args()
     jobs = commands(args.mode, args.targets, args.grep)
     if args.dry_run:
@@ -111,12 +118,12 @@ def main():
         focused = args.mode in {"unit", "related", "python"} or (
             args.mode in {"all-unit", "all-python"} and bool(args.targets)
         )
-        require(guard.check(admission=True) if focused else guard.admit(), guard.reason)
         environment = isolation_environment()
         if args.mode == "package":
             for key in (
                 "CAGELEDGER_BUILDX_BUILDER",
                 "CAGELEDGER_BUILD_PRUNE",
+                "CAGELEDGER_BUILD_CACHE_LIMIT",
                 "CAGELEDGER_BUILD_CA_BUNDLE",
                 "CAGELEDGER_REGISTRY",
                 "CAGELEDGER_IMAGE_NAMESPACE",
@@ -124,18 +131,36 @@ def main():
             ):
                 if key in os.environ:
                     environment[key] = os.environ[key]
+            environment["CAGELEDGER_FRONTEND_BUILD_RECEIPT"] = str(default_receipt(ROOT))
         environment["NODE_OPTIONS"] = "--max-old-space-size=3072"
         environment["CAGELEDGER_E2E_OUTPUT_DIR"] = str(directory / "chromium")
         environment["CAGELEDGER_COMPAT_OUTPUT_DIR"] = str(directory / "compat")
         results = []
+        cache_directory = ROOT.parent / (ROOT.name + "-verify-cache")
+        keys = [verification_cache.cache_key(ROOT, job, environment) for job in jobs]
+        reused = [
+            None if args.no_reuse else verification_cache.lookup(cache_directory, key, job)
+            for key, job in zip(keys, jobs, strict=False)
+        ]
+        if not all(reused):
+            require(guard.check(admission=True) if focused else guard.admit(), guard.reason)
         print(f"验证范围：{args.mode}；证据目录：{directory}", flush=True)
         try:
             for index, job in enumerate(jobs):
                 entry = {"command": job, "status": "running", "started": datetime.now(UTC).isoformat()}
                 results.append(entry)
+                if reused[index]:
+                    entry.update(status="reused", evidence=reused[index]["log"], fingerprint=keys[index])
+                    entry["ended"] = datetime.now(UTC).isoformat()
+                    print(f"复用已通过检查：{' '.join(job)}；原证据：{entry['evidence']}", flush=True)
+                    continue
                 try:
-                    runner.run(job, directory / f"step-{index + 1}" / "command.log", env=environment)
+                    log = directory / f"step-{index + 1}" / "command.log"
+                    runner.run(job, log, env=environment)
+                    verification_cache.test_evidence(job, log)
                     entry["status"] = "passed"
+                    if verification_cache.cache_key(ROOT, job, environment) == keys[index]:
+                        verification_cache.remember(cache_directory, keys[index], job, log)
                 except BaseException:
                     entry["status"] = "failed"
                     raise

@@ -58,7 +58,7 @@ npm run test:python:target -- tests.test_intake_order_identifiers
 npm run test:e2e -- tests/e2e/login-navigation.spec.ts
 ```
 
-Linux 的受管检查使用 cgroup v2 有限内存配额、OOM 事件及 swap 监测，保留互斥锁、单 worker、独立数据库和进程清理。定向单元/API 测试只做一次准入；完整和浏览器检查保留稳定观察。`npm run check`、`npm run verify:full` 留到发布前或明确要求全量时执行；所有所需依赖和用例必须实际完成，不能将 dry-run 或单元测试通过描述为浏览器验收。
+Linux 的受管检查使用 cgroup v2 有限内存配额、OOM 事件及 swap 监测，保留互斥锁、单 worker、独立数据库和进程清理。定向单元/API 测试只做一次准入；完整和浏览器检查保留稳定观察。日常与交付都按风险选范围；`check`、`verify:full` 仅在明确选择完整范围时执行；所有所需依赖和用例必须实际完成，不能将 dry-run 或单元测试通过描述为浏览器验收。
 
 ## 云端受管构建
 
@@ -70,11 +70,11 @@ export CAGELEDGER_BUILDX_BUILDER=cageledger-cloud
 npm run package:managed
 ```
 
-`package:managed` 共用宿主锁和资源保护，串行执行 `package:offline` 与 `package:container`。前者构建应用与文档并生成 `dist/CageLedger-offline-<version>.tar.gz`；后者仅构建 `linux/arm64`，直接导出 `docker load` 兼容镜像包、加载说明和 SHA256，校验通过后才替换最终产物。打包入口本身不上传，不与受管浏览器或其他重任务重叠。交付时复用同一最终源码状态的有效测试证据，记录确切来源 revision；构建后出现新修改须重新判断测试与产物是否失效，不能将脏工作区产物仅标记成旧 HEAD 的干净构建。
+`package:managed` 共用宿主锁和资源保护，先执行可复用的 `build:shared`，再串行执行 `package:offline` 与 `package:container`。源码包复用已验证的应用/文档输出，生成 `dist/CageLedger-offline-<version>.tar.gz`；镜像也通过受验证的命名上下文复用同一 `web-dist`，只构建 ARM64 运行时，直接导出 `docker load` 兼容镜像包、加载说明和 SHA256，校验通过后才替换最终产物。打包入口本身不上传，不与受管浏览器或其他重任务重叠。交付时复用同一最终源码状态的有效测试证据，记录确切来源 revision；构建后出现新修改须重新判断测试与产物是否失效，不能将脏工作区产物仅标记成旧 HEAD 的干净构建。
 
 Docker/Buildx 必须具有 ARM64 构建能力，能力不足明确失败。当前云端 rootless Docker 的默认 builder 不能据 binfmt 注册成功就判定可构建 ARM64。初始化命令使用固定摘要的官方 BuildKit、现有代理和 CA，创建独立 `cageledger-cloud` builder，每次实际运行 ARM64 指令探针；不切换全局 Docker context、不修改宿主 binfmt，也不重启未知 daemon。
 
-`cloud_env.sh` 默认选择该 builder，并显式设置 `CAGELEDGER_BUILD_PRUNE=1`，在 ARM64 导出校验后清理专用 builder 缓存以控制磁盘使用。通用入口默认不清缓存，拒绝对默认或未知 builder 清理。环境恢复后必要时重新初始化；BuildKit ARM64 构建成功不等同于宿主 Docker 可以直接运行 ARM64 容器。
+`cloud_env.sh` 默认保留可复用依赖缓存，并以 `CAGELEDGER_BUILD_CACHE_LIMIT=12GB` 在导出后对专用 builder 执行有界GC；不再每次全清并重新安装依赖。确需完全清理时显式设置 `CAGELEDGER_BUILD_PRUNE=1`。任何自动清理仍拒绝默认或未知 builder。环境恢复后必要时重新初始化；BuildKit ARM64 构建成功不等同于宿主 Docker 可以直接运行 ARM64 容器。
 
 可选的 Mac mini 备用构建仅手动触发，使用原生 ARM64 Docker Desktop／Colima context，保留缓存，不套用云端激活脚本和 builder 配置。
 
@@ -82,7 +82,7 @@ Docker 网络构建保持代理与 TLS 验证，使用 BuildKit secret 临时挂
 
 ## Gitea 托管与发布边界
 
-明确交付任务将对应代码和 ARM64 产物推送到 Gitea。私有源码及开发产物使用私有仓库的开发构建草稿附件，保留离线源码包、ARM64 离线镜像、加载说明、SHA256 及来源清单；这不等同于完整正式发布门禁或 Registry 镜像发布。已有附件仅在全量下载哈希一致时复用，冲突停止，不覆盖旧版本。
+明确交付任务将对应代码和 ARM64 产物推送到 Gitea。私有源码及开发产物使用私有仓库的开发构建草稿附件，保留离线源码包、ARM64 离线镜像、加载说明、SHA256 及来源清单；这不等同于完整正式发布门禁或 Registry 镜像发布。已有附件有可信的完整下载哈希凭据且身份不变时可复用，否则重新下载核验；冲突停止，不覆盖旧版本。
 
 先完成定向测试、提交当前源码，再构建和核验同一提交的产物。构建成功后推送对应分支，再上传：
 
@@ -96,7 +96,7 @@ npm run publish:cloud
 
 Gitea Generic Packages 关联私有仓库不代表原始文件下载受保护；本环境已实际验证匿名仍可读取该类测试文件。不得用仓库关联字段代替原始下载权限验证，也不将私有源码上传到该软件包区。草稿上传前，先用无源码的小附件验证认证下载内容，再用不携带认证的请求验证原始下载地址确实拒绝访问；仅 API 元数据返回 401 不能证明文件私有。
 
-当前云端网络实测 8 MiB 请求可上传，16 MiB 请求认证失败；Gitea 单附件上限为 100 MiB。因此大源码包和 ARM64 镜像自动分成不超过 8 MiB 的附件，逐片流式上传并完整下载回读 SHA256。分片以 `.partNNNN.gz` 命名，不能逐片解压；来源清单记录顺序、分片哈希及完整文件哈希，并提供标准库下载重组脚本 `CageLedger-download.py.txt`。使用脚本恢复后，仍得到完整的原始 `.tar.gz`，再按加载说明操作。
+当前云端网络实测 8 MiB 请求可上传，16 MiB 请求认证失败；Gitea 单附件上限为 100 MiB。因此大源码包和 ARM64 镜像自动分成不超过 8 MiB 的附件，新附件逐片流式上传并完整下载回读 SHA256 一次；首尾复核仓库/草稿和真实匿名访问权限，不每片重复查询同一权限。可信续传凭据与远端附件身份不变时复用旧字节校验，`--audit-remote` 才强制重新下载全部附件。分片以 `.partNNNN.gz` 命名，不能逐片解压；来源清单记录顺序、分片哈希及完整文件哈希，并提供标准库下载重组脚本 `CageLedger-download.py.txt`。使用脚本恢复后，仍得到完整的原始 `.tar.gz`，再按加载说明操作。
 
 上传状态和随机草稿所有权凭据仅保存在仓库外的 `CageLedger-delivery-state/`，不纳入代码或软件包。失败保留可核对状态，不盲目创建第二份同名草稿。Registry 认证未就绪时不能把离线镜像归档托管描述为可直接 `docker pull` 的镜像发布。
 

@@ -5,6 +5,7 @@ Interrupted mutations are reconciled, never blindly retried. Evidence is local,
 not a signature or a substitute for a trusted checkout/host.
 """
 
+import copy
 import fcntl
 import hashlib
 import json
@@ -27,6 +28,7 @@ from uuid import uuid4
 
 from release_endpoints import DEFAULT_GITEA_URL, HTTPS_GITEA_URL, REPOSITORY_PATH, gitea_url
 from release_reporting import progress
+from validation_inputs import metadata
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_FILES = {
@@ -71,6 +73,45 @@ def tree(path):
     return {str(p.relative_to(path)): digest(p) for p in sorted(path.rglob("*")) if p.is_file() or p.is_symlink()}
 
 
+_TOOL_VALIDATIONS = {}
+_TOOL_VALIDATION_LOCK = threading.RLock()
+
+
+def clear_tool_validation_cache():
+    """Drop this process's trusted installation proofs, including byte-digest memoization."""
+    with _TOOL_VALIDATION_LOCK:
+        _TOOL_VALIDATIONS.clear()
+        cached_file_digest.cache_clear()
+
+
+def cached_tool_validation(kind, path, validate, *, required=(), context=()):
+    """Only installed tools use this cache; source, output and remote checks stay independent."""
+    with _TOOL_VALIDATION_LOCK:
+        try:
+            actual = Path(path).expanduser().resolve(strict=True)
+            for item in required:
+                require(Path(item).resolve(strict=True).is_file(), "Required tool executable is not a file")
+            signature = metadata(actual)
+        except (OSError, RuntimeError):
+            # Missing mocked locations must not seed a success cache for a later real installation.
+            return copy.deepcopy(validate())
+        if signature == "missing":
+            return copy.deepcopy(validate())
+        key = (kind, str(actual), tuple(context))
+        entry = _TOOL_VALIDATIONS.get(key)
+        if entry is not None and entry[0] == signature:
+            return copy.deepcopy(entry[1])
+        value = validate()
+        require(metadata(actual) == signature, "Tool installation changed during validation")
+        _TOOL_VALIDATIONS[key] = (signature, copy.deepcopy(value))
+        return copy.deepcopy(value)
+
+
+def tool_tree(path):
+    """Reuse complete browser bundle bytes only while its full installation metadata is unchanged."""
+    return cached_tool_validation("browser-tree", path, lambda: tree(path))
+
+
 def command(args, cwd=ROOT, *, env=None, timeout=120):
     result = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, check=False)
     require(result.returncode == 0, f"{args[0]} failed (exit {result.returncode}); inspect the phase log")
@@ -102,18 +143,27 @@ def converter_identity():
     require(sys.platform == "darwin", "Unsupported release converter platform")
     bundle = next((parent for parent in path.parents if parent.suffix == ".app"), None)
     require(bundle is not None, "Release converter must belong to a verified macOS application bundle")
-    command(["codesign", "--verify", "--deep", "--strict", str(bundle)])
-    command(["spctl", "--assess", "--type", "execute", str(bundle)])
-    with tempfile.TemporaryDirectory(prefix="cageledger-release-converter-") as temporary:
-        version = command(
-            [str(path), "-env:UserInstallation=" + Path(temporary).as_uri(), "--version"],
-            timeout=30,
+
+    def verify():
+        command(["codesign", "--verify", "--deep", "--strict", str(bundle)])
+        command(["spctl", "--assess", "--type", "execute", str(bundle)])
+        with tempfile.TemporaryDirectory(prefix="cageledger-release-converter-") as temporary:
+            version = command(
+                [str(path), "-env:UserInstallation=" + Path(temporary).as_uri(), "--version"],
+                timeout=30,
+            )
+        require(
+            bool(re.fullmatch(r"LibreOffice [0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)? [0-9a-f]+", version)),
+            "Unrecognized LibreOffice version response",
         )
-    require(
-        bool(re.fullmatch(r"LibreOffice [0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)? [0-9a-f]+", version)),
-        "Unrecognized LibreOffice version response",
-    )
-    return {"executable": str(path), "bundle": str(bundle), "bundle_sha256": hashed(tree(bundle)), "version": version}
+        return {
+            "executable": str(path),
+            "bundle": str(bundle),
+            "bundle_sha256": hashed(tree(bundle)),
+            "version": version,
+        }
+
+    return cached_tool_validation("converter", bundle, verify, required=(path,), context=(str(path),))
 
 
 def browser_installations(repo):
@@ -136,7 +186,7 @@ console.log(JSON.stringify(['chromium','chromium-headless-shell','firefox','webk
 
 def runtime_fingerprint(repo):
     # Hash browser bundles, not merely a version string or executable pathname.
-    browsers = {str(p): tree(p) for p in browser_installations(repo)}
+    browsers = {str(p): tool_tree(p) for p in browser_installations(repo)}
     return hashed(
         {
             "python": digest(Path(sys.executable).resolve()),
