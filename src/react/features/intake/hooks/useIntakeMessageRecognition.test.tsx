@@ -80,6 +80,73 @@ function setup(mode: "entry" | "batches" = "entry", editing = false) {
   return { ...hook, draft, revision, recognition, request, replaceDraft, onTextRecognized, setNotice };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+
+it("starts independent local lookups together and shares repeated clicks until the complete draft is ready", async () => {
+  const strain = deferred<{ item: string }>();
+  const project = deferred<{ items: { iacuc: string; project: string }[] }>();
+  vi.mocked(parseIntakeMessage).mockReturnValue({
+    ...createIntakeDraft("录入人"),
+    batchNo: "（Z2025034）2025090302",
+    iacuc: "Z2025034",
+    strainRaw: "未知品系",
+    strainStandard: "未知品系",
+  });
+  vi.mocked(standardizeIntakeStrain).mockReturnValue(strain.promise);
+  const lookup = vi.spyOn(client, "ensureQueryData").mockReturnValue(project.promise);
+  const { result, replaceDraft, onTextRecognized } = setup();
+  let first!: Promise<void>;
+  let repeated!: Promise<void>;
+  act(() => {
+    first = result.current.parseMessage();
+    repeated = result.current.parseMessage();
+  });
+  expect(standardizeIntakeStrain).toHaveBeenCalledOnce();
+  expect(lookup).toHaveBeenCalledOnce();
+  expect(parseIntakeMessage).toHaveBeenCalledOnce();
+  await act(async () => {
+    project.resolve({ items: [{ iacuc: "Z2025034", project: "匹配项目" }] });
+    await project.promise;
+  });
+  expect(replaceDraft).not.toHaveBeenCalled();
+  await act(async () => {
+    strain.resolve({ item: "标准品系" });
+    await Promise.all([first, repeated]);
+  });
+  expect(replaceDraft).toHaveBeenCalledOnce();
+  expect(replaceDraft.mock.calls[0][0]).toMatchObject({ project: "匹配项目", strainStandard: "标准品系" });
+  expect(onTextRecognized).toHaveBeenCalledOnce();
+});
+
+it("starts new local input while an earlier lookup is pending and never applies its stale result", async () => {
+  const old = deferred<{ item: string }>();
+  vi.mocked(parseIntakeMessage)
+    .mockReturnValueOnce({ ...createIntakeDraft("录入人"), strainRaw: "旧品系", strainStandard: "旧品系" })
+    .mockReturnValueOnce({ ...createIntakeDraft("录入人"), strainRaw: "新品系", strainStandard: "新标准品系" });
+  vi.mocked(standardizeIntakeStrain).mockReturnValue(old.promise);
+  const { result, draft, revision, replaceDraft } = setup();
+  let previous!: Promise<void>;
+  act(() => {
+    previous = result.current.parseMessage();
+  });
+  draft.rawMessage = "新的预约原文";
+  revision.current += 1;
+  await act(() => result.current.parseMessage());
+  expect(replaceDraft).toHaveBeenCalledOnce();
+  expect(replaceDraft.mock.calls[0][0]).toMatchObject({ rawMessage: "新的预约原文", strainStandard: "新标准品系" });
+  await act(async () => {
+    old.resolve({ item: "旧标准品系" });
+    await previous;
+  });
+  expect(replaceDraft).toHaveBeenCalledOnce();
+});
+
 it.each(["local", "ai"])("previews a text-only %s result after applying the recognized draft", async (kind) => {
   const { result, replaceDraft, onTextRecognized, request } = setup();
   await act(() => (kind === "local" ? result.current.parseMessage() : result.current.aiParseMessage()));

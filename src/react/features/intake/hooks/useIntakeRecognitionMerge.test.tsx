@@ -52,7 +52,11 @@ it("only previews the recognized draft, excludes an edited ID and does not write
   vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue(previewResult());
   const { result, save } = setup();
   await act(() => result.current.preview(incoming, "current-editor"));
-  expect(previewIntakeRecognitionMerge).toHaveBeenCalledExactlyOnceWith(incoming, "current-editor");
+  expect(previewIntakeRecognitionMerge).toHaveBeenCalledExactlyOnceWith(
+    incoming,
+    "current-editor",
+    expect.any(AbortSignal),
+  );
   expect(result.current.state?.incoming).toEqual(incoming);
   expect(save.mutateAsync).not.toHaveBeenCalled();
   act(() => result.current.close());
@@ -156,8 +160,11 @@ it("ignores late previews after a new draft revision and after unmount", async (
   act(() => {
     pending = result.current.preview(incoming);
   });
+  const signal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[0][2]!;
+  expect(signal.aborted).toBe(false);
   revision.current += 1;
   rerender();
+  expect(signal.aborted).toBe(true);
   expect(result.current.state).toBeNull();
   unmount();
   await act(async () => {
@@ -165,6 +172,54 @@ it("ignores late previews after a new draft revision and after unmount", async (
     await pending;
   });
   expect(save.mutateAsync).not.toHaveBeenCalled();
+});
+
+it("cancels superseded and closed preview requests without allowing their late results to reopen the dialog", async () => {
+  const first = deferred<IntakeRecognitionMergePreview>();
+  const second = deferred<IntakeRecognitionMergePreview>();
+  vi.mocked(previewIntakeRecognitionMerge).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const { result } = setup();
+  let firstPending!: Promise<void>;
+  let secondPending!: Promise<void>;
+  act(() => {
+    firstPending = result.current.preview(incoming);
+  });
+  const firstSignal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[0][2]!;
+  act(() => {
+    secondPending = result.current.preview({ ...incoming, batchNo: "NEW" });
+  });
+  const secondSignal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[1][2]!;
+  expect(firstSignal.aborted).toBe(true);
+  expect(secondSignal.aborted).toBe(false);
+  await act(async () => {
+    first.resolve(previewResult());
+    await firstPending;
+  });
+  expect(result.current.state).toMatchObject({ incoming: { batchNo: "NEW" }, checking: true, result: null });
+  act(() => result.current.close());
+  expect(secondSignal.aborted).toBe(true);
+  await act(async () => {
+    second.resolve(previewResult());
+    await secondPending;
+  });
+  expect(result.current.state).toBeNull();
+});
+
+it("aborts only the private preview request on unmount", async () => {
+  const read = deferred<IntakeRecognitionMergePreview>();
+  vi.mocked(previewIntakeRecognitionMerge).mockReturnValue(read.promise);
+  const { result, unmount } = setup();
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.preview(incoming);
+  });
+  const signal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[0][2]!;
+  unmount();
+  expect(signal.aborted).toBe(true);
+  await act(async () => {
+    read.resolve(previewResult());
+    await pending;
+  });
 });
 
 it("does not reset a newer draft when an earlier merge write finishes", async () => {
@@ -202,5 +257,5 @@ it("still previews an order-only source with no purchase ID or batch number", as
   const { result } = setup();
   const orderOnly = { ...incoming, batchNo: "", purchaseOrderNo: "", orderNo: "DC202611022948607" };
   await act(() => result.current.preview(orderOnly));
-  expect(previewIntakeRecognitionMerge).toHaveBeenCalledExactlyOnceWith(orderOnly, undefined);
+  expect(previewIntakeRecognitionMerge).toHaveBeenCalledExactlyOnceWith(orderOnly, undefined, expect.any(AbortSignal));
 });

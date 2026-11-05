@@ -29,6 +29,7 @@ from server_app.domains.iacuc.sync import (
     save_principal_identity,
 )
 from server_app.domains.intake.duplicates import IntakeDuplicateConfirmationRequired
+from server_app.domains.intake.recognition_uploads import UploadExpired
 from server_app.domains.state.infrastructure_commands import (
     write_infrastructure as write_infrastructure_state,
 )
@@ -303,6 +304,8 @@ class HandlerSupportMixin:
                 {"error": str(exc), "code": "INTAKE_DUPLICATE_CONFIRMATION_REQUIRED", "details": exc.details},
                 HTTPStatus.CONFLICT,
             )
+        except UploadExpired as exc:
+            self.send_json({"error": str(exc), "code": "INTAKE_UPLOAD_EXPIRED"}, HTTPStatus.GONE)
         except StaleWriteError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except sqlite3.IntegrityError:

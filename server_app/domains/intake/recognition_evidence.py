@@ -2,6 +2,7 @@
 
 import re
 
+from server_app.domains.intake.recognition_image_copy import sanitize_processing
 from server_app.domains.intake.recognition_quantity import sanitize_calculation
 from server_app.domains.intake.recognition_review import sanitize_review
 from server_app.domains.intake.recognition_sources import sanitize_sources
@@ -69,6 +70,9 @@ def sanitize_evidence(raw):
             and isinstance(item.get("name"), str)
             and re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256") or ""))
         ]
+    processing = sanitize_processing(raw.get("imageProcessing"))
+    if processing:
+        result["imageProcessing"] = processing
     supplements = raw.get("textSupplements")
     if isinstance(supplements, list):
         result["textSupplements"] = [

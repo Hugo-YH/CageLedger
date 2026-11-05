@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useRef, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import type { IntakeBatch } from "../../../../contracts/intake";
@@ -18,6 +18,8 @@ import { queryKeys } from "../../../api/queryKeys";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import type { useIntakeRecognition } from "./useIntakeRecognition";
+
+type ProjectMatch = { project?: string; pi?: string; owner?: string } | undefined;
 
 export function useIntakeMessageRecognition({
   draft,
@@ -47,32 +49,46 @@ export function useIntakeMessageRecognition({
   const queryClient = useQueryClient();
   const feedback = useOperationFeedback();
   const requests = useLatestRequest();
+  const localRequest = useRef<{ key: string; promise: Promise<void> } | null>(null);
 
-  async function applyParsedMessage(parsed: Partial<IntakeBatch>, valid: () => boolean) {
+  function normalizeParsedMessage(parsed: Partial<IntakeBatch>) {
     const normalized = normalizeIntakeBatch(
       { ...parsed, supplier: abbreviateSupplier(parsed.supplier || ""), rawMessage: draft.rawMessage },
       roomNames,
     );
     const limitMessage = intakeIdentifierLimitMessage(normalized);
     if (limitMessage) throw new Error(limitMessage);
+    return normalized;
+  }
+
+  async function findProject(parsed: Partial<IntakeBatch>, normalized: IntakeBatch): Promise<ProjectMatch> {
     const multipleIacucs = intakeBatchIacucs(normalized.batchNo).length > 1;
     const normalizedCode = String(multipleIacucs ? "" : parsed.iacuc || "")
       .trim()
       .toUpperCase();
-    let match: { project?: string; pi?: string; owner?: string } | undefined;
     if (normalizedCode) {
       const result = await queryClient.ensureQueryData({
         queryKey: queryKeys.iacucSearch(normalizedCode, 1),
         queryFn: ({ signal }) => fetchIacucSearch(normalizedCode, 1, signal),
         staleTime: 5 * 60_000,
       });
-      match = result.items.find(
+      return result.items.find(
         (candidate) =>
           String(candidate.iacuc || "")
             .trim()
             .toUpperCase() === normalizedCode,
       );
     }
+  }
+
+  async function applyParsedMessage(
+    parsed: Partial<IntakeBatch>,
+    valid: () => boolean,
+    preloaded?: { match: ProjectMatch },
+  ) {
+    const normalized = normalizeParsedMessage(parsed);
+    const multipleIacucs = intakeBatchIacucs(normalized.batchNo).length > 1;
+    const match = preloaded ? preloaded.match : await findProject(parsed, normalized);
     if (!valid()) return null;
     const isEditingSavedBatch = mode === "batches" && editing;
     const item = normalizeIntakeBatch(
@@ -104,8 +120,7 @@ export function useIntakeMessageRecognition({
     };
   }
 
-  async function parseMessage() {
-    if (!requireRooms()) return;
+  async function recognizeLocalMessage() {
     if (parseIntakeOrderIdentifiers(draft.rawMessage).hasConflict) {
       requests.invalidate();
       feedback.warning("采购与订单编号需核对", "采购单号与订单编号不对应，请核对后再识别。");
@@ -117,12 +132,16 @@ export function useIntakeMessageRecognition({
     const hasNewImages = recognition.reading || recognition.snapshot().length > 0;
     try {
       let parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
-      if (parsed.strainRaw && parsed.strainStandard === parsed.strainRaw) {
-        const result = await standardizeIntakeStrain(parsed.strainRaw);
-        if (!valid()) return;
-        parsed = { ...parsed, strainStandard: result.item || parsed.strainStandard };
-      }
-      const info = await applyParsedMessage(parsed, valid);
+      const normalized = normalizeParsedMessage(parsed);
+      const [strain, match] = await Promise.all([
+        parsed.strainRaw && parsed.strainStandard === parsed.strainRaw
+          ? standardizeIntakeStrain(parsed.strainRaw)
+          : undefined,
+        findProject(parsed, normalized),
+      ]);
+      if (!valid()) return;
+      if (strain) parsed = { ...parsed, strainStandard: strain.item || parsed.strainStandard };
+      const info = await applyParsedMessage(parsed, valid, { match });
       if (!info) return;
       if (info.multipleIacucs) {
         const message = "已保留全部编号，但包含不同 IACUC，请按项目拆分预约后保存。";
@@ -143,6 +162,18 @@ export function useIntakeMessageRecognition({
     } catch (error) {
       if (valid()) setNotice(error instanceof Error ? error.message : "本地识别失败，请重试。");
     }
+  }
+
+  function parseMessage() {
+    if (!requireRooms()) return Promise.resolve();
+    const key = JSON.stringify([revision.current, draft.rawMessage, draft.id, roomNames, user.id, mode, editing]);
+    if (localRequest.current?.key === key) return localRequest.current.promise;
+    const promise = recognizeLocalMessage();
+    localRequest.current = { key, promise };
+    void promise.finally(() => {
+      if (localRequest.current?.promise === promise) localRequest.current = null;
+    });
+    return promise;
   }
 
   async function aiParseMessage() {

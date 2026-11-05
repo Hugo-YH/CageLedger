@@ -29,28 +29,53 @@ describe("intake save API", () => {
     );
   });
 
-  it("sends image bytes only in the recognition and save request envelopes", async () => {
+  it("uploads an original once and sends only references for recognition, save and duplicate confirmation", async () => {
     const image = { name: "预约.png", dataUrl: "data:image/png;base64,aGVsbG8=" };
     const item = createIntakeDraft("测试");
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ item }))));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((url) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url === "/api/intake/recognition-uploads"
+              ? {
+                  items: [
+                    {
+                      uploadId: "a".repeat(32),
+                      name: image.name,
+                      mime: "image/png",
+                      size: 5,
+                      sha256: "b".repeat(64),
+                      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+                    },
+                  ],
+                }
+              : { item },
+          ),
+        ),
+      ),
+    );
     const controller = new AbortController();
     await aiParseIntakeMessage("", ["8101"], [image], controller.signal);
     expect(fetchSpy).toHaveBeenLastCalledWith(
       "/api/intake/ai-parse",
       expect.objectContaining({
         signal: controller.signal,
-        body: JSON.stringify({ rawMessage: "", roomNames: ["8101"], images: [image] }),
+        body: JSON.stringify({ rawMessage: "", roomNames: ["8101"], imageRefs: [{ uploadId: "a".repeat(32) }] }),
       }),
     );
     await saveIntakeBatch({ item, exists: false, recognitionImages: [image] });
     expect(fetchSpy).toHaveBeenLastCalledWith(
       "/api/intake-batches",
       expect.objectContaining({
-        body: JSON.stringify({ item, recognitionImages: [image], expectedUpdatedAt: "" }),
+        body: JSON.stringify({ item, recognitionImageRefs: [{ uploadId: "a".repeat(32) }], expectedUpdatedAt: "" }),
       }),
     );
+    await saveIntakeBatch({ item, exists: false, recognitionImages: [image], duplicateConfirmation: "confirmed" });
+    expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/intake/recognition-uploads")).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    for (const [url, init] of fetchSpy.mock.calls) {
+      if (url !== "/api/intake/recognition-uploads") expect(String(init?.body)).not.toContain(image.dataUrl);
+    }
   });
 
   it("recognizes only the duplicate-confirmation conflict shape", () => {

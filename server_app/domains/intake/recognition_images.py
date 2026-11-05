@@ -56,31 +56,39 @@ def decode_images(raw):
         total += len(content)
         if total > MAX_TOTAL_BYTES:
             raise ValueError("预约图片合计不能超过 15 MiB")
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("error", Image.DecompressionBombWarning)
-                with Image.open(BytesIO(content), formats=list(FORMATS)) as image:
-                    if image.width * image.height > 25_000_000 or max(image.size) > 8192:
-                        raise ValueError("预约图片尺寸过大，请使用清晰的页面截图")
-                    if image.format not in FORMATS or FORMATS[image.format][0] != match[1]:
-                        raise ValueError("预约图片内容与文件格式不一致")
-                    if getattr(image, "n_frames", 1) != 1:
-                        raise ValueError("预约识别仅支持静态图片")
-                    image.verify()
-                with Image.open(BytesIO(content), formats=list(FORMATS)) as image:
-                    image.load()
-        except (
-            UnidentifiedImageError,
-            OSError,
-            SyntaxError,
-            Image.DecompressionBombError,
-            Image.DecompressionBombWarning,
-        ) as exc:
-            raise ValueError("预约图片损坏或无法读取") from exc
-        name = str(item.get("name") or f"预约图片{index + 1}").replace("\\", "/").rsplit("/", 1)[-1]
-        name = "".join(char for char in name if char.isprintable())[:160].strip() or f"预约图片{index + 1}"
-        images.append(RecognitionImage(name, match[1], content))
+        images.append(validate_image(item.get("name") or f"预约图片{index + 1}", content, match[1]))
     return images
+
+
+def validate_image(name, content, mime=None):
+    """Validate original bytes once, including complete decoding; transport never establishes type."""
+    if not isinstance(content, bytes) or not 0 < len(content) <= MAX_IMAGE_BYTES:
+        raise ValueError("每张预约图片须为有效图片且不能超过 5 MiB")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(BytesIO(content), formats=list(FORMATS)) as image:
+                if image.width * image.height > 25_000_000 or max(image.size) > 8192:
+                    raise ValueError("预约图片尺寸过大，请使用清晰的页面截图")
+                if image.format not in FORMATS or (mime and FORMATS[image.format][0] != mime):
+                    raise ValueError("预约图片内容与文件格式不一致")
+                mime = FORMATS[image.format][0]
+                if getattr(image, "n_frames", 1) != 1:
+                    raise ValueError("预约识别仅支持静态图片")
+                image.verify()
+            with Image.open(BytesIO(content), formats=list(FORMATS)) as image:
+                image.load()
+    except (
+        UnidentifiedImageError,
+        OSError,
+        SyntaxError,
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+    ) as exc:
+        raise ValueError("预约图片损坏或无法读取") from exc
+    name = str(name or "预约图片").replace("\\", "/").rsplit("/", 1)[-1]
+    name = "".join(char for char in name if char.isprintable())[:160].strip() or "预约图片"
+    return RecognitionImage(name, mime, content)
 
 
 class ImageWriteSession:
@@ -89,14 +97,33 @@ class ImageWriteSession:
     def __init__(self):
         self.created = []
         self.committed = False
+        self.prepared = {}
+        self.used = set()
 
     def __enter__(self):
         return self
 
     def __exit__(self, *_):
-        if not self.committed:
-            for path in self.created:
+        for path in self.created:
+            if not self.committed or path not in self.used:
                 path.unlink(missing_ok=True)
+
+    def prepare(self, images):
+        """Write/fsync owned originals before SQLite's write lock; __exit__ removes unused files."""
+        for image in images:
+            key = (hashlib.sha256(image.body).hexdigest(), image.name)
+            if key in self.prepared:
+                continue
+            identity = uuid4().hex
+            root = INTAKE_RECOGNITION_IMAGES_PATH
+            root.mkdir(parents=True, exist_ok=True)
+            path = root / (identity + MIME_SUFFIX[image.mime])
+            with path.open("xb") as output:
+                self.created.append(path)
+                output.write(image.body)
+                output.flush()
+                os.fsync(output.fileno())
+            self.prepared[key] = (identity, path)
 
     def save(self, batch_id, images, existing, at):
         result = list(existing)
@@ -108,16 +135,10 @@ class ImageWriteSession:
                 continue
             if len(result) >= 20:
                 raise ValueError("该批次的预约来源图片已达 20 张上限")
-            identity = uuid4().hex
-            root = INTAKE_RECOGNITION_IMAGES_PATH
-            root.mkdir(parents=True, exist_ok=True)
-            path = root / (identity + MIME_SUFFIX[image.mime])
-            # UUID names are exclusively owned by this attempt; originals are never replaced.
-            with path.open("xb") as output:
-                self.created.append(path)
-                output.write(image.body)
-                output.flush()
-                os.fsync(output.fileno())
+            if (digest, image.name) not in self.prepared:
+                self.prepare([image])
+            identity, path = self.prepared[(digest, image.name)]
+            self.used.add(path)
             item = {
                 "id": identity,
                 "name": image.name,

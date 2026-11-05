@@ -4,6 +4,10 @@ from email.parser import BytesParser
 
 
 def parse_multipart_upload(content_type, raw):
+    return parse_multipart_files(content_type, raw, max_files=1)[0]
+
+
+def parse_multipart_files(content_type, raw, *, max_files):
     if content_type.split(";", 1)[0].strip().lower() != "multipart/form-data":
         raise ValueError("请使用 multipart/form-data 上传文件")
     _multipart_boundary(content_type)
@@ -18,14 +22,18 @@ def parse_multipart_upload(content_type, raw):
         if part.get_content_disposition() == "form-data"
         and part.get_param("name", header="content-disposition") == "file"
     ]
-    if len(files) > 1:
-        raise ValueError("每次请求只能上传一个 file 文件")
-    if files:
-        part = files[0]
+    if len(files) > max_files:
+        raise ValueError(
+            "每次请求只能上传一个 file 文件" if max_files == 1 else f"每次最多上传 {max_files} 个 file 文件"
+        )
+    result = []
+    for part in files:
         if part.is_multipart() or part.get("Content-Transfer-Encoding"):
             raise ValueError("上传文件必须使用原始二进制内容")
-        return part.get_filename() or "", part.get_payload(decode=True)
-    raise ValueError("没有找到上传字段 file")
+        result.append((part.get_filename() or "", part.get_payload(decode=True)))
+    if not result:
+        raise ValueError("没有找到上传字段 file")
+    return result
 
 
 def _multipart_boundary(content_type):

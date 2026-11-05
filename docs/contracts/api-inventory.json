@@ -259,9 +259,16 @@
       "audit": "原导出审计",
       "effects": "export_audit"
     },
+    "intake_image_upload": {
+      "version": "暂存不修改业务版本；保存时仍按原批次版本和授权校验",
+      "idempotency": "当前草稿按原图对象复用上传凭据；引用30分钟或进程重启失效，410仅在业务写入和模型调用前返回",
+      "transaction": "先鉴权，再有界multipart校验与账号绑定暂存；不占用SQLite写事务；总128MiB/64文件，每账号60MiB/16文件，成功保存后的暂存副本可回收",
+      "audit": "暂存不新增业务审计；成功保存原件及关联沿用原预约图片审计",
+      "effects": "file_cache"
+    },
     "ai": {
       "version": "不适用",
-      "idempotency": "不自动重放模型请求",
+      "idempotency": "预约仅合并同账号同输入的在途请求；完成或失败后重试重新识别，最多2个模型任务和2个合并等待者，不自动重放模型请求",
       "transaction": "原服务端解析与输入限制；不保存接收批次",
       "audit": "原诊断及使用信息规则",
       "effects": "remote_read"
@@ -311,7 +318,7 @@
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
-    "server_app/web/router_registry.py": "bb294930286617051da1c8cc054c698cfb73e112104be0575c5229e5cb78e4d4",
+    "server_app/web/router_registry.py": "ef20a211ab0ed979cb29c6b214ad338dc813fccb1c64e62c2077a7103d5f0218",
     "server_app/web/route_registration.py": "4ccfd221b7233e3a75ecb1bfa4ecfe9d306fcb6b23139fa1479a389ce30ceadc",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "0f2737bacd52aa9bb111c46c177d9972019ceb6fa9e8152de59dc0f8bbc4f776",
@@ -1272,7 +1279,7 @@
           "method": "POST",
           "path": "/api/intake-batches",
           "purpose": "新建批次",
-          "request": "{item,checkDuplicates?,duplicateConfirmation?}；item分别保存purchaseOrderNo和orderNo，严格DC+13位数字+2位后缀可推导C，显式对应冲突400；PUT省略orderNo保留已有值",
+          "request": "{item,recognitionImageRefs?:[{uploadId}],checkDuplicates?,duplicateConfirmation?}；item分别保存purchaseOrderNo和orderNo，严格DC+13位数字+2位后缀可推导C，显式对应冲突400；PUT省略orderNo保留已有值；兼容recognitionImages原图，失效引用在写入前410",
           "response": "{item,auditLogs,...}；可选查重未确认时409含匹配记录和确认标识",
           "protection": "entity_create"
         },
@@ -1280,7 +1287,7 @@
           "method": "PUT",
           "path": "/api/intake-batches/{id}",
           "purpose": "编辑批次",
-          "request": "{item,expectedUpdatedAt?,checkDuplicates?,duplicateConfirmation?,recognitionMerge?:{incoming,confirmationToken}}；合并时版本必填；item分别保存purchaseOrderNo和orderNo，严格DC+13位数字+2位后缀可推导C，显式对应冲突400；PUT省略orderNo保留已有值",
+          "request": "{item,recognitionImageRefs?:[{uploadId}],expectedUpdatedAt?,checkDuplicates?,duplicateConfirmation?,recognitionMerge?:{incoming,confirmationToken}}；合并时版本必填；item分别保存purchaseOrderNo和orderNo，严格DC+13位数字+2位后缀可推导C，显式对应冲突400；PUT省略orderNo保留已有值；兼容recognitionImages原图，失效引用在写入前410",
           "response": "{item,placementTasks?,auditLogs?}；可选查重未确认时409含匹配记录和确认标识",
           "protection": "intake_recognition_edit"
         },
@@ -1365,9 +1372,17 @@
           "method": "POST",
           "path": "/api/intake/ai-parse",
           "purpose": "解析文字及多图预约信息，按饲养需求和采购信息分别提取后核对合并",
-          "request": "{rawMessage,roomNames,images?:[{name,dataUrl}]}；图片≤4张、单张≤5MiB、合计≤15MiB",
+          "request": "{rawMessage,roomNames,imageRefs?:[{uploadId}]}；兼容images:[{name,dataUrl}]，两种图片格式不可同时提交；图片≤4张、单张≤5MiB、合计≤15MiB",
           "response": "{item,usage,recognition?}；图片返回分类来源、提取文本、字段依据与核对提示；item分别返回purchaseOrderNo与orderNo，完整保留DC后缀；新图片识别可含recognition.review(version=1,comparisons,reminders)，历史依据缺少该字段时兼容原展示",
           "protection": "ai"
+        },
+        {
+          "method": "POST",
+          "path": "/api/intake/recognition-uploads",
+          "purpose": "一次上传当前预约原图，识别与保存通过账号绑定引用复用；未保存图片只短期暂存",
+          "request": "multipart/form-data，1至4个同名file；PNG/JPEG/WebP静态图，单图≤5MiB、合计≤15MiB",
+          "response": "{items:[{uploadId,name,mime,size,sha256,expiresAt}]}，输入顺序；201成功，400格式/归属错误，503暂存或上传繁忙",
+          "protection": "intake_image_upload"
         },
         {
           "method": "POST",

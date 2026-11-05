@@ -14,6 +14,19 @@ export interface IntakeRecognitionImageInput {
   dataUrl: string;
 }
 
+export interface IntakeRecognitionImageRef {
+  uploadId: string;
+}
+
+/** Short-lived, account-bound upload; neither the reference nor bytes belong in batch fields. */
+export interface IntakeRecognitionUpload extends IntakeRecognitionImageRef {
+  name: string;
+  mime: string;
+  size: number;
+  sha256: string;
+  expiresAt: string;
+}
+
 export interface IntakeRecognitionImage {
   id: string;
   name: string;
@@ -68,6 +81,16 @@ export interface IntakeRecognitionSource {
 }
 
 export interface IntakeRecognitionEvidence {
+  imageProcessing?: Array<{
+    imageIndex: number;
+    version: string;
+    applied: boolean;
+    sourceSize: number[];
+    imageSize: number[];
+    cropBox: number[];
+    sourceSha256: string;
+    imageSha256: string;
+  }>;
   extractedText: string;
   warnings: string[];
   fieldSources: Record<string, string>;

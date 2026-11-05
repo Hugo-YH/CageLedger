@@ -27,6 +27,17 @@ async function addImage(page: Page) {
   await expect(page.getByRole("button", { name: "移除图片 预约.png" })).toBeVisible();
 }
 
+async function performanceSnapshot(page: Page) {
+  const environment = await page.request.get("/api/system/environment");
+  const history = await page.request.get("/api/system/performance-history?hours=1");
+  return {
+    capturedAt: new Date().toISOString(),
+    hours: 1,
+    performance: environment.ok() ? ((await environment.json()) as { performance: unknown }).performance : null,
+    history: history.ok() ? ((await history.json()) as unknown) : null,
+  };
+}
+
 function aiItem(batchNo: string, iacuc = "") {
   return {
     batchNo,
@@ -77,6 +88,12 @@ test("recognizes synthetic images and persists evidence and original bytes in th
 }, info) => {
   const batchNo = `E2E-IMAGE-${Date.now()}`;
   await login(page);
+  const performanceBefore = await performanceSnapshot(page);
+  let uploadRequests = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/intake/recognition-uploads")
+      uploadRequests += 1;
+  });
   await page.route("**/api/intake/ai-parse", (route) =>
     finish(route, {
       item: { ...aiItem(batchNo, "Z2026001"), specification: "6–8个月" },
@@ -143,6 +160,9 @@ test("recognizes synthetic images and persists evidence and original bytes in th
   await page.getByRole("button", { name: "保存待接收批次", exact: true }).click();
   const response = await savedResponse;
   expect(response.ok()).toBe(true);
+  expect(uploadRequests).toBe(1);
+  expect(response.request().postDataJSON().recognitionImages).toBeUndefined();
+  expect(response.request().postDataJSON().recognitionImageRefs).toHaveLength(2);
   const saved = (await response.json()) as {
     item: {
       id: string;
@@ -162,6 +182,14 @@ test("recognizes synthetic images and persists evidence and original bytes in th
     const original = await page.request.get(persisted.item.recognition.images[0].url);
     expect(original.ok()).toBe(true);
     expect(await original.body()).toEqual(png);
+    await info.attach("recognition-performance", {
+      body: JSON.stringify({
+        scope: "isolated-browser-fixture",
+        before: performanceBefore,
+        after: await performanceSnapshot(page),
+      }),
+      contentType: "application/json",
+    });
     await openNavigationEntry(page, "笼卡管理", "待接收批次");
     await page.locator("tr", { hasText: batchNo }).getByRole("button", { name: "编辑", exact: true }).click();
     await expect(page.getByLabel("规格（体重/日龄）", { exact: true })).toHaveValue("6–8个月");
@@ -285,11 +313,17 @@ for (const action of ["save", "print"] as const) {
         finish(route, { item: aiItem(batchNo, "Z2026001"), recognition: evidence }),
       );
       await addImage(page);
+      let uploadRequests = 0;
+      page.on("request", (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname === "/api/intake/recognition-uploads")
+          uploadRequests += 1;
+      });
       await page.getByRole("button", { name: "AI识别" }).click();
       await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
       await setDate(page);
       const bodies: Array<{
-        recognitionImages?: Array<{ name: string; dataUrl: string }>;
+        recognitionImages?: unknown;
+        recognitionImageRefs?: Array<{ uploadId: string }>;
         duplicateConfirmation?: string;
       }> = [];
       page.on("request", (request) => {
@@ -316,10 +350,12 @@ for (const action of ["save", "print"] as const) {
       expect(response.ok()).toBe(true);
       savedId = ((await response.json()) as { item: { id: string } }).item.id;
       expect(bodies).toHaveLength(2);
-      for (const body of bodies)
-        expect(body.recognitionImages).toEqual([
-          expect.objectContaining({ name: "预约.png", dataUrl: `data:image/png;base64,${png.toString("base64")}` }),
-        ]);
+      expect(uploadRequests).toBe(1);
+      for (const body of bodies) {
+        expect(body.recognitionImages).toBeUndefined();
+        expect(body.recognitionImageRefs).toEqual([{ uploadId: expect.stringMatching(/^[a-f0-9]{32}$/) }]);
+      }
+      expect(bodies[0].recognitionImageRefs).toEqual(bodies[1].recognitionImageRefs);
       expect(bodies[1].duplicateConfirmation).toBeTruthy();
     } finally {
       if (savedId) await page.request.delete(`/api/intake-batches/${encodeURIComponent(savedId)}`);

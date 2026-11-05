@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { IntakeRecognitionImageInput } from "../../../api/contracts";
+import { registerIntakeImageFile } from "../../../api/intakeImageUploads";
 
 const MAX_FILE = 5 * 1024 * 1024;
 const MAX_TOTAL = 15 * 1024 * 1024;
 const TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
-type LocalImage = IntakeRecognitionImageInput & { size: number; key: string };
+type LocalImage = IntakeRecognitionImageInput & { size: number; key: string; source: IntakeRecognitionImageInput };
 
 export function useIntakeRecognition(onChange: () => void) {
   const [images, setImages] = useState<LocalImage[]>([]);
@@ -67,13 +68,16 @@ export function useIntakeRecognition(onChange: () => void) {
             (file) =>
               new Promise<LocalImage>((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = () =>
+                reader.onload = () => {
+                  const source = Object.freeze({ name: file.name || "粘贴的图片", dataUrl: String(reader.result) });
+                  registerIntakeImageFile(source, file);
                   resolve({
-                    name: file.name || "粘贴的图片",
-                    dataUrl: String(reader.result),
+                    ...source,
+                    source,
                     size: file.size,
                     key: crypto.randomUUID(),
                   });
+                };
                 reader.onerror = () => reject(new Error("图片读取失败，请重试。"));
                 reader.readAsDataURL(file);
               }),
@@ -121,6 +125,6 @@ export function useIntakeRecognition(onChange: () => void) {
       },
     };
   }, []);
-  const snapshot = useCallback(() => imagesRef.current.map(({ name, dataUrl }) => ({ name, dataUrl })), []);
+  const snapshot = useCallback(() => imagesRef.current.map(({ source }) => source), []);
   return { images, error, pending, reading, invalidate, reset, addFiles, remove, begin, snapshot };
 }

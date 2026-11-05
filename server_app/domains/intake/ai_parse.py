@@ -21,6 +21,7 @@ from server_app.domains.intake.identifier_recognition import (
     normalize_recognized_identifiers,
     recognized_identifiers,
 )
+from server_app.domains.intake.recognition_image_copy import prepare as prepare_image_copy
 from server_app.domains.intake.recognition_images import decode_images
 from server_app.domains.intake.recognition_pipeline import normalize_image_recognition
 from server_app.domains.intake.strain_standard import abbreviate_supplier, standardize_strain
@@ -299,24 +300,32 @@ warnings只列缺失、矛盾或待核对事项，不要把“数量一致”等
 """
 
 
-def ai_parse_intake_images(raw_message, room_names, images):
-    decoded = decode_images(images)
-    if not decoded:
+def ai_parse_intake_images(raw_message, room_names, images, *, decoded=False):
+    decoded_images = images if decoded else decode_images(images)
+    if not decoded_images:
         raise ValueError("请先添加预约图片")
-    names = "\n".join(f"图片{index + 1}：{image.name}" for index, image in enumerate(decoded))
+    names = "\n".join(f"图片{index + 1}：{image.name}" for index, image in enumerate(decoded_images))
     prompt = f"预约截图（按以下顺序）：\n{names}\n补充文字：\n{str(raw_message or '')[:20000]}"
     if room_names:
         prompt += "\n可选饲养房间号：" + ", ".join(str(name) for name in room_names[:200])
     rules = SYSTEM_RULES.replace("当前年份 2026", f"当前年份 {date.today().year}") + IMAGE_RULES + SOURCE_RULES
+    copies, processing = [], []
+    for index, image in enumerate(decoded_images):
+        prepared, facts = prepare_image_copy(image)
+        copies.append(prepared)
+        if facts is not None:
+            processing.append({"imageIndex": index + 1, **facts})
     payload, usage = deepseek_chat_json(
-        rules, prompt, image_urls=[image.data_url for image in decoded], model=DEEPSEEK_VISION_MODEL
+        rules, prompt, image_urls=[image.data_url for image in copies], model=DEEPSEEK_VISION_MODEL
     )
     if not payload:
         raise ValueError("图片未识别出预约字段，请更换清晰截图或补充文字后重试。")
     item, evidence = normalize_image_recognition(payload, DEEPSEEK_VISION_MODEL, _normalize_payload)
     evidence["inputImages"] = [
-        {"name": image.name, "sha256": hashlib.sha256(image.body).hexdigest()} for image in decoded
+        {"name": image.name, "sha256": hashlib.sha256(image.body).hexdigest()} for image in decoded_images
     ]
+    if processing:
+        evidence["imageProcessing"] = processing
     if not any(
         item.get(field)
         for field in ("purchaseOrderNo", "orderNo", "batchNo", "iacuc", "supplier", "strainRaw", "quantity", "roomName")

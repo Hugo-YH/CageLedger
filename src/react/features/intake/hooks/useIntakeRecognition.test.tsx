@@ -3,6 +3,25 @@ import { describe, expect, it, vi } from "vitest";
 import { useIntakeRecognition } from "./useIntakeRecognition";
 
 describe("intake recognition images", () => {
+  it("freezes stable original-image inputs across snapshots and additions without reviving removed files", async () => {
+    const { result } = renderHook(() => useIntakeRecognition(() => {}));
+    await act(async () => {
+      await result.current.addFiles([new File(["one"], "one.png", { type: "image/png" })]);
+    });
+    const captured = result.current.snapshot();
+    expect(result.current.snapshot()[0]).toBe(captured[0]);
+    expect(Object.isFrozen(captured[0])).toBe(true);
+    await act(async () => {
+      await result.current.addFiles([new File(["two"], "two.png", { type: "image/png" })]);
+    });
+    expect(result.current.snapshot()[0]).toBe(captured[0]);
+    expect(captured).toHaveLength(1);
+    act(() => result.current.remove(result.current.images[0].key));
+    expect(result.current.snapshot().map((image) => image.name)).toEqual(["two.png"]);
+    expect(captured[0].name).toBe("one.png");
+    act(() => result.current.reset());
+    expect(result.current.snapshot()).toEqual([]);
+  });
   it("adds and removes images, rejects invalid input without losing previous images", async () => {
     const onChange = vi.fn();
     const { result } = renderHook(() => useIntakeRecognition(onChange));

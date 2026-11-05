@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import type { IntakeBatch, IntakeRecognitionMergePreview } from "../../../../contracts/intake";
 import { previewIntakeRecognitionMerge, type useSaveIntakeBatch } from "../../../api/intake";
@@ -33,16 +33,29 @@ export function useIntakeRecognitionMerge({
   currentState.current = state;
   const requests = useLatestRequest();
   const visible = state?.revision === revision.current ? state : null;
+  const previewRequest = useRef<{ controller: AbortController; revision: number } | null>(null);
+  const cancelPreview = useCallback(() => {
+    previewRequest.current?.controller.abort();
+    previewRequest.current = null;
+  }, []);
+  const currentRevision = revision.current;
+  useEffect(() => cancelPreview, [cancelPreview]);
+  useEffect(() => {
+    if (previewRequest.current && previewRequest.current.revision !== currentRevision) cancelPreview();
+  }, [currentRevision, cancelPreview]);
 
   async function preview(incoming: IntakeBatch, excludeId?: string) {
+    cancelPreview();
     if (!incoming.batchNo.trim() && !incoming.purchaseOrderNo.trim() && !incoming.orderNo?.trim()) {
       requests.invalidate();
       setState(null);
       return;
     }
     const startedRevision = revision.current;
+    const controller = new AbortController();
+    previewRequest.current = { controller, revision: startedRevision };
     const isCurrentRequest = requests.begin();
-    const valid = () => isCurrentRequest() && revision.current === startedRevision;
+    const valid = () => !controller.signal.aborted && isCurrentRequest() && revision.current === startedRevision;
     setState({
       revision: startedRevision,
       incoming,
@@ -55,7 +68,7 @@ export function useIntakeRecognitionMerge({
       needsRefresh: false,
     });
     try {
-      const result = await previewIntakeRecognitionMerge(incoming, excludeId);
+      const result = await previewIntakeRecognitionMerge(incoming, excludeId, controller.signal);
       if (valid()) setState((current) => (current ? { ...current, result, checking: false } : null));
     } catch (error) {
       if (valid())
@@ -68,11 +81,14 @@ export function useIntakeRecognitionMerge({
               }
             : null,
         );
+    } finally {
+      if (previewRequest.current?.controller === controller) previewRequest.current = null;
     }
   }
 
   function close() {
     if (currentState.current?.saving) return;
+    cancelPreview();
     requests.invalidate();
     setState(null);
   }

@@ -18,6 +18,7 @@ import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
 import { queryKeys } from "./queryKeys";
 import { individualPeople } from "./personNames";
+import { withIntakeImageRefs } from "./intakeImageUploads";
 
 function intakeListUrl(params: IntakeListParams, summary = false) {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
@@ -103,19 +104,21 @@ export function saveIntakeBatch({
   recognitionImages,
   recognitionMerge,
 }: IntakeSaveRequest) {
-  return requestJson<IntakeWriteResponse>(
-    exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
-    {
-      method: exists ? "PUT" : "POST",
-      body: JSON.stringify({
-        item,
-        ...(recognitionImages?.length ? { recognitionImages } : {}),
-        ...(recognitionMerge ? { recognitionMerge } : {}),
-        expectedUpdatedAt: exists ? item.updatedAt : "",
-        ...(checkDuplicates ? { checkDuplicates: true } : {}),
-        ...(duplicateConfirmation ? { duplicateConfirmation } : {}),
-      }),
-    },
+  return withIntakeImageRefs(recognitionImages, (recognitionImageRefs) =>
+    requestJson<IntakeWriteResponse>(
+      exists ? `/api/intake-batches/${encodeURIComponent(item.id)}` : "/api/intake-batches",
+      {
+        method: exists ? "PUT" : "POST",
+        body: JSON.stringify({
+          item,
+          ...(recognitionImageRefs.length ? { recognitionImageRefs } : {}),
+          ...(recognitionMerge ? { recognitionMerge } : {}),
+          expectedUpdatedAt: exists ? item.updatedAt : "",
+          ...(checkDuplicates ? { checkDuplicates: true } : {}),
+          ...(duplicateConfirmation ? { duplicateConfirmation } : {}),
+        }),
+      },
+    ),
   );
 }
 
@@ -244,11 +247,16 @@ export async function aiParseIntakeMessage(
   images?: IntakeRecognitionImageInput[],
   signal?: AbortSignal,
 ) {
-  return requestJson<IntakeAiParseResponse>("/api/intake/ai-parse", {
-    method: "POST",
+  return withIntakeImageRefs(
+    images,
+    (imageRefs) =>
+      requestJson<IntakeAiParseResponse>("/api/intake/ai-parse", {
+        method: "POST",
+        signal,
+        body: JSON.stringify({ rawMessage, roomNames, ...(imageRefs.length ? { imageRefs } : {}) }),
+      }),
     signal,
-    body: JSON.stringify({ rawMessage, roomNames, ...(images?.length ? { images } : {}) }),
-  });
+  );
 }
 
 export function standardizeIntakeStrain(strain: string) {

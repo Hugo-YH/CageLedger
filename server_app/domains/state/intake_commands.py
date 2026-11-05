@@ -14,8 +14,9 @@ from server_app.db import connect_db
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
 from server_app.domains.intake.duplicates import confirm_duplicate_identifiers, duplicate_confirmation_event
 from server_app.domains.intake.recognition_evidence import sanitize_evidence
-from server_app.domains.intake.recognition_images import ImageWriteSession, decode_images
+from server_app.domains.intake.recognition_images import ImageWriteSession
 from server_app.domains.intake.recognition_merge import confirmed_merge
+from server_app.domains.intake.recognition_uploads import acknowledge_saved_images, request_images
 from server_app.domains.state.audit_diff import build_audit_events, validate_state_write_permission
 from server_app.repositories.entities import (
     delete_intake_batch as delete_intake_batch_repository,
@@ -47,8 +48,13 @@ class IntakeCommandPorts:
 def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports):
     started_at = time.perf_counter()
     status = HTTPStatus.OK
-    images = decode_images(payload.get("recognitionImages", [])) if method != "DELETE" else []
+    images = (
+        request_images(payload, actor["id"], raw_key="recognitionImages", refs_key="recognitionImageRefs")
+        if method != "DELETE"
+        else []
+    )
     with ImageWriteSession() as image_writer, connect_db() as conn:
+        image_writer.prepare(images)
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
         normalized_payload = dict(payload)
@@ -69,6 +75,7 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
         if method == "PUT" and existing and "orderNo" in existing and "orderNo" not in raw_item:
             raw_item["orderNo"] = existing["orderNo"]
         raw_item.pop("recognitionImages", None)
+        raw_item.pop("recognitionImageRefs", None)
         # Only server-owned metadata may reference persisted images. Old clients
         # omitting provenance retain the existing record instead of removing it.
         old_recognition = (existing or {}).get("recognition") or {}
@@ -195,6 +202,8 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
         write_audit_events(conn, events)
         conn.commit()
         image_writer.committed = True
+        if images:
+            acknowledge_saved_images(payload, actor["id"])
 
     invalidate_data_cache("assembled_state")
     invalidate_data_cache_prefixes(
