@@ -3,6 +3,19 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.30.0",
+    build: "261",
+    releasedAt: "2026-11-05",
+    title: "数量统计表保存反馈",
+    items: [
+      "录入页工具栏下方常驻显示上次成功保存的伦理号、月份、房间和时间，原有保存成功通知仍短暂显示",
+      "继续填写、新建表格或保存失败时保留上次成功记录，下一次成功保存后更新",
+      "同一账号会话中切换页面后保留，刷新页面或退出登录后重置",
+      "统一 Gitea API、Release 上传和 Wiki 的非交互凭据解析，支持受权限保护的 token 文件及官方站点已有认证",
+      "镜像推送前保存构建摘要，按架构核对远端内容并续传缺失部分；发布收尾汇总进程清理和原件比对结果，仅在条件满足时快进同步开发目录与分支",
+    ],
+  },
+  {
     version: "1.29.0",
     build: "260",
     releasedAt: "2026-11-04",
