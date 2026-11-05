@@ -4,7 +4,6 @@ import sys
 import tarfile
 import tempfile
 import unittest
-import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -74,7 +73,7 @@ class LocalArtifacts(unittest.TestCase):
         if arguments[0] == "remote":
             return f"{delivery.ORIGIN}/hugo/cageledger.git"
         if arguments[0] == "ls-remote":
-            return f"{REVISION}\trefs/heads/main"
+            return "" if any(arg.startswith("refs/tags/") for arg in arguments) else f"{REVISION}\trefs/heads/main"
         if arguments[0] == "ls-files":
             return "\0".join(self.source) + "\0"
         self.fail(f"Unexpected Git command: {arguments}")
@@ -132,225 +131,151 @@ class LocalArtifacts(unittest.TestCase):
         self.notes.write_text("changed after checksums were generated")
         with self.assertRaisesRegex(delivery.DeliveryError, "checksum file differs"):
             self.plan()
-        with self.assertRaisesRegex(delivery.DeliveryError, "Invalid Generic Package version"):
+        with self.assertRaisesRegex(delivery.DeliveryError, "Development draft version"):
             delivery.prepare(self.repo, self.output, "../outside")
 
-    def test_immutable_conflict_prevents_all_uploads_and_matching_files_are_reused(self):
-        plan = self.plan()
-        client = MemoryGitea()
-        client.remote = {a.path.name: a.metadata() for a in plan.files()}
-        client.remote[self.image.name] = {**client.remote[self.image.name], "sha256": "b" * 64}
+    def test_split_parts_are_ordered_and_restore_the_identical_archive(self):
+        artifact_path = self.output / "payload.tar.gz"
+        content = bytes(range(256)) * 3
+        artifact_path.write_bytes(content)
+        original = delivery.Artifact.read(artifact_path)
+        parts = delivery.split_artifact(original, 91, self.output / "parts", write=True)
+        self.assertGreater(len(parts), 1)
+        self.assertEqual(b"".join(part.path.read_bytes() for part in parts), content)
+        self.assertEqual(delivery.sha256_file(artifact_path), original.sha256)
+        self.assertTrue(all(part.size <= 91 and part.path.name.endswith(".gz") for part in parts))
+        self.assertEqual(parts[0].path.name, "payload.tar.part0001.gz")
+        dry = delivery.split_artifact(original, 91, self.output / "dry-parts", write=False)
+        self.assertEqual([part.sha256 for part in dry], [part.sha256 for part in parts])
+        self.assertFalse((self.output / "dry-parts").exists())
+        plan = delivery.prepare(self.repo, self.output, chunk_bytes=128, write_parts=True)
+        manifest = json.loads(plan.manifest)
+        self.assertTrue(all(record["sha256"] and record["attachments"] for record in manifest["artifacts"]))
+        self.assertIn(b"NOT independently decompressible", plan.restore)
+        self.assertIn(delivery.DOWNLOAD_NAME, [path.name for path in plan.generated()])
+
+    def test_owned_draft_and_raw_probe_precede_sensitive_upload_and_allow_resume(self):
+        plan, client = self.plan(), MemoryRelease()
         state = self.directory / "delivery"
-        with self.assertRaisesRegex(delivery.DeliveryError, "Immutable remote file conflicts"):
-            delivery.deliver(plan, client, state)
-        self.assertEqual(client.uploaded, [])
-        client.remote = {a.path.name: a.metadata() for a in plan.files()}
         receipt_path = delivery.deliver(plan, client, state)
-        self.assertEqual(client.uploaded, [])
-        receipt = json.loads(receipt_path.read_text())
-        self.assertEqual(receipt["status"], "verified")
-        self.assertEqual({v["status"] for v in receipt["files"].values()}, {"reused"})
-
-    def test_upload_order_and_post_upload_hash_verification(self):
-        plan = self.plan()
-        client = MemoryGitea()
-        receipt_path = delivery.deliver(plan, client, self.directory / "delivery")
-        self.assertEqual(client.uploaded, [a.path.name for a in plan.files()])
-        self.assertEqual(client.uploaded[0], plan.manifest_path.name)
+        self.assertTrue(client.value["draft"])
+        self.assertTrue(client.value["prerelease"])
+        self.assertEqual(client.value["target_commitish"], REVISION)
+        self.assertEqual(client.value["tag_name"], "v" + plan.version)
+        self.assertEqual(client.uploaded[0], delivery.PROBE_NAME)
+        self.assertEqual(client.uploaded[1], plan.manifest_path.name)
         self.assertEqual(client.uploaded[-1], self.image.name)
+        self.assertLess(client.events.index("anonymous"), client.events.index("upload:" + plan.manifest_path.name))
         receipt = json.loads(receipt_path.read_text())
-        self.assertEqual({v["status"] for v in receipt["files"].values()}, {"verified"})
-        bad = MemoryGitea(corrupt=True)
+        self.assertEqual(receipt["status"], "verified_draft")
+        self.assertIn(receipt["ownership"], client.value["body"])
+        uploaded = list(client.uploaded)
+        delivery.deliver(plan, client, state)
+        self.assertEqual(client.uploaded, uploaded)
+        receipt = json.loads(receipt_path.read_text())
+        self.assertEqual({value["status"] for value in receipt["files"].values()}, {"reused"})
+        self.assertTrue(client.verified)
+
+    def test_anonymous_readability_blocks_source_even_when_repository_metadata_is_private(self):
+        client = MemoryRelease(public=True)
+        with self.assertRaisesRegex(delivery.AssetError, "anonymously accessible"):
+            delivery.deliver(self.plan(), client, self.directory / "public")
+        self.assertEqual(client.uploaded, [delivery.PROBE_NAME])
+
+    def test_unknown_same_tag_or_changed_owner_draft_is_not_adopted(self):
+        plan, client = self.plan(), MemoryRelease()
+        client.value = {**delivery.release_payload(plan, "unknown"), "id": 19, "author": client.actor()}
+        with self.assertRaisesRegex(delivery.DeliveryError, "Unknown draft ownership"):
+            delivery.deliver(plan, client, self.directory / "unknown")
+        self.assertEqual(client.uploaded, [])
+        client = MemoryRelease()
+        state = self.directory / "owner"
+        delivery.deliver(plan, client, state)
+        client.value["author"] = {"id": 999, "login": "other"}
+        previous = list(client.uploaded)
+        with self.assertRaisesRegex(delivery.DeliveryError, "different author"):
+            delivery.deliver(plan, client, state)
+        self.assertEqual(client.uploaded, previous)
+
+    def test_full_download_hash_is_required_for_existing_and_new_attachments(self):
+        plan, client = self.plan(), MemoryRelease()
+        state = self.directory / "immutable"
+        delivery.deliver(plan, client, state)
+        remote_id = client.remote[self.image.name]["id"]
+        body = client.contents[remote_id]
+        client.contents[remote_id] = b"X" + body[1:]
+        previous = list(client.uploaded)
+        with self.assertRaisesRegex(delivery.AssetError, "SHA256 conflict"):
+            delivery.deliver(plan, client, state)
+        self.assertEqual(client.uploaded, previous)
+        bad = MemoryRelease(corrupt=True)
         failed_state = self.directory / "failed"
-        with self.assertRaisesRegex(delivery.DeliveryError, "Immutable remote file conflicts"):
+        with self.assertRaisesRegex(delivery.AssetError, "SHA256 conflict"):
             delivery.deliver(plan, bad, failed_state)
-        failure = json.loads((failed_state / "receipt.json").read_text())
-        self.assertEqual(failure["status"], "incomplete")
-        self.assertEqual(failure["files"][plan.manifest_path.name]["status"], "unknown")
-        self.assertEqual(len(bad.uploaded), 1)
-
-    def test_bootstrap_is_linked_and_verified_before_source_put(self):
-        plan = self.plan()
-        client = PrivacyGitea()
-        receipt_path = delivery.deliver(plan, client, self.directory / "private")
-        puts = [(index, path) for index, (method, path) in enumerate(client.events) if method == "PUT"]
-        self.assertTrue(puts[0][1].endswith(f"/{delivery.BOOTSTRAP_VERSION}/{delivery.BOOTSTRAP_FILE}"))
-        link_index = next(index for index, (method, path) in enumerate(client.events) if method == "POST")
-        private_index = next(
-            index
-            for index, (method, path) in enumerate(client.events)
-            if method == "GET" and path.endswith("/" + delivery.BOOTSTRAP_VERSION)
-        )
-        self.assertLess(puts[0][0], link_index)
-        self.assertLess(link_index, private_index)
-        self.assertLess(private_index, puts[1][0])
-        receipt = json.loads(receipt_path.read_text())
-        self.assertEqual(receipt["privacy"]["repository_id"], 1)
-        self.assertIn("bootstrap_marker", receipt["privacy"])
-
-    def test_wrong_or_unknown_unlinked_package_never_receives_source(self):
-        plan = self.plan()
-        for wrong_repository in (None, {"id": 2, "full_name": "hugo/other", "private": True}):
-            client = PrivacyGitea()
-            client.stored["unknown-version"] = {"unknown.txt": {"name": "unknown.txt", "size": 0, "sha256": "a" * 64}}
-            client.binding = wrong_repository
-            with self.subTest(repository=wrong_repository), self.assertRaises(delivery.DeliveryError):
-                delivery.deliver(plan, client, self.directory / ("unknown" if wrong_repository is None else "wrong"))
-            self.assertFalse(any(method == "PUT" for method, path in client.events))
-        unlinked = PrivacyGitea(link_effect=False)
-        with self.assertRaisesRegex(delivery.DeliveryError, "not verified as linked"):
-            delivery.deliver(plan, unlinked, self.directory / "link-failed")
-        puts = [path for method, path in unlinked.events if method == "PUT"]
-        self.assertEqual(len(puts), 1)
-        self.assertTrue(puts[0].endswith("/" + delivery.BOOTSTRAP_FILE))
-
-    def test_known_unlinked_bootstrap_can_resume_without_overwriting_marker(self):
-        plan = self.plan()
-        client = PrivacyGitea()
-        client.stored[delivery.BOOTSTRAP_VERSION] = {
-            delivery.BOOTSTRAP_FILE: {
-                "name": delivery.BOOTSTRAP_FILE,
-                "size": len(delivery.BOOTSTRAP_BODY),
-                "sha256": delivery.hashlib.sha256(delivery.BOOTSTRAP_BODY).hexdigest(),
-            }
-        }
-        delivery.deliver(plan, client, self.directory / "bootstrap-resume")
-        self.assertFalse(
-            any(method == "PUT" and path.endswith("/" + delivery.BOOTSTRAP_FILE) for method, path in client.events)
-        )
-        self.assertTrue(any(method == "POST" for method, path in client.events))
+        receipt = json.loads((failed_state / "receipt.json").read_text())
+        self.assertEqual(receipt["status"], "incomplete")
+        self.assertEqual(receipt["files"][plan.manifest_path.name]["status"], "unknown")
+        self.assertEqual(len(bad.uploaded), 2)
 
     def test_receipt_must_stay_outside_checkout(self):
         with self.assertRaisesRegex(delivery.DeliveryError, "outside the repository"):
-            delivery.deliver(self.plan(), MemoryGitea(), self.repo / "receipt")
+            delivery.deliver(self.plan(), MemoryRelease(), self.repo / "receipt")
 
 
-class MemoryGitea:
-    def __init__(self, corrupt=False):
+class MemoryRelease:
+    def __init__(self, public=False, corrupt=False):
+        self.value = None
         self.remote = {}
+        self.contents = {}
         self.uploaded = []
+        self.verified = []
+        self.events = []
+        self.public = public
         self.corrupt = corrupt
 
-    def ensure_private(self):
-        return {"status": "verified", "repository_id": 1, "anchor_version": delivery.BOOTSTRAP_VERSION}
+    def repository(self):
+        return 1
 
-    def verify_private(self, version, repository_id):
-        if repository_id != 1:
-            raise delivery.DeliveryError("Invalid private repository")
+    def actor(self):
+        return {"id": 7, "login": "hugo"}
 
-    def files(self, version):
-        return {name: dict(metadata) for name, metadata in self.remote.items()}
+    def find(self, tag):
+        return self.value
 
-    def upload(self, version, artifact):
-        self.uploaded.append(artifact.path.name)
-        self.remote[artifact.path.name] = artifact.metadata()
-        if self.corrupt:
-            self.remote[artifact.path.name]["sha256"] = "b" * 64
+    def create(self, payload):
+        self.value = {**payload, "id": 19, "author": self.actor()}
+        return self.value
 
+    def release(self, release_id):
+        return self.value
 
-class PrivacyGitea(delivery.Gitea):
-    def __init__(self, link_effect=True):
-        super().__init__("test-binding")
-        self.events = []
-        self.stored = {}
-        self.binding = None
-        self.link_effect = link_effect
+    def assets(self, release_id):
+        return {name: dict(value) for name, value in self.remote.items()}
 
-    def request(self, method, path, *, stream=None, size=None, missing=False):
-        self.events.append((method, path))
-        parts = delivery.urllib.parse.urlsplit(path).path.strip("/").split("/")
-        if path == "/api/v1/repos/hugo/cageledger":
-            value = {"id": 1, "full_name": "hugo/cageledger", "private": True}
-        elif method == "GET" and "?" in path:
-            value = [
-                {"name": delivery.PACKAGE, "type": "generic", "version": version, "repository": self.binding}
-                for version in self.stored
-            ]
-        elif method == "GET" and parts[-1] == "files":
-            version = parts[-2]
-            if version not in self.stored and missing:
-                return None
-            value = list(self.stored.get(version, {}).values())
-        elif method == "GET":
-            value = {"repository": self.binding}
-        elif method == "POST":
-            if self.link_effect:
-                self.binding = {"id": 1, "full_name": "hugo/cageledger", "private": True}
-            return b""
-        elif method == "PUT":
-            version, name = parts[-2:]
-            body = stream.read()
-            if len(body) != size:
-                raise AssertionError("Wrong upload size")
-            self.stored.setdefault(version, {})[name] = {
-                "name": name,
-                "size": size,
-                "sha256": delivery.hashlib.sha256(body).hexdigest(),
-            }
-            return b""
-        else:
-            raise AssertionError("Unexpected fake API call")
-        return json.dumps(value).encode()
+    def upload(self, release_id, artifact):
+        name = artifact.path.name
+        self.events.append("upload:" + name)
+        self.uploaded.append(name)
+        asset_id = len(self.remote) + 1
+        self.remote[name] = {
+            "name": name,
+            "size": artifact.size,
+            "id": asset_id,
+            "browser_download_url": delivery.ORIGIN + "/hugo/cageledger/releases/download/dev/" + name,
+        }
+        content = artifact.path.read_bytes()
+        if self.corrupt and name != delivery.PROBE_NAME:
+            content = b"X" + content[1:]
+        self.contents[asset_id] = content
 
+    def verify(self, attachment, artifact):
+        self.verified.append(attachment["name"])
+        body = self.contents[attachment["id"]]
+        if len(body) != artifact.size or delivery.hashlib.sha256(body).hexdigest() != artifact.sha256:
+            raise delivery.AssetError("Immutable attachment SHA256 conflict")
 
-class GiteaTransportTests(unittest.TestCase):
-    def test_https_origin_is_fixed_and_redirects_are_rejected_without_echoing_response(self):
-        for origin in ("http://git.cellnucle.us", "https://other.example", "https://user:password@git.cellnucle.us"):
-            with self.subTest(origin=origin), self.assertRaisesRegex(delivery.DeliveryError, "HTTPS Gitea origin"):
-                delivery.Gitea("test-binding", origin=origin)
-        handler = delivery.NoRedirect()
-        self.assertIsNone(handler.redirect_request(None, None, 302, "Found", {}, "https://other.example"))
-        response = io.BytesIO(b"sensitive-response-must-not-be-printed")
-        opener = type(
-            "RedirectOpener",
-            (),
-            {
-                "open": lambda *a, **kw: (_ for _ in ()).throw(
-                    urllib.error.HTTPError(delivery.ORIGIN + "/api/example", 302, "secret-message", {}, response)
-                )
-            },
-        )()
-        with self.assertRaises(delivery.DeliveryError) as failure:
-            delivery.Gitea("test-binding", opener=opener).request("GET", "/api/example")
-        self.assertIn("HTTP 302", str(failure.exception))
-        self.assertNotIn("secret", str(failure.exception))
-        self.assertNotIn("sensitive", str(failure.exception))
-
-    def test_put_body_is_a_bounded_file_stream_with_content_length(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "image.tar.gz"
-            path.write_bytes(b"archive-bytes" * 3000)
-            observed = {}
-
-            class StreamOpener:
-                def open(self, request, timeout):
-                    self_outer.assertFalse(isinstance(request.data, bytes))
-                    self_outer.assertTrue(hasattr(request.data, "read"))
-                    observed["length"] = request.get_header("Content-length")
-                    observed["authorization"] = request.get_header("Authorization")
-                    observed["timeout"] = timeout
-                    observed["method"] = request.get_method()
-                    observed["bytes"] = 0
-                    while chunk := request.data.read(8192):
-                        self_outer.assertLessEqual(len(chunk), 8192)
-                        observed["bytes"] += len(chunk)
-                    return io.BytesIO(b"")
-
-            self_outer = self
-            client = delivery.Gitea("test-binding", opener=StreamOpener())
-            artifact = delivery.Artifact.read(path)
-            client.upload("1.2.3-dev.abc", artifact)
-            self.assertEqual(observed["length"], str(artifact.size))
-            self.assertEqual(observed["bytes"], artifact.size)
-            self.assertEqual(observed["authorization"], "token test-binding")
-            self.assertEqual(observed["timeout"], 120)
-            self.assertEqual(observed["method"], "PUT")
-
-    def test_file_metadata_requires_size_and_sha256(self):
-        client = delivery.Gitea("test-binding")
-        values = [{"name": "artifact", "size": 3, "sha256": "a" * 64}]
-        with patch.object(client, "request", return_value=json.dumps(values).encode()):
-            self.assertEqual(client.files("1.2.3")["artifact"]["sha256"], "a" * 64)
-        with patch.object(client, "request", return_value=b'[{"name":"artifact","size":3}]'):
-            with self.assertRaisesRegex(delivery.DeliveryError, "Invalid Gitea package metadata"):
-                client.files("1.2.3")
+    def anonymous_denied(self, attachment):
+        self.events.append("anonymous")
+        if self.public:
+            raise delivery.AssetError("Raw attachment is anonymously accessible")
+        return {"status": 404, "raw_attachment_access": "denied"}

@@ -1,6 +1,6 @@
 # 发布与 CI-CD
 
-Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。只有明确交付任务才在云端构建并上传；普通修改与代码推送不自动打包。测试证据、源码和产物对应同一最终状态及来源 revision，旧版本制品不覆盖，NAS 不自动部署。普通产物可用 Gitea Packages 的唯一开发版本托管，操作见 `docs/contracts/cloud-development.md`。备用 Runner 见 `docs/contracts/macos-gitea-runner.md`，仅手动触发。
+Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。只有明确交付任务才在云端构建并上传；普通修改与代码推送不自动打包。测试证据、源码和产物对应同一最终状态及来源 revision，旧版本制品不覆盖，NAS 不自动部署。普通产物可用 Gitea 私有仓库的开发构建草稿附件托管，操作见 `docs/contracts/cloud-development.md`。备用 Runner 见 `docs/contracts/macos-gitea-runner.md`，仅手动触发。
 
 下面保留 Mac mini 受管正式发布流程，仍有平台专用转换器信任校验；当前云端 WebKit 系统库也受限，不能宣称 Linux 完整正式发布管线已全部适配。这不是云端普通打包与开发包上传的前置入口。正式发布由版本提交、tag、Gitea Release、容器镜像和 Wiki 同步组成。
 

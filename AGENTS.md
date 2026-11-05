@@ -74,7 +74,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。按用户授权执行提交、推送和上传；推送代码、构建软件包、发布环境与生产部署是独立操作。云端流程见 [cloud-development.md](docs/contracts/cloud-development.md)。
 
-生产目标为群晖 DS223（aarch64），后续只构建 `linux/arm64`：保留离线源码包、ARM64 镜像和离线镜像包，历史 AMD64 制品不删除。仅在明确交付任务中执行构建和上传，普通修改与代码推送不自动打包。构建、测试证据和上传产物对应同一源码状态及来源 revision；开发产物可用 Gitea Packages 的唯一开发版本托管，不覆盖旧版本，不自动部署 NAS。可选 Runner 见 [macos-gitea-runner.md](docs/contracts/macos-gitea-runner.md)，只接受手动触发。Mac mini 受管正式发布入口及平台专用校验保留，不能据此宣称 Linux 完整正式发布已适配；其资源配置见 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置。云端按 cgroup 配额受管执行，一次只运行一组浏览器，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。完整正式发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
+生产目标为群晖 DS223（aarch64），后续只构建 `linux/arm64`：保留离线源码包、ARM64 镜像和离线镜像包，历史 AMD64 制品不删除。仅在明确交付任务中执行构建和上传，普通修改与代码推送不自动打包。构建、测试证据和上传产物对应同一源码状态及来源 revision；开发产物可用 Gitea 私有仓库的开发构建草稿附件托管，不覆盖旧版本，不自动部署 NAS。可选 Runner 见 [macos-gitea-runner.md](docs/contracts/macos-gitea-runner.md)，只接受手动触发。Mac mini 受管正式发布入口及平台专用校验保留，不能据此宣称 Linux 完整正式发布已适配；其资源配置见 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置。云端按 cgroup 配额受管执行，一次只运行一组浏览器，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。完整正式发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
 
 ## 测试执行约束
 

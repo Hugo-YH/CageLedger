@@ -82,19 +82,23 @@ Docker 网络构建保持代理与 TLS 验证，使用 BuildKit secret 临时挂
 
 ## Gitea 托管与发布边界
 
-明确交付任务将对应代码和 ARM64 产物推送到 Gitea。普通构建产物可使用 Gitea Packages 的唯一开发版本托管，并保存离线源码包、ARM64 离线镜像、加载说明、SHA256 及来源清单；这不等同于正式 Release 或 Registry 镜像发布。上传前检查远端同名版本与文件，已有制品仅在哈希一致时复用，冲突停止，不覆盖旧版本。上传后回读核对文件与哈希。
+明确交付任务将对应代码和 ARM64 产物推送到 Gitea。私有源码及开发产物使用私有仓库的开发构建草稿附件，保留离线源码包、ARM64 离线镜像、加载说明、SHA256 及来源清单；这不等同于完整正式发布门禁或 Registry 镜像发布。已有附件仅在全量下载哈希一致时复用，冲突停止，不覆盖旧版本。
 
-本轮开发交付使用下列入口；先完成定向测试、提交当前源码，再构建和核验同一提交的产物。构建成功后推送对应分支，再上传软件包：
+先完成定向测试、提交当前源码，再构建和核验同一提交的产物。构建成功后推送对应分支，再上传：
 
 ```bash
 npm run package:managed
-node scripts/run_python.mjs scripts/gitea_git.py push gitea HEAD:refs/heads/main
+node scripts/run_python.mjs scripts/gitea_git.py push --no-follow-tags gitea HEAD:refs/heads/main
 npm run publish:cloud
 ```
 
-`publish:cloud` 不构建、不提交，也不执行 Git 推送。它要求干净源码及 Gitea 分支与本地 HEAD 一致，验证离线源码中的受跟踪文件、ARM64 镜像来源与校验文件，再以 `<应用版本>-dev.<提交前12位>` 创建不可覆盖的 Generic 开发构建版本。源码上传前必须确认软件包关联到私有 `hugo/cageledger` 并继承其权限。首次只用不含源码的固定 bootstrap 文件建立关联；关联失败停止。来源清单不含凭据，上传后的大小和 SHA256 从 Gitea 回读，续传记录位于仓库外的 `CageLedger-delivery-state/`。
+`publish:cloud` 不构建、不提交，也不执行 Git 推送。它要求干净源码及 Gitea 分支与本地 HEAD 一致，验证离线源码中的受跟踪文件、ARM64 镜像来源与校验文件，再创建 `v<应用版本>-dev.<提交前12位>` 的开发草稿，`target_commitish` 固定为完整 HEAD，保持 `draft=true`、`prerelease=true`，不修改旧 Release 或 `latest`。
 
-该入口上传离线源码包、ARM64 离线镜像、加载说明、校验文件和构建来源清单，不移动现有 Release 或 `latest`。Registry 认证未就绪时不能把 Generic 镜像归档托管描述为可直接 `docker pull` 的镜像发布。
+Gitea Generic Packages 关联私有仓库不代表原始文件下载受保护；本环境已实际验证匿名仍可读取该类测试文件。不得用仓库关联字段代替原始下载权限验证，也不将私有源码上传到该软件包区。草稿上传前，先用无源码的小附件验证认证下载内容，再用不携带认证的请求验证原始下载地址确实拒绝访问；仅 API 元数据返回 401 不能证明文件私有。
+
+当前云端网络实测 8 MiB 请求可上传，16 MiB 请求认证失败；Gitea 单附件上限为 100 MiB。因此大源码包和 ARM64 镜像自动分成不超过 8 MiB 的附件，逐片流式上传并完整下载回读 SHA256。分片以 `.partNNNN.gz` 命名，不能逐片解压；来源清单记录顺序、分片哈希及完整文件哈希，并提供标准库下载重组脚本 `CageLedger-download.py.txt`。使用脚本恢复后，仍得到完整的原始 `.tar.gz`，再按加载说明操作。
+
+上传状态和随机草稿所有权凭据仅保存在仓库外的 `CageLedger-delivery-state/`，不纳入代码或软件包。失败保留可核对状态，不盲目创建第二份同名草稿。Registry 认证未就绪时不能把离线镜像归档托管描述为可直接 `docker pull` 的镜像发布。
 
 正式 Release 上传、Registry 镜像发布和 `latest` 更新分别使用相应受管入口，并验证 API 与 registry 的认证、地址和结果；网络密钥绑定 HTTPS API 主机不等于 Docker registry 已认证。Gitea 托管不触发生产 NAS 的自动部署。
 

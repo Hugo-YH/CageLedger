@@ -117,7 +117,7 @@ Codex 云端负责日常开发、验收、按影响范围的测试和交付任�
 
 ## 发布
 
-明确交付任务使用 `npm run package:managed` 受管打包，串行生成离线源码包和 ARM64 离线镜像；普通开发修改不自动打包。测试、构建与上传必须对应同一源码状态和来源 revision，旧版本产物不覆盖，NAS 不自动部署。普通开发产物可保存到 Gitea Packages 的唯一开发版本，不等同于正式 Release。单项入口为 `package:offline`、`package:container`。以下为保留的 Mac mini 受管发布流程；其平台专用转换器校验仍然有效，不作为云端普通构建的前置条件。
+明确交付任务使用 `npm run package:managed` 受管打包，串行生成离线源码包和 ARM64 离线镜像；普通开发修改不自动打包。测试、构建与上传必须对应同一源码状态和来源 revision，旧版本产物不覆盖，NAS 不自动部署。普通开发产物可保存到 Gitea 私有仓库的开发构建草稿附件，不等同于正式 Release。单项入口为 `package:offline`、`package:container`。以下为保留的 Mac mini 受管发布流程；其平台专用转换器校验仍然有效，不作为云端普通构建的前置条件。
 
 1. 在 `wiki/更新日志.md` 增加版本、日期和面向使用者的说明，再运行 `npm run release:notes:sync`。
 2. 正式版本在 `main` 上发布，预发布经 `beta → rc → main` 推进。

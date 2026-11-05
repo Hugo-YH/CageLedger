@@ -1,36 +1,31 @@
-"""Upload committed ARM64 development artifacts to immutable Gitea Generic Packages."""
+"""Deliver committed ARM64 archives as verified private development draft attachments."""
 
 import argparse
 import hashlib
-import http.client
 import json
-import os
 import re
+import shlex
 import subprocess
 import tarfile
 import tempfile
-import urllib.error
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from container_archive import validate_archive
 from gitea_git import git_environment
+from gitea_release_assets import ORIGIN, AssetError, ReleaseAssets, download_script
 
 ROOT = Path(__file__).resolve().parents[1]
-ORIGIN = "https://git.cellnucle.us"
-OWNER = "hugo"
-PACKAGE = "cageledger-cloud-build"
 IMAGE = "ddns.cellnucle.us:3333/hugo/cageledger"
 PLATFORM = "linux/arm64"
-BOOTSTRAP_VERSION = "privacy-bootstrap-v1"
-BOOTSTRAP_FILE = "package-link.txt"
-BOOTSTRAP_BODY = b"Gitea package privacy binding bootstrap. No application source or build identity.\n"
-MAX_METADATA = 4 * 1024 * 1024
+PROBE_NAME = "access-probe.txt"
+PROBE_BODY = b"CageLedger draft-release raw download permission probe. No source or build identity.\n"
+RESTORE_NAME = "RESTORE.txt"
+DOWNLOAD_NAME = "CageLedger-download.py.txt"
 
 
-class DeliveryError(RuntimeError):
+class DeliveryError(AssetError):
     pass
 
 
@@ -104,15 +99,51 @@ class Plan:
     repo: Path
     identity: dict
     version: str
-    manifest_path: Path
+    directory: Path
     manifest: bytes
-    artifacts: tuple
+    restore: bytes
+    payloads: tuple
 
-    def manifest_artifact(self):
-        return Artifact(self.manifest_path, len(self.manifest), hashlib.sha256(self.manifest).hexdigest())
+    @property
+    def tag(self):
+        return "v" + self.version
+
+    @property
+    def manifest_path(self):
+        return self.directory / f"CageLedger-build-{self.version}.json"
+
+    def generated(self):
+        return {
+            self.manifest_path: self.manifest,
+            self.directory / RESTORE_NAME: self.restore,
+            self.directory / PROBE_NAME: PROBE_BODY,
+            self.directory / DOWNLOAD_NAME: download_script(
+                self.tag, self.identity["revision"], self.manifest_path.name, hashlib.sha256(self.manifest).hexdigest()
+            ),
+        }
 
     def files(self):
-        return (self.manifest_artifact(), *self.artifacts)
+        generated = tuple(
+            Artifact(path, len(content), hashlib.sha256(content).hexdigest())
+            for path, content in self.generated().items()
+            if path.name != PROBE_NAME
+        )
+        return (*generated, *self.payloads)
+
+    def probe(self):
+        return Artifact(self.directory / PROBE_NAME, len(PROBE_BODY), hashlib.sha256(PROBE_BODY).hexdigest())
+
+
+def write_immutable(path, content):
+    if path.exists():
+        require(
+            path.is_file() and not path.is_symlink() and path.read_bytes() == content,
+            f"Existing generated file differs: {path.name}",
+        )
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("xb") as output:
+        output.write(content)
 
 
 def validate_source_archive(path, identity, repo):
@@ -195,204 +226,113 @@ def validate_checksums(checksums, notes, image):
     require(actual == {notes.path.name: notes.sha256, image.path.name: image.sha256}, "Artifact checksum file differs.")
 
 
-def prepare(repo, output, version=None, *, check_remote=True):
+def split_artifact(artifact, chunk_bytes, directory, *, write):
+    if artifact.size <= chunk_bytes:
+        return (artifact,)
+    result = []
+    combined = hashlib.sha256()
+    with artifact.path.open("rb") as source:
+        number = 0
+        while source.tell() < artifact.size:
+            number += 1
+            require(number <= 9999, "Too many attachment chunks.")
+            target = directory / f"{artifact.path.name.removesuffix('.gz')}.part{number:04d}.gz"
+            temporary = None
+            output = None
+            try:
+                if write:
+                    directory.mkdir(parents=True, exist_ok=True)
+                    output = tempfile.NamedTemporaryFile(mode="wb", dir=directory, prefix=".chunk-", delete=False)
+                    temporary = Path(output.name)
+                digest = hashlib.sha256()
+                size = 0
+                while size < chunk_bytes:
+                    block = source.read(min(64 * 1024, chunk_bytes - size))
+                    if not block:
+                        break
+                    digest.update(block)
+                    combined.update(block)
+                    size += len(block)
+                    if output is not None:
+                        output.write(block)
+                require(size > 0, "Archive was truncated while splitting.")
+                chunk = Artifact(target, size, digest.hexdigest())
+                if output is not None:
+                    output.close()
+                    if target.exists() or target.is_symlink():
+                        require(
+                            not target.is_symlink() and chunk.unchanged(),
+                            f"Existing local chunk differs: {target.name}",
+                        )
+                    else:
+                        temporary.replace(target)
+                result.append(chunk)
+            finally:
+                if output is not None:
+                    output.close()
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
+    require(
+        sum(part.size for part in result) == artifact.size and combined.hexdigest() == artifact.sha256,
+        "Archive changed while splitting.",
+    )
+    return tuple(result)
+
+
+def prepare(repo, output, version=None, *, check_remote=True, chunk_bytes=8 * 1024 * 1024, write_parts=False):
     identity = source_identity(repo, check_remote=check_remote)
-    version = version or f"{identity['app_version']}-dev.{identity['revision'][:12]}"
-    require(bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}", version)), "Invalid Generic Package version.")
+    expected_version = f"{identity['app_version']}-dev.{identity['revision'][:12]}"
+    version = version or expected_version
+    require(
+        version == expected_version,
+        "Development draft version must identify the current application and source revision.",
+    )
+    require(0 < chunk_bytes <= 8 * 1024 * 1024, "Attachment chunk size must be greater than zero and at most 8 MiB.")
     app = identity["app_version"]
     source = Artifact.read(output / f"CageLedger-offline-{app}.tar.gz")
     image = Artifact.read(output / f"CageLedger-image-{app}-arm64.tar.gz")
     notes = Artifact.read(output / f"CageLedger-image-{app}-load.txt")
     checksums = Artifact.read(output / f"CageLedger-image-{app}-sha256.txt")
-    archived_source_count = validate_source_archive(source.path, identity, repo)
+    count = validate_source_archive(source.path, identity, repo)
     validate_archive(image.path, "arm64", app, identity["revision"], f"{IMAGE}:{app}-arm64")
     validate_checksums(checksums, notes, image)
+    directory = output / "cloud-delivery" / version
+    records, payloads, commands = [], [], []
+    for artifact in (source, notes, checksums, image):
+        pieces = split_artifact(artifact, chunk_bytes, directory / "parts", write=write_parts)
+        records.append({**artifact.metadata(), "attachments": [part.metadata() for part in pieces]})
+        payloads.extend(pieces)
+        if len(pieces) > 1:
+            commands.append(
+                "cat "
+                + " ".join(shlex.quote(part.path.name) for part in pieces)
+                + " > "
+                + shlex.quote(artifact.path.name)
+            )
+        commands.append(
+            f"printf '%s  %s\\n' {shlex.quote(artifact.sha256)} {shlex.quote(artifact.path.name)} | shasum -a 256 -c -"
+        )
     require(source_identity(repo, check_remote=False) == identity, "Source changed during artifact verification.")
-    artifacts = (source, notes, checksums, image)
+    restore = (
+        "CageLedger ARM64 development build archive restoration\n\n"
+        "Alternatively run python3 CageLedger-download.py.txt to fetch and restore private attachments using an environment token or hidden prompt.\n\nDownload all attachments into one directory. Files ending in .partNNNN.gz are consecutive binary pieces, NOT independently decompressible gzip files. Concatenate only in the explicit order below, then verify the full archive SHA256 before extracting or docker load. Original archives are unchanged.\n\n"
+        "set -eu\n" + "\n".join(commands) + "\n"
+    ).encode()
     manifest = {
-        "schema_version": 1,
-        "package": PACKAGE,
+        "schema_version": 2,
+        "delivery": "private-development-draft-release",
         "version": version,
         "source": {"repository": f"{ORIGIN}/hugo/cageledger", **identity},
         "platforms": [PLATFORM],
-        "source_archive_tracked_files_verified": archived_source_count,
+        "source_archive_tracked_files_verified": count,
         "image_tag": f"{IMAGE}:{app}-arm64",
-        "artifacts": [artifact.metadata() for artifact in artifacts],
+        "chunk_bytes": chunk_bytes,
+        "artifacts": records,
+        "downloader": DOWNLOAD_NAME,
+        "recovery": {"name": RESTORE_NAME, "size": len(restore), "sha256": hashlib.sha256(restore).hexdigest()},
     }
     encoded = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
-    return Plan(repo, identity, version, output / f"CageLedger-build-{version}.json", encoded, artifacts)
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-class Gitea:
-    def __init__(self, token=None, *, origin=ORIGIN, opener=None):
-        require(origin.rstrip("/") == ORIGIN, "Delivery requires the configured HTTPS Gitea origin.")
-        token = token if token is not None else os.environ.get("CAGELEDGER_GITEA_TOKEN", "")
-        require(
-            bool(token) and not any(char.isspace() for char in token),
-            "A valid CAGELEDGER_GITEA_TOKEN binding is required.",
-        )
-        self.authorization = "token " + token
-        # Default ProxyHandler and verified HTTPSHandler retain the session proxy/CA trust.
-        self.opener = opener or urllib.request.build_opener(NoRedirect())
-
-    def request(self, method, path, *, stream=None, size=None, missing=False):
-        parsed = urllib.parse.urlsplit(path)
-        require(
-            path.startswith("/api/") and not parsed.scheme and not parsed.netloc and not parsed.fragment,
-            "Invalid Gitea API path.",
-        )
-        headers = {"Authorization": self.authorization, "Accept": "application/json"}
-        if stream is not None:
-            headers.update({"Content-Type": "application/octet-stream", "Content-Length": str(size)})
-        request = urllib.request.Request(ORIGIN + path, data=stream, headers=headers, method=method)
-        try:
-            with self.opener.open(request, timeout=120) as response:
-                body = response.read(MAX_METADATA + 1)
-                require(len(body) <= MAX_METADATA, f"Gitea metadata exceeds the limit: {path}")
-                return body
-        except urllib.error.HTTPError as error:
-            if error.code == 404 and missing:
-                return None
-            raise DeliveryError(f"Gitea {method} {path}: HTTP {error.code}") from None
-        except (OSError, urllib.error.URLError, TimeoutError, http.client.HTTPException):
-            raise DeliveryError(
-                f"Gitea {method} {path}: network request failed; inspect the receipt before resuming."
-            ) from None
-
-    def metadata(self, path, *, missing=False):
-        body = self.request("GET", path, missing=missing)
-        if body is None:
-            return None
-        try:
-            return json.loads(body)
-        except (ValueError, TypeError):
-            raise DeliveryError(f"Invalid Gitea package metadata: {path}") from None
-
-    def repository(self):
-        value = self.metadata("/api/v1/repos/hugo/cageledger")
-        require(
-            isinstance(value, dict)
-            and type(value.get("id")) is int
-            and value.get("full_name") == "hugo/cageledger"
-            and value.get("private") is True,
-            "Delivery requires the verified private hugo/cageledger repository.",
-        )
-        return value["id"]
-
-    def versions(self):
-        versions = []
-        for page in range(1, 1001):
-            query = urllib.parse.urlencode({"type": "generic", "q": PACKAGE, "limit": 50, "page": page})
-            values = self.metadata(f"/api/v1/packages/{OWNER}?{query}")
-            require(isinstance(values, list), "Invalid Gitea package version list.")
-            for value in values:
-                require(isinstance(value, dict), "Invalid Gitea package version metadata.")
-                if value.get("name") == PACKAGE and value.get("type") == "generic":
-                    require(isinstance(value.get("version"), str), "Missing Generic Package version.")
-                    versions.append(value)
-            if len(values) < 50:
-                return versions
-        raise DeliveryError("Gitea package version pagination exceeded the limit.")
-
-    def verify_private(self, version, repository_id):
-        quoted = urllib.parse.quote(version, safe="")
-        value = self.metadata(f"/api/v1/packages/{OWNER}/generic/{PACKAGE}/{quoted}")
-        repository = value.get("repository") if isinstance(value, dict) else None
-        require(
-            isinstance(repository, dict)
-            and repository.get("id") == repository_id
-            and repository.get("full_name") == "hugo/cageledger"
-            and repository.get("private") is True,
-            "Package is not verified as linked to the private hugo/cageledger repository; source upload refused.",
-        )
-
-    def ensure_private(self):
-        repository_id = self.repository()
-        versions = self.versions()
-        marker = {
-            "name": BOOTSTRAP_FILE,
-            "size": len(BOOTSTRAP_BODY),
-            "sha256": hashlib.sha256(BOOTSTRAP_BODY).hexdigest(),
-        }
-        if versions and all(value.get("repository") is not None for value in versions):
-            for value in versions:
-                repository = value["repository"]
-                require(
-                    isinstance(repository, dict)
-                    and repository.get("id") == repository_id
-                    and repository.get("full_name") == "hugo/cageledger"
-                    and repository.get("private") is True,
-                    "Existing package is linked to a different or non-private repository; not relinked.",
-                )
-            anchor = sorted(value["version"] for value in versions)[0]
-            self.verify_private(anchor, repository_id)
-            return {"status": "verified", "repository_id": repository_id, "anchor_version": anchor}
-        require(
-            not versions
-            or (
-                len(versions) == 1
-                and versions[0].get("version") == BOOTSTRAP_VERSION
-                and versions[0].get("repository") is None
-            ),
-            "Unlinked package has unknown ownership/content; source upload refused.",
-        )
-        existing = self.files(BOOTSTRAP_VERSION)
-        if versions:
-            require(existing == {BOOTSTRAP_FILE: marker}, "Unlinked bootstrap file differs; not adopted.")
-        else:
-            require(not existing, "Unexpected existing bootstrap files; source upload refused.")
-            import io
-
-            path = f"/api/packages/{OWNER}/generic/{PACKAGE}/{BOOTSTRAP_VERSION}/{BOOTSTRAP_FILE}"
-            with io.BytesIO(BOOTSTRAP_BODY) as stream:
-                self.request("PUT", path, stream=stream, size=len(BOOTSTRAP_BODY))
-            require(
-                self.files(BOOTSTRAP_VERSION) == {BOOTSTRAP_FILE: marker}, "Bootstrap file SHA256 was not verified."
-            )
-        self.request("POST", f"/api/v1/packages/{OWNER}/generic/{PACKAGE}/-/link/cageledger")
-        self.verify_private(BOOTSTRAP_VERSION, repository_id)
-        return {
-            "status": "verified",
-            "repository_id": repository_id,
-            "anchor_version": BOOTSTRAP_VERSION,
-            "bootstrap_marker": marker,
-        }
-
-    def files(self, version):
-        version = urllib.parse.quote(version, safe="")
-        path = f"/api/v1/packages/{OWNER}/generic/{PACKAGE}/{version}/files"
-        body = self.request("GET", path, missing=True)
-        if body is None:
-            return {}
-        try:
-            values = json.loads(body)
-            require(isinstance(values, list), "Invalid Gitea package file list.")
-            files = {}
-            for entry in values:
-                name, size, sha256 = entry["name"], entry["size"], entry["sha256"]
-                require(isinstance(name, str) and name not in files, "Invalid or duplicate Gitea package filename.")
-                require(type(size) is int and size >= 0, "Invalid Gitea package file size.")
-                require(
-                    isinstance(sha256, str) and bool(re.fullmatch(r"[a-fA-F0-9]{64}", sha256)),
-                    "Missing Gitea file SHA256.",
-                )
-                files[name] = {"name": name, "size": size, "sha256": sha256.lower()}
-            return files
-        except (ValueError, TypeError, KeyError):
-            raise DeliveryError(f"Invalid Gitea package metadata: {path}") from None
-
-    def upload(self, version, artifact):
-        version = urllib.parse.quote(version, safe="")
-        filename = urllib.parse.quote(artifact.path.name, safe="")
-        path = f"/api/packages/{OWNER}/generic/{PACKAGE}/{version}/{filename}"
-        # urllib/http.client consumes file.read() in bounded blocks; no archive-sized byte string.
-        with artifact.path.open("rb") as stream:
-            self.request("PUT", path, stream=stream, size=artifact.size)
+    return Plan(repo, identity, version, directory, encoded, restore, tuple(payloads))
 
 
 def save_receipt(path, value):
@@ -407,70 +347,139 @@ def save_receipt(path, value):
     temporary.replace(path)
 
 
-def check_remote_file(artifact, remote):
-    existing = remote.get(artifact.path.name)
-    if existing is not None:
-        require(
-            existing == artifact.metadata(), f"Immutable remote file conflicts: {artifact.path.name}; not overwritten."
-        )
-        return True
-    return False
+def release_payload(plan, ownership):
+    revision = plan.identity["revision"]
+    manifest_sha = hashlib.sha256(plan.manifest).hexdigest()
+    return {
+        "tag_name": plan.tag,
+        "target_commitish": revision,
+        "draft": True,
+        "prerelease": True,
+        "name": f"CageLedger {plan.identity['app_version']} development build {revision[:12]} (ARM64)",
+        "body": (
+            "Private development build from Codex cloud. This remains a draft and does not advance the official Release or latest image.\n\n"
+            f"Source revision: `{revision}`. Target: `linux/arm64`. Application build: {plan.identity['app_build']}.\n"
+            "Download all attachments, read RESTORE.txt, concatenate ordered binary chunks, and verify full SHA256 before use. No NAS deployment is performed.\n\n"
+            f"<!-- cageledger-delivery-owner:{ownership}; manifest-sha256:{manifest_sha} -->"
+        ),
+    }
+
+
+def verify_release(value, payload, receipt, actor):
+    require(isinstance(value, dict) and type(value.get("id")) is int, "Invalid development draft metadata.")
+    require(receipt.get("creation_intent") == payload, "Unknown draft ownership; not adopted.")
+    require(
+        all(
+            value.get(key) == payload[key]
+            for key in ("tag_name", "target_commitish", "draft", "prerelease", "name", "body")
+        ),
+        "Development draft metadata conflicts; not modified.",
+    )
+    author = value.get("author", {})
+    require(
+        author.get("id") == actor["id"] and author.get("login") == actor["login"],
+        "Development draft has a different author; not adopted.",
+    )
+    require(
+        receipt.get("release_id", value["id"]) == value["id"],
+        "Development draft ID differs from the ownership receipt.",
+    )
+    return value["id"]
+
+
+def ensure_release(plan, client, receipt, path):
+    repository_id, actor = client.repository(), client.actor()
+    require(receipt.get("repository_id", repository_id) == repository_id, "Private source repository identity changed.")
+    require(receipt.get("actor", actor) == actor, "Delivery actor changed; inspect ownership before resuming.")
+    receipt.update(repository_id=repository_id, actor=actor)
+    payload = release_payload(plan, receipt["ownership"])
+    value = client.find(plan.tag)
+    if value is None:
+        require("release_id" not in receipt, "Owned draft disappeared; inspect before recreating it.")
+        tag = git(plan.repo, "ls-remote", "gitea", f"refs/tags/{plan.tag}", f"refs/tags/{plan.tag}^{{}}")
+        require(not tag, "Development tag already exists without an owned draft; not adopted.")
+        receipt["creation_intent"] = payload
+        save_receipt(path, receipt)  # Durable nonce/payload ownership BEFORE the external mutation.
+        value = client.create(payload)
+    release_id = verify_release(value, payload, receipt, actor)
+    receipt["release_id"] = release_id
+    save_receipt(path, receipt)
+    return release_id, payload, actor
+
+
+def probe_privacy(plan, client, release_id, assets):
+    probe = plan.probe()
+    if PROBE_NAME not in assets:
+        require(probe.unchanged(), "Local permission probe changed.")
+        client.upload(release_id, probe)
+        assets = client.assets(release_id)
+    require(PROBE_NAME in assets, "Permission probe upload is not visible.")
+    client.verify(assets[PROBE_NAME], probe)
+    proof = client.anonymous_denied(assets[PROBE_NAME])
+    return proof, assets
 
 
 def deliver(plan, client, state):
     require(not state.resolve().is_relative_to(plan.repo.resolve()), "Delivery state must be outside the repository.")
     path = state / "receipt.json"
-    receipt_identity = {
+    identity = {
+        "transport": "private-draft-release-v1",
         "source": plan.identity,
-        "package": PACKAGE,
-        "version": plan.version,
-        "manifest_sha256": plan.manifest_artifact().sha256,
+        "tag": plan.tag,
+        "manifest_sha256": hashlib.sha256(plan.manifest).hexdigest(),
     }
-    receipt = json.loads(path.read_text()) if path.exists() else {"identity": receipt_identity, "files": {}}
-    require(receipt.get("identity") == receipt_identity, "Existing delivery receipt belongs to different artifacts.")
+    receipt = (
+        json.loads(path.read_text()) if path.exists() else {"identity": identity, "ownership": uuid4().hex, "files": {}}
+    )
+    require(receipt.get("identity") == identity, "Existing receipt belongs to different artifacts or transport.")
     receipt["status"] = "running"
     save_receipt(path, receipt)
     active = None
     try:
-        receipt["privacy"] = {"status": "checking"}
+        for artifact_path, content in plan.generated().items():
+            write_immutable(artifact_path, content)
+        release_id, payload, actor = ensure_release(plan, client, receipt, path)
+        assets = client.assets(release_id)
+        allowed = {artifact.path.name for artifact in plan.files()} | {PROBE_NAME}
+        require(set(assets) <= allowed, "Owned draft contains unknown attachments; inspect before resuming.")
+        receipt["privacy"] = {"status": "checking_raw_attachment"}
         save_receipt(path, receipt)
-        receipt["privacy"] = client.ensure_private()
+        receipt["privacy"], assets = probe_privacy(plan, client, release_id, assets)
         save_receipt(path, receipt)
-        remote = client.files(plan.version)
-        for artifact in plan.files():
-            check_remote_file(artifact, remote)
-        if plan.manifest_path.exists():
-            require(
-                plan.manifest_path.read_bytes() == plan.manifest,
-                "Existing build manifest differs; preserve it and inspect.",
-            )
-        else:
-            with plan.manifest_path.open("xb") as stream:
-                stream.write(plan.manifest)
         for artifact in plan.files():
             active = artifact.path.name
             require(artifact.unchanged(), f"Local artifact changed: {active}")
-            if check_remote_file(artifact, remote):
-                receipt["files"][active] = {**artifact.metadata(), "status": "reused"}
+            verify_release(client.release(release_id), payload, receipt, actor)
+            require(client.repository() == receipt["repository_id"], "Private repository identity changed.")
+            receipt["privacy"], assets = probe_privacy(plan, client, release_id, assets)
+            if active in assets:
+                client.verify(assets[active], artifact)  # Re-read complete bytes; no server SHA is assumed.
+                status = "reused"
             else:
                 receipt["files"][active] = {**artifact.metadata(), "status": "uploading"}
                 save_receipt(path, receipt)
-                client.verify_private(receipt["privacy"]["anchor_version"], receipt["privacy"]["repository_id"])
-                client.upload(plan.version, artifact)
-                client.verify_private(plan.version, receipt["privacy"]["repository_id"])
-                remote = client.files(plan.version)
-                require(check_remote_file(artifact, remote), f"Uploaded file is not visible in Gitea: {active}")
-                receipt["files"][active] = {**artifact.metadata(), "status": "verified"}
+                client.upload(release_id, artifact)
+                assets = client.assets(release_id)
+                require(active in assets, "Uploaded attachment is not visible.")
+                client.verify(assets[active], artifact)
+                status = "verified"
+            receipt["files"][active] = {
+                **artifact.metadata(),
+                "status": status,
+                "attachment_id": assets[active]["id"],
+                "browser_download_url": assets[active]["browser_download_url"],
+            }
             save_receipt(path, receipt)
-            print(f"{receipt['files'][active]['status']}: {active}", flush=True)
-        client.verify_private(plan.version, receipt["privacy"]["repository_id"])
-        receipt["status"] = "verified"
+            print(f"{status}: {active}", flush=True)
+        verify_release(client.release(release_id), payload, receipt, actor)
+        require(client.repository() == receipt["repository_id"], "Private repository identity changed.")
+        require(source_identity(plan.repo, check_remote=False) == plan.identity, "Source changed during upload.")
+        receipt["privacy"], _ = probe_privacy(plan, client, release_id, client.assets(release_id))
+        receipt["status"] = "verified_draft"
         save_receipt(path, receipt)
         return path
     except BaseException:
         receipt["status"] = "incomplete"
-        if receipt.get("privacy", {}).get("status") == "checking":
-            receipt["privacy"]["status"] = "unknown"
         if active and receipt["files"].get(active, {}).get("status") == "uploading":
             receipt["files"][active]["status"] = "unknown"
         save_receipt(path, receipt)
@@ -479,14 +488,28 @@ def deliver(plan, client, state):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", help="Generic version; defaults to <application-version>-dev.<revision12>")
+    parser.add_argument("--version", help="Development version; must match <application-version>-dev.<revision12>")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
-    parser.add_argument("--state-dir", type=Path, help="Receipt directory, outside the source checkout")
+    parser.add_argument("--state-dir", type=Path, help="Receipt directory outside the source checkout")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Validate local artifacts only; no network, manifest write or upload"
+        "--chunk-mib",
+        type=int,
+        default=8,
+        help="Maximum binary attachment piece size (default/max 8 MiB for this proxy)",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Validate local artifacts/plan only; no network or generated-file writes"
     )
     options = parser.parse_args()
-    plan = prepare(ROOT, options.output_dir.expanduser().resolve(), options.version, check_remote=not options.dry_run)
+    require(1 <= options.chunk_mib <= 8, "--chunk-mib must be between 1 and 8.")
+    plan = prepare(
+        ROOT,
+        options.output_dir.expanduser().resolve(),
+        options.version,
+        check_remote=not options.dry_run,
+        chunk_bytes=options.chunk_mib * 1024 * 1024,
+        write_parts=not options.dry_run,
+    )
     if options.dry_run:
         print(
             json.dumps(
@@ -494,23 +517,23 @@ def main():
                     "status": "validated_locally",
                     "remote_branch_verified": False,
                     "upload_performed": False,
-                    "version": plan.version,
-                    "files": [a.metadata() for a in plan.files()],
+                    "tag": plan.tag,
+                    "files": [artifact.metadata() for artifact in plan.files()],
                 },
                 indent=2,
             )
         )
         return
     state = options.state_dir or ROOT.parent / f"{ROOT.name}-delivery-state" / plan.version
-    path = deliver(plan, Gitea(), state.expanduser().resolve())
-    print(f"Generic Package delivery verified; receipt: {path}")
-    print(f"{ORIGIN}/{OWNER}/-/packages/generic/{PACKAGE}/{urllib.parse.quote(plan.version, safe='')}")
+    path = deliver(plan, ReleaseAssets(), state.expanduser().resolve())
+    print(f"Private development draft attachments verified; receipt: {path}")
+    print(f"{ORIGIN}/hugo/cageledger/releases/tag/{plan.tag}")
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (DeliveryError, OSError, ValueError, tarfile.TarError, subprocess.SubprocessError) as error:
-        if isinstance(error, DeliveryError):
+    except (AssetError, OSError, ValueError, tarfile.TarError, subprocess.SubprocessError) as error:
+        if isinstance(error, AssetError):
             raise SystemExit(str(error)) from None
-        raise SystemExit("Cloud package delivery failed; inspect local artifacts and the external receipt.") from None
+        raise SystemExit("Cloud draft delivery failed; inspect local artifacts and the external receipt.") from None

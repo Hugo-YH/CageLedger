@@ -79,20 +79,20 @@ npm run dev
 
 ## 常用命令
 
-| 命令                            | 用途                                                     |
-| ------------------------------- | -------------------------------------------------------- |
-| `npm run dev`                   | 开发页面、API 和文档站                                   |
-| `npm start`                     | 构建后启动本地生产服务                                   |
-| `npm run build`                 | 构建业务页面和 VitePress 文档                            |
-| `npm run check`                 | 格式、lint、类型、前后端测试与项目契约检查               |
-| `npm run test:e2e`              | Chromium 业务回归，默认使用隔离数据库                    |
-| `npm run test:e2e:compat`       | Firefox／WebKit 桌面兼容性检查                           |
-| `npm run verify:full`           | 统一检查、生产构建和三浏览器回归                         |
-| `npm run package:offline`       | 生成包含 `web-dist/` 的离线源码包                        |
-| `npm run package:managed`       | 受管串行构建离线源码包和 ARM64 镜像包                    |
-| `npm run publish:cloud`         | 将已核验的源码包和 ARM64 镜像包上传到 Gitea 私有软件包区 |
-| `npm run package:container`     | 构建 ARM64 镜像及离线镜像包，不上传                      |
-| `npm run package:offline:image` | 导出 ARM64 离线镜像与校验文件                            |
+| 命令                            | 用途                                                               |
+| ------------------------------- | ------------------------------------------------------------------ |
+| `npm run dev`                   | 开发页面、API 和文档站                                             |
+| `npm start`                     | 构建后启动本地生产服务                                             |
+| `npm run build`                 | 构建业务页面和 VitePress 文档                                      |
+| `npm run check`                 | 格式、lint、类型、前后端测试与项目契约检查                         |
+| `npm run test:e2e`              | Chromium 业务回归，默认使用隔离数据库                              |
+| `npm run test:e2e:compat`       | Firefox／WebKit 桌面兼容性检查                                     |
+| `npm run verify:full`           | 统一检查、生产构建和三浏览器回归                                   |
+| `npm run package:offline`       | 生成包含 `web-dist/` 的离线源码包                                  |
+| `npm run package:managed`       | 受管串行构建离线源码包和 ARM64 镜像包                              |
+| `npm run publish:cloud`         | 将已核验的源码包和 ARM64 镜像包上传到 Gitea 私有仓库的开发构建草稿 |
+| `npm run package:container`     | 构建 ARM64 镜像及离线镜像包，不上传                                |
+| `npm run package:offline:image` | 导出 ARM64 离线镜像与校验文件                                      |
 
 本地生产服务在 `5173` 同时提供页面、文档和 `/api`。离线源码包在目标机器运行时无需 Node.js，仍需 Python 3.13 和运行依赖。
 

@@ -261,7 +261,7 @@ CAGELEDGER_COMPAT_PORT=5643 CAGELEDGER_COMPAT_OUTPUT_DIR="$release_evidence_dir/
 
 Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。简单修改不默认全量检查；发布前或明确要求时执行完整开发门禁。生产目标 DS223（aarch64），后续只构建 `linux/arm64`；离线源码包继续保留，历史 AMD64 制品不删除。交付记录实际检查、产物和未覆盖项。
 
-只有明确交付任务才通过云端 `package:managed` 串行生成源码包与 ARM64 镜像包，普通开发不因提交或代码推送自动打包。测试证据、构建源码和上传产物必须对应同一最终状态及来源 revision；已有版本制品不覆盖。Gitea Packages 开发版本托管不等同于完整正式发布门禁，也不自动部署 NAS。
+只有明确交付任务才通过云端 `package:managed` 串行生成源码包与 ARM64 镜像包，普通开发不因提交或代码推送自动打包。测试证据、构建源码和上传产物必须对应同一最终状态及来源 revision；已有版本制品不覆盖。Gitea 私有仓库开发构建草稿托管不等同于完整正式发布门禁，也不自动部署 NAS。
 
 可选 Mac mini Runner 使用原生 host 标签、capacity 1，并共用宿主锁和资源保护；工作流仅允许手动触发。部署见 [macos-gitea-runner.md](macos-gitea-runner.md)。
 
