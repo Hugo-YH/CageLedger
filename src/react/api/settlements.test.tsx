@@ -27,6 +27,20 @@ afterEach(() => {
 });
 
 describe("shared settlement actions", () => {
+  it.each(["quantity_sheet", "pi_merged_technical_service"] as const)(
+    "forwards cancellation only for an explicit read-only %s preview",
+    async (sourceType) => {
+      const controller = new AbortController();
+      await previewSettlement({ ...target, sourceType }, controller.signal);
+      expect(requestJson).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: controller.signal }),
+      );
+      await initiateSettlement({ ...target, sourceType, sourceVersions: { sheet: "reviewed" } });
+      expect(vi.mocked(requestJson).mock.calls.at(-1)?.[1]).not.toHaveProperty("signal");
+    },
+  );
+
   it.each(["quantity_sheet", "cage_map"] as const)(
     "keeps %s preview and initiation flags and the legacy URL",
     async (sourceType) => {

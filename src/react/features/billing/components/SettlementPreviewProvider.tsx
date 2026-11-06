@@ -35,10 +35,12 @@ export function SettlementPreviewProvider({
   const feedback = useOperationFeedback();
   const [previewError, setPreviewError] = useState("");
   const [activeId, setActiveId] = useState("");
-  const { preview, initiate, isPending } = useSettlementActions();
+  const { preview, initiate } = useSettlementActions();
+  const [previewPending, setPreviewPending] = useState(false);
+  const isPending = previewPending || initiate.isPending;
   const advance = useAdvanceWorkflow();
   const request = useLatestRequest();
-  const generating = useRef(false);
+  const generating = useRef<{ controller?: AbortController } | null>(null);
   const mounted = useRef(true);
   const returnFocus = useRef<HTMLElement | null>(null);
   const restoreFocusAfterClose = useRef(false);
@@ -46,6 +48,7 @@ export function SettlementPreviewProvider({
     mounted.current = true;
     return () => {
       mounted.current = false;
+      generating.current?.controller?.abort();
     };
   }, []);
 
@@ -55,7 +58,9 @@ export function SettlementPreviewProvider({
   const generateFor = useCallback(
     async (candidate: SettlementCandidate, persist: boolean): Promise<boolean> => {
       if (generating.current) return false;
-      generating.current = true;
+      const operation = { controller: persist ? undefined : new AbortController() };
+      generating.current = operation;
+      setPreviewPending(!persist);
       setActiveId(candidate.id);
       const isCurrent = request.begin();
       if (!persist) {
@@ -71,7 +76,7 @@ export function SettlementPreviewProvider({
               ...target,
               sourceVersions: selected?.id === candidate.id ? result?.sourceVersions : undefined,
             })
-          : await previewStatement(target);
+          : await previewStatement({ ...target, signal: operation.controller?.signal });
         if (!isCurrent()) return false;
         setSelected(candidate);
         setResult(response);
@@ -86,8 +91,13 @@ export function SettlementPreviewProvider({
         }
         return false;
       } finally {
-        generating.current = false;
-        if (mounted.current) setActiveId("");
+        if (generating.current === operation) {
+          generating.current = null;
+          if (mounted.current) {
+            setPreviewPending(false);
+            setActiveId("");
+          }
+        }
       }
     },
     [initiateStatement, previewStatement, request, result, selected, feedback, source],
@@ -95,11 +105,16 @@ export function SettlementPreviewProvider({
 
   async function prepareNoticeEmail(candidate: SettlementCandidate) {
     if (generating.current) return;
-    generating.current = true;
+    const operation = { controller: new AbortController() };
+    generating.current = operation;
+    setPreviewPending(true);
     setActiveId(candidate.id);
     const isCurrent = request.begin();
     try {
-      const response = await preview.mutateAsync(settlementCandidateScope(candidate, source));
+      const response = await preview.mutateAsync({
+        ...settlementCandidateScope(candidate, source),
+        signal: operation.controller.signal,
+      });
       if (!isCurrent()) return;
       setSelected(candidate);
       setResult(response);
@@ -119,8 +134,13 @@ export function SettlementPreviewProvider({
     } catch (error) {
       if (isCurrent()) setPreviewError(error instanceof Error ? error.message : "生成结算单失败");
     } finally {
-      generating.current = false;
-      if (mounted.current) setActiveId("");
+      if (generating.current === operation) {
+        generating.current = null;
+        if (mounted.current) {
+          setPreviewPending(false);
+          setActiveId("");
+        }
+      }
     }
   }
 
@@ -155,6 +175,12 @@ export function SettlementPreviewProvider({
   function close() {
     restoreFocusAfterClose.current = true;
     request.invalidate();
+    if (generating.current?.controller) {
+      generating.current.controller.abort();
+      generating.current = null;
+      setPreviewPending(false);
+      setActiveId("");
+    }
     setSelected(null);
     setResult(null);
     setNoticeEmail(null);

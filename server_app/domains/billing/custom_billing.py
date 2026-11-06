@@ -41,10 +41,11 @@ def _normalize_segment(source, month):
     }
 
 
-def custom_billing_segments_for_day(sheet, line_date, available_count):
+def custom_billing_segments_for_day(sheet, line_date, available_count, *, segments=None):
     available_count = max(as_int(available_count) or 0, 0)
     result = []
-    segments = sheet.get("customBillingSegments")
+    if segments is None:
+        segments = sheet.get("customBillingSegments")
     if not isinstance(segments, list):
         segments = normalize_custom_billing_segments(sheet, clean_text(sheet.get("month", "")))
     for segment in segments:
@@ -59,18 +60,29 @@ def custom_billing_segments_for_day(sheet, line_date, available_count):
     return result
 
 
-def custom_billing_quantity_for_day(sheet, line_date, available_count):
-    return sum(item["quantity"] for item in custom_billing_segments_for_day(sheet, line_date, available_count))
+def custom_billing_quantity_for_day(sheet, line_date, available_count, *, segments=None):
+    return sum(
+        item["quantity"]
+        for item in custom_billing_segments_for_day(sheet, line_date, available_count, segments=segments)
+    )
 
 
 def validate_custom_billing_segments(sheets, rooms):
-    room_by_id = {room.get("id"): room for room in rooms or []}
-    balances = resolve_quantity_sheet_daily_counts(sheets, room_by_id)
+    configured = []
     for sheet in sheets or []:
-        month = clean_text(sheet.get("month", ""))
         segments = sheet.get("customBillingSegments")
         if not isinstance(segments, list):
-            segments = normalize_custom_billing_segments(sheet, month)
+            segments = normalize_custom_billing_segments(sheet, clean_text(sheet.get("month", "")))
+        if segments:
+            configured.append((sheet, segments))
+    if not configured:
+        return
+
+    room_by_id = {room.get("id"): room for room in rooms or []}
+    # Transfers from sheets without custom pricing still affect configured balances.
+    balances = resolve_quantity_sheet_daily_counts(sheets, room_by_id)
+    for sheet, segments in configured:
+        month = clean_text(sheet.get("month", ""))
         for segment in segments:
             _validate_segment_shape(segment, month)
         for index, segment in enumerate(segments):
@@ -81,16 +93,14 @@ def validate_custom_billing_segments(sheets, rooms):
                     and other["startDate"] <= segment["endDate"]
                 ):
                     raise ValueError("全部结余收费区间不能与其他自定义收费区间重叠")
+        unit = billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit")).get("unit")
         for line_date, balance in balances.get(sheet.get("id"), {}).items():
-            unit = billing_profile_for_room(room_by_id.get(sheet.get("roomId"), {}), sheet.get("billingUnit")).get(
-                "unit"
-            )
             available = balance["animalCount"] if unit == "animal_day" else balance["cageCount"]
-            configured = custom_billing_quantity_for_day(sheet, line_date, available)
-            if configured > available:
+            configured_quantity = custom_billing_quantity_for_day(sheet, line_date, available, segments=segments)
+            if configured_quantity > available:
                 unit_label = "只" if unit == "animal_day" else "笼"
                 raise ValueError(
-                    f"{sheet.get('iacuc', '')} {line_date} 自定义收费数量 {configured} {unit_label}，超过当天结余 {available} {unit_label}"
+                    f"{sheet.get('iacuc', '')} {line_date} 自定义收费数量 {configured_quantity} {unit_label}，超过当天结余 {available} {unit_label}"
                 )
 
 

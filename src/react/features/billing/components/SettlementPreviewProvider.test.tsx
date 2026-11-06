@@ -153,10 +153,12 @@ function statement(sourceVersions?: Record<string, string>): BillingStatementRes
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function renderProvider(children: ReactNode) {
@@ -175,9 +177,10 @@ describe("SettlementPreviewProvider", () => {
   beforeEach(() => vi.mocked(requestJson).mockReset());
   afterEach(() => cleanup());
 
-  it("opens the selected row immediately, shares one preview request, and ignores a result after close", async () => {
+  it("aborts a closed preview and lets another row load without an old finally clearing its pending state", async () => {
     const pending = deferred<BillingStatementResponse>();
-    vi.mocked(requestJson).mockReturnValueOnce(pending.promise);
+    const next = deferred<BillingStatementResponse>();
+    vi.mocked(requestJson).mockReturnValueOnce(pending.promise).mockReturnValueOnce(next.promise);
     renderProvider(
       <>
         <SettlementCandidateActions candidate={feedingCandidate("one")} />
@@ -197,11 +200,88 @@ describe("SettlementPreviewProvider", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
     expect(first).toHaveFocus();
+    const oldSignal = vi.mocked(requestJson).mock.calls[0][1]?.signal;
+    expect(oldSignal?.aborted).toBe(true);
+    expect(second).toBeEnabled();
+    fireEvent.click(second);
+    expect(screen.getByLabelText("预览 two")).toHaveTextContent("正在加载结算预览");
+    await waitFor(() => expect(requestJson).toHaveBeenCalledTimes(2));
     await act(async () => {
       pending.resolve(statement());
       await pending.promise;
     });
     expect(screen.queryByLabelText("预览 one")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("预览 two")).toHaveTextContent("正在加载结算预览");
+    expect(second).toHaveAttribute("data-loading", "true");
+    expect(first).toBeDisabled();
+    expect(vi.mocked(requestJson).mock.calls[1][1]?.signal?.aborted).toBe(false);
+    await act(async () => {
+      next.resolve(statement({ "service-1": "current" }));
+      await next.promise;
+    });
+    expect(screen.getByLabelText("预览 two")).toHaveTextContent("审阅版本 current");
+  });
+
+  it("ignores a closed preview failure after a newer preview succeeds and aborts reads on unmount", async () => {
+    const old = deferred<BillingStatementResponse>();
+    const next = deferred<BillingStatementResponse>();
+    vi.mocked(requestJson)
+      .mockReturnValueOnce(old.promise)
+      .mockResolvedValueOnce(statement({ "service-1": "new" }))
+      .mockReturnValueOnce(next.promise);
+    const view = renderProvider(
+      <>
+        <SettlementCandidateActions candidate={feedingCandidate("one")} />
+        <SettlementCandidateActions candidate={feedingCandidate("two")} />
+      </>,
+    );
+    const [first, second] = screen.getAllByRole("button", { name: "预览结算单" });
+    fireEvent.click(first);
+    await waitFor(() => expect(requestJson).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
+    fireEvent.click(second);
+    await screen.findByText("审阅版本 new");
+    await act(async () => {
+      old.reject(new Error("旧预览错误"));
+      await old.promise.catch(() => undefined);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("预览 two")).toHaveTextContent("审阅版本 new");
+    fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
+    fireEvent.click(first);
+    await waitFor(() => expect(requestJson).toHaveBeenCalledTimes(3));
+    const signal = vi.mocked(requestJson).mock.calls[2][1]?.signal;
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      next.resolve(statement());
+      await next.promise;
+    });
+  });
+
+  it("lets an initiated write finish and reconcile caches after the preview workspace unmounts", async () => {
+    const write = deferred<BillingStatementResponse>();
+    vi.mocked(requestJson)
+      .mockResolvedValueOnce(statement({ "service-1": "v1" }))
+      .mockResolvedValueOnce(statement({ "service-1": "v2" }))
+      .mockReturnValueOnce(write.promise);
+    const view = renderProvider(<SettlementCandidateActions candidate={serviceCandidate} />);
+    const invalidate = vi.spyOn(view.client, "invalidateQueries").mockResolvedValue();
+    fireEvent.click(screen.getByRole("button", { name: "预览结算单" }));
+    await screen.findByText("审阅版本 v1");
+    fireEvent.click(screen.getByRole("button", { name: "生成通知邮件" }));
+    await screen.findByLabelText("结算通知");
+    fireEvent.click(screen.getByRole("button", { name: "确认发起" }));
+    await waitFor(() => expect(requestJson).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(requestJson).mock.calls[2][1]).not.toHaveProperty("signal");
+    const reviewedSignal = vi.mocked(requestJson).mock.calls[1][1]?.signal;
+    view.unmount();
+    expect(reviewedSignal?.aborted).toBe(false);
+    await act(async () => {
+      write.resolve(statement({ "service-1": "v2" }));
+      await write.promise;
+    });
+    expect(invalidate).toHaveBeenCalledTimes(7);
   });
 
   it("keeps the failed preview open and retries the same candidate", async () => {

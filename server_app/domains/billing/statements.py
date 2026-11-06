@@ -7,7 +7,7 @@ from server_app.shared import as_int, clean_text, new_id
 from .allowance import (
     allocate_daily_free_cages_by_iacuc,
     apply_free_cage_allocations,
-    iacuc_free_allowance_eligible,
+    free_allowance_dates_eligible,
     summarize_breakdown_charges,
 )
 from .charging import (
@@ -15,7 +15,11 @@ from .charging import (
     BILLING_TIER_OVER_PRICE,
     dates_in_month,
 )
-from .custom_billing import custom_billing_segments_for_day, validate_custom_billing_segments
+from .custom_billing import (
+    custom_billing_segments_for_day,
+    normalize_custom_billing_segments,
+    validate_custom_billing_segments,
+)
 from .profiles import billing_profile_for_room
 
 
@@ -38,16 +42,24 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             rows_by_date.setdefault(row["date"], []).append(row)
         room = room_by_id.get(sheet.get("roomId"), {})
         profile = billing_profile_for_room(room, sheet.get("billingUnit"))
+        iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
+        application = applications_by_iacuc.get(iacuc, {}) or sheet
+        custom_segments = sheet.get("customBillingSegments")
+        if not isinstance(custom_segments, list):
+            custom_segments = normalize_custom_billing_segments(sheet, clean_text(sheet.get("month", "")))
         state = {
             "sheet": sheet,
             "room": room,
             "rowsByDate": rows_by_date,
             "profile": profile,
+            "iacuc": iacuc,
+            "freeAllowanceStartDate": normalize_application_date(application.get("projectStartDate", "")),
+            "freeAllowanceEndDate": normalize_application_date(application.get("projectEndDate", "")),
+            "customBillingSegments": custom_segments,
             "animalCount": sheet.get("initialAnimalCount") or 0,
             "cageCount": sheet.get("initialCageCount") or 0,
         }
         sheet_states.append(state)
-        iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
         if iacuc and iacuc not in sheet_state_by_iacuc:
             sheet_state_by_iacuc[iacuc] = state
 
@@ -107,11 +119,12 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
             available_count = state["animalCount"] if profile["unit"] == "animal_day" else state["cageCount"]
             has_record = bool(state["rowsByDate"].get(line_date))
             if available_count or has_record:
-                sheet_iacuc = normalize_iacuc_number(sheet.get("iacuc", ""))
-                application = applications_by_iacuc.get(sheet_iacuc, {})
-                free_eligible = iacuc_free_allowance_eligible(application or sheet, line_date)
-                expiry_date = normalize_application_date((application or sheet).get("projectEndDate", ""))
-                custom_segments = custom_billing_segments_for_day(sheet, line_date, available_count)
+                sheet_iacuc = state["iacuc"]
+                expiry_date = state["freeAllowanceEndDate"]
+                free_eligible = free_allowance_dates_eligible(state["freeAllowanceStartDate"], expiry_date, line_date)
+                custom_segments = custom_billing_segments_for_day(
+                    sheet, line_date, available_count, segments=state["customBillingSegments"]
+                )
                 custom_count = sum(item["quantity"] for item in custom_segments)
                 standard_count = max(available_count - custom_count, 0)
                 if standard_count or has_record:

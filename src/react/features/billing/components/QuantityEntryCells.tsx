@@ -46,9 +46,10 @@ export const QuantityEntryCells = memo(
       }),
       [row],
     );
+    const { addedCount, removedCount, animalCount, cageCount } = row;
     useEffect(() => {
       onChanged();
-    }, [row, onChanged]);
+    }, [addedCount, removedCount, animalCount, cageCount, onChanged]);
     const update = (key: keyof QuantitySheetRow, value: string | number | null) =>
       setRow((current) => ({
         ...current,

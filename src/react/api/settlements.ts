@@ -22,15 +22,16 @@ export type { GenerateBillingStatementPayload } from "../../contracts/settlement
 
 type ServiceTarget = SettlementTarget & { sourceType: "pi_merged_technical_service" };
 
-export function previewSettlement(target: ServiceTarget): Promise<TechnicalServicePreview>;
-export function previewSettlement(target: SettlementTarget): Promise<BillingStatementResponse>;
-export function previewSettlement({ pi, month, sourceType }: SettlementTarget) {
+export function previewSettlement(target: ServiceTarget, signal?: AbortSignal): Promise<TechnicalServicePreview>;
+export function previewSettlement(target: SettlementTarget, signal?: AbortSignal): Promise<BillingStatementResponse>;
+export function previewSettlement({ pi, month, sourceType }: SettlementTarget, signal?: AbortSignal) {
   if (sourceType === "pi_merged_technical_service")
     return requestJson<TechnicalServicePreview>("/api/technical-services/settlements/preview", {
       method: "POST",
       body: JSON.stringify({ pi, month }),
+      ...(signal ? { signal } : {}),
     });
-  return feedingSettlement({ pi, month, sourceType }, false);
+  return feedingSettlement({ pi, month, sourceType }, false, signal);
 }
 
 export function initiateSettlement(target: ServiceTarget & InitiateSettlementPayload): Promise<TechnicalServicePreview>;
@@ -50,15 +51,19 @@ export function initiateReviewedServiceSettlement({ pi, month, sourceVersions }:
   });
 }
 
-function feedingSettlement({ pi, month, sourceType }: SettlementTarget, persist: boolean) {
+function feedingSettlement({ pi, month, sourceType }: SettlementTarget, persist: boolean, signal?: AbortSignal) {
   return requestJson<BillingStatementResponse>("/api/billing-statements/generate-by-pi", {
     method: "POST",
     body: JSON.stringify({ pi, month, sourceType, status: "draft", persist, initiate: persist }),
+    ...(signal ? { signal } : {}),
   });
 }
 
 export function usePreviewSettlement() {
-  return useMutation({ mutationFn: previewSettlement });
+  return useMutation({
+    mutationFn: ({ signal, ...target }: SettlementTarget & { signal?: AbortSignal }) =>
+      previewSettlement(target, signal),
+  });
 }
 
 export function useInitiateSettlement() {

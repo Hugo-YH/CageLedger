@@ -38,14 +38,51 @@ class CandidateRefreshConcurrencyTests(unittest.TestCase):
         self.writer.close()
         self.directory.cleanup()
 
+    def large_keys(self):
+        keys = list(self.keys)
+        for index in range(118):
+            pi = f"PI-{index:03d}"
+            seed_quantity_sheet(self.reader, f"sheet-{index}", "2026-09", pi, f"Z-{index}")
+            keys.append(("2026-09", pi))
+        sync_billing_candidate_snapshot_registry(self.reader, "quantity_sheet", "before")
+        self.reader.commit()
+        return keys
+
+    def test_large_refresh_keeps_writers_available_until_all_amounts_are_ready(self):
+        keys = self.large_keys()
+        calls = []
+
+        def calculate(month, pi):
+            calls.append(pi)
+            if pi == keys[-1][1]:
+                # A second writer can acquire its lock even after the first SQL-sized batch.
+                self.writer.execute("BEGIN IMMEDIATE")
+                self.writer.rollback()
+            return {"totalAmount": 17}
+
+        _refresh_snapshot_keys(self.reader, keys, calculate, "quantity_sheet", None, None)
+        self.assertEqual(len(calls), len(keys))
+        self.assertEqual(
+            self.writer.execute(
+                "SELECT COUNT(*) FROM billing_candidate_snapshots WHERE total_amount IS NOT NULL"
+            ).fetchone()[0],
+            0,
+        )
+        self.reader.commit()
+        self.assertEqual(
+            self.writer.execute("SELECT COUNT(*) FROM billing_candidate_snapshots WHERE total_amount=17").fetchone()[0],
+            len(keys),
+        )
+
     def test_source_change_between_calculation_and_batch_publish_uses_current_amount(self):
+        keys = self.large_keys()
         changed = False
         calls = []
 
         def calculate(month, pi):
             nonlocal changed
             calls.append(pi)
-            if pi == "B" and not changed:
+            if pi == keys[-1][1] and not changed:
                 changed = True
                 self.writer.execute("UPDATE quantity_sheets SET updated_at='source-new' WHERE id='sheet-a'")
                 invalidate_settlement_candidate_snapshots(self.writer, [(month, "A")], now="source-new")
@@ -53,12 +90,12 @@ class CandidateRefreshConcurrencyTests(unittest.TestCase):
             updated = self.reader.execute("SELECT updated_at FROM quantity_sheets WHERE pi=?", (pi,)).fetchone()[0]
             return {"totalAmount": 20 if updated == "source-new" else 10}
 
-        _refresh_snapshot_keys(self.reader, self.keys, calculate, "quantity_sheet", None, None)
+        _refresh_snapshot_keys(self.reader, keys, calculate, "quantity_sheet", None, None)
         self.reader.commit()
         snapshot = get_billing_candidate_snapshot(self.writer, "2026-09", "A", "quantity_sheet")
         self.assertEqual(snapshot["totalAmount"], 20)
         self.assertIn("source-new", snapshot["sourceFingerprint"])
-        self.assertEqual(calls, ["A", "B", "A", "B"])
+        self.assertEqual(calls, [pi for _, pi in keys] * 2)
 
     def test_concurrent_snapshot_change_discards_prepared_headers_even_with_same_source_fingerprint(self):
         ledger_fixture.ReimbursementLedgerTests._insert_statement_on(

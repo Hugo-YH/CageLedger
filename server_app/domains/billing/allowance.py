@@ -31,6 +31,10 @@ def tier_cage_priority_sort_key(item):
 def iacuc_free_allowance_eligible(application, target_date):
     start_date = normalize_application_date((application or {}).get("projectStartDate", ""))
     end_date = normalize_application_date((application or {}).get("projectEndDate", ""))
+    return free_allowance_dates_eligible(start_date, end_date, target_date)
+
+
+def free_allowance_dates_eligible(start_date, end_date, target_date):
     if start_date and target_date < start_date:
         return False
     if end_date and target_date > end_date:

@@ -175,32 +175,26 @@ def _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calc
     keys = sorted({(month, pi_name) for month, pi_name in keys if month and pi_name})
     if not keys:
         return
-    # Don't lock writers during normal preparation. Fence the first publication
-    # against intervening commits, then retain the caller-owned write transaction.
+    # Prepare every lightweight snapshot before locking, including later SQL batches.
+    # Fence publication against intervening commits; retain any caller-owned transaction.
     revision = conn.execute("PRAGMA data_version").fetchone()[0] if not conn.in_transaction else None
     if prepare_calculations is not None:
         prepare_calculations(keys)
     groups = quantity_settlement_groups_many(conn, keys)
-    for offset in range(0, len(keys), 50):
-        snapshots = [
-            _snapshot_payload(groups[key], calculate, source_type, now)
-            for key in keys[offset : offset + 50]
-            if key in groups
-        ]
-        if not snapshots:
-            continue
-        if revision is not None:
-            if not conn.in_transaction:
-                conn.execute("BEGIN IMMEDIATE")
-            if conn.execute("PRAGMA data_version").fetchone()[0] != revision:
-                for prepared in (calculate, getattr(prepare_calculations, "__self__", None)):
-                    if isinstance(prepared, CandidateCalculation):
-                        prepared.reset_prepared()
-                # Now holding the write lock: one fresh calculation is enough,
-                # including refreshed issued headers, before publishing any row.
-                return _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calculations)
-            revision = None
-        upsert_candidate_snapshots_many(conn, snapshots)
+    snapshots = [_snapshot_payload(groups[key], calculate, source_type, now) for key in keys if key in groups]
+    if not snapshots:
+        return
+    if revision is not None:
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("PRAGMA data_version").fetchone()[0] != revision:
+            for prepared in (calculate, getattr(prepare_calculations, "__self__", None)):
+                if isinstance(prepared, CandidateCalculation):
+                    prepared.reset_prepared()
+            # A conflict discards all prepared results, including issued headers.
+            # Recalculate under the existing write lock without committing the caller.
+            return _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calculations)
+    upsert_candidate_snapshots_many(conn, snapshots)
 
 
 def _refresh_snapshot(conn, group, calculate, source_type, now):

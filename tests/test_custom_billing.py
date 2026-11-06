@@ -85,6 +85,28 @@ class AllQuantityCustomBillingTests(unittest.TestCase):
         lines = server.quantity_sheet_statement_lines([sheet], 0, [room], {})
         self.assertEqual([line["amount"] for line in lines[:4]], [50, 36, 35, 0])
 
+    def test_custom_balance_includes_transfers_from_sheets_without_custom_pricing(self):
+        target, room = self.fixture(animal=False)
+        target.update(initialCageCount=2, rows=[])
+        target["customBillingSegments"][0].update(
+            quantityMode="fixed", quantity=5, startDate="2026-07-01", endDate="2026-07-01"
+        )
+        source = {
+            "id": "ordinary-source",
+            "month": "2026-07",
+            "roomId": room["id"],
+            "iacuc": "Z-SOURCE",
+            "initialCageCount": 10,
+            "rows": [{"id": "transfer", "date": "2026-07-01", "removedCount": 3, "transferOutToIacuc": "Z-ALL"}],
+        }
+        lines = server.quantity_sheet_statement_lines([source, target], 0, [room], {})
+        custom = next(item for item in lines[0]["iacucBreakdown"] if item["customBilling"])
+        self.assertEqual(custom["cageCount"], 5)
+        self.assertEqual(custom["unitPrice"], 3)
+        source["rows"][0]["removedCount"] = 2
+        with self.assertRaisesRegex(ValueError, "超过当天结余 4 笼"):
+            validate_custom_billing_segments([source, target], [room])
+
     def test_full_quantity_overlaps_are_rejected_even_on_empty_days(self):
         for mode in ("fixed", "all"):
             sheet, room = self.fixture()

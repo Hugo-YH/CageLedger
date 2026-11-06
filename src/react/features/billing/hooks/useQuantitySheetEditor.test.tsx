@@ -152,6 +152,84 @@ describe("quantity editor draft lifecycle", () => {
     expect(operationFeedback.success).toHaveBeenCalledWith("数量统计表已保存", expect.any(String));
   });
 
+  it("coalesces row notifications into one live balance pass and saves before the next frame", async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+    const flushFrame = () => {
+      const pending = [...frames.values()];
+      frames.clear();
+      act(() => pending.forEach((callback) => callback(0)));
+    };
+    const { result, unmount } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    act(() => result.current.loadForEdit(savedSheet()));
+    const live = [
+      { ...createQuantityRow("2026-09", true), addedCount: 4, addedType: "购入", cageCount: 2 },
+      { ...createQuantityRow("2026-09"), date: "2026-09-02", addedCount: 2, addedType: "购入" },
+    ];
+    const handles = live.map((_, index) => ({ getRow: vi.fn(() => live[index]), setCalculated: vi.fn() }));
+    result.current.rowRefs.current = handles;
+    act(() => {
+      for (let index = 0; index < 62; index += 1) result.current.recalculate();
+    });
+    expect(frames.size).toBe(1);
+    expect(handles[0].getRow).not.toHaveBeenCalled();
+    flushFrame();
+    handles.forEach((handle) => expect(handle.getRow).toHaveBeenCalledOnce());
+    expect(handles[0].setCalculated).toHaveBeenLastCalledWith(4, 2);
+    expect(handles[1].setCalculated).toHaveBeenLastCalledWith(6, 2);
+
+    // Saving reads the local row handles synchronously, not a deferred calculated snapshot.
+    live[0] = { ...live[0], cageCount: 9 };
+    act(() => {
+      result.current.recalculate();
+      result.current.requestSave(submitEvent());
+    });
+    expect(result.current.confirmSave?.rows[0].cageCount).toBe(9);
+    expect(frames.size).toBe(1);
+    const calls = handles[0].setCalculated.mock.calls.length;
+    unmount();
+    flushFrame();
+    expect(frames.size).toBe(0);
+    expect(handles[0].setCalculated).toHaveBeenCalledTimes(calls);
+  });
+
+  it("replaces queued balances when rows, month and billing units change", async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    const removed = { getRow: vi.fn(() => createQuantityRow("2026-09")), setCalculated: vi.fn() };
+    result.current.rowRefs.current = [removed];
+    act(() => result.current.recalculate());
+    const row = { ...createQuantityRow("2026-10", true), addedCount: 5 };
+    const current = { getRow: vi.fn(() => row), setCalculated: vi.fn() };
+    act(() => {
+      result.current.rowRefs.current = [current, null];
+      result.current.setField("month", "2026-10");
+      result.current.setEditorRows([row]);
+      result.current.chooseRoom("rabbit");
+    });
+    expect(frames.size).toBe(1);
+    const pending = [...frames.values()];
+    frames.clear();
+    act(() => pending.forEach((callback) => callback(0)));
+    expect(removed.getRow).not.toHaveBeenCalled();
+    expect(current.getRow).toHaveBeenCalledOnce();
+    expect(current.setCalculated).toHaveBeenCalledExactlyOnceWith(5, 5);
+    expect(result.current.draft.month).toBe("2026-10");
+  });
+
   it("keeps the last confirmed entry receipt through new drafts, errors and same-account navigation", async () => {
     const first = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
     await waitFor(() => expect(first.result.current.metadataReady).toBe(true));

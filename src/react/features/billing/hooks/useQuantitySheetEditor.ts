@@ -101,7 +101,8 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
     previousPi.trim() !== iacucMatch?.pi.trim();
   const save = useSaveQuantitySheet();
 
-  const recalculate = useCallback(() => {
+  const recalculationFrame = useRef<number | null>(null);
+  const calculateBalances = useCallback(() => {
     let animals = 0;
     let cages = 0;
     rowRefs.current.forEach((handle) => {
@@ -114,9 +115,24 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
     });
   }, [animalDetails]);
 
+  const cancelRecalculation = useCallback(() => {
+    if (recalculationFrame.current !== null) cancelAnimationFrame(recalculationFrame.current);
+    recalculationFrame.current = null;
+  }, []);
+  const recalculate = useCallback(() => {
+    if (recalculationFrame.current !== null) return;
+    // All mounted/edited rows share one pass, reading their current local drafts.
+    recalculationFrame.current = requestAnimationFrame(() => {
+      recalculationFrame.current = null;
+      calculateBalances();
+    });
+  }, [calculateBalances]);
+
   useEffect(() => {
+    cancelRecalculation();
     recalculate();
-  }, [recalculate, editorRows]);
+    return cancelRecalculation;
+  }, [cancelRecalculation, recalculate, editorRows]);
 
   const customBillingSegmentCount = draft.customBillingSegments.length;
 
