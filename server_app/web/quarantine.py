@@ -54,9 +54,12 @@ def handle(handler, method, path):
 
 def get(handler, conn, parts, params):
     if len(parts) == 3 and parts[0] == "batches" and parts[2] == "summary":
-        document = summary.batch_snapshot(conn, parts[1])
+        with repo.read_snapshot(conn):
+            document = summary.batch_snapshot(conn, parts[1])
         kind = params.get("kind", "quarantine")
-        data = pdf.convert_docx(summary.generate(document, kind=kind))
+        if kind not in summary.TITLES:
+            raise ValueError("报告类型无效")
+        data = pdf.render_document(document, lambda: summary.generate(document, kind=kind), kind=f"summary:{kind}")
         handler.send_download(
             data, files.summary_download_filename(document["batch"], summary.TITLES[kind]), files.PDF_MIME
         )
@@ -74,7 +77,9 @@ def get(handler, conn, parts, params):
     if parts in (["sources"], ["batches"]):
         return repo.list_page(conn, parts[0], params)
     if len(parts) == 2 and parts[0] == "batches":
-        return service.batch_detail(conn, parts[1])
+        return service.batch_detail(conn, parts[1], overview=params.get("view") == "overview")
+    if len(parts) == 2 and parts[0] == "tests":
+        return service.test_detail(conn, parts[1])
     if parts == ["suppliers", "summary"]:
         return supplier_summary(conn, params)
     if parts == ["suppliers", "details"]:
@@ -106,8 +111,9 @@ def get(handler, conn, parts, params):
         handler.send_download(content, name, files.PDF_MIME)
         return None
     if len(parts) == 3 and parts[0] == "tests" and parts[2] == "preview":
-        test = repo.get(conn, "tests", parts[1])
-        document = files.snapshot(conn, test)
+        with repo.read_snapshot(conn):
+            test = repo.get(conn, "tests", parts[1])
+            document = files.snapshot(conn, test)
         data = pdf.generate(document, QUARANTINE_FILES_PATH, draft=True)
         handler.send_download(
             data,

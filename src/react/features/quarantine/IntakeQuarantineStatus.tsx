@@ -1,19 +1,36 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Button, Select, Space, Tag } from "antd";
 import { Modal } from "../../components/ui/Modal";
 import type { IntakeBatchListItem } from "../../../contracts/intake";
-import { downloadQuarantine, useQuarantineDetail } from "../../api/quarantine";
+import { downloadQuarantine, useQuarantineOverview } from "../../api/quarantine";
 import { methodLabels, quarantineStatusColor } from "./shared";
 
 export function IntakeQuarantineStatus({ item }: { item: IntakeBatchListItem }) {
   const feedback = useOperationFeedback();
   const [batchId, setBatchId] = useState("");
   const [error, setError] = useState("");
-  const detail = useQuarantineDetail(batchId);
+  const detail = useQuarantineOverview(batchId);
+  const downloadLock = useRef(false);
+  const [downloading, setDownloading] = useState("");
   const related = item.quarantineBatches ?? [];
   const quarantineStatus = item.quarantineStatus || (item.status === "received" ? "待检疫" : "待接收");
+  async function download(reportId: string) {
+    if (downloadLock.current) return;
+    downloadLock.current = true;
+    setDownloading(reportId);
+    setError("");
+    try {
+      const filename = await downloadQuarantine(`reports/${reportId}`);
+      feedback.success("检疫报告已生成，下载已开始", filename);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "下载失败，请重试");
+    } finally {
+      downloadLock.current = false;
+      setDownloading("");
+    }
+  }
   return (
     <>
       <Space orientation="vertical" size={0}>
@@ -61,15 +78,11 @@ export function IntakeQuarantineStatus({ item }: { item: IntakeBatchListItem }) 
                   block
                   className="quarantine-report-download"
                   key={report.id}
-                  onClick={() => {
-                    setError("");
-                    void downloadQuarantine(`reports/${report.id}`)
-                      .then((filename) => feedback.success("检疫报告已生成，下载已开始", filename))
-                      .catch((e: Error) => setError(e.message));
-                  }}
+                  loading={downloading === report.id}
+                  disabled={Boolean(downloading) && downloading !== report.id}
+                  onClick={() => void download(report.id)}
                 >
-                  {methodLabels[detail.data.tests.find((t) => t.id === report.testId)!.method]} · {report.number} · v
-                  {report.version}
+                  {methodLabels[report.method]} · {report.number} · v{report.version}
                 </Button>
               ))}
               {!detail.data.reports.length && <p>尚未出具报告</p>}

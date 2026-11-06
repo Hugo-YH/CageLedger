@@ -4,10 +4,10 @@ import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { useState } from "react";
 import { Alert, Button, Form, Input, Space } from "antd";
 import { Modal } from "../../components/ui/Modal";
-import type { QuarantineDetail } from "../../../contracts/quarantine";
+import type { QuarantineOverview } from "../../../contracts/quarantine";
 import { useQuarantineWrite } from "../../api/quarantine";
 
-export function BatchCompletion({ detail }: { detail: QuarantineDetail }) {
+export function BatchCompletion({ detail }: { detail: QuarantineOverview }) {
   const feedback = useOperationFeedback();
   const [open, setOpen] = useState(false);
   const [conclusionOpen, setConclusionOpen] = useState(false);

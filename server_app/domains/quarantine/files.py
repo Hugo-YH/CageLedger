@@ -1,6 +1,8 @@
 import copy
 import hashlib
+import os
 import re
+import tempfile
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -16,7 +18,7 @@ from . import pdf
 from . import repository as repo
 from .attachment_metadata import validate as validate_attachment
 from .catalog import TEMPLATE_VERSION
-from .service import audit, authorize, check_version, now
+from .service import StaleWriteError, audit, authorize, check_version, now
 
 MIME = {
     ".png": "image/png",
@@ -42,17 +44,22 @@ generate = pdf.generate
 
 
 def next_report_number(conn, batch, method):
+    number, reservation = _next_report_number(conn, batch, method, datetime.now().astimezone().strftime("%y%m%d"))
+    if reservation:
+        repo.reserve_sequence(conn, *reservation)
+    return number
+
+
+def _next_report_number(conn, batch, method, issued_date):
     batch_no = str(batch.get("batchNo") or batch.get("name", "")).upper()
     if not re.fullmatch(r"B\d{8}", batch_no):
-        return ""
-    issued_date = datetime.now().astimezone().strftime("%y%m%d")
+        return "", None
     method_code = METHOD_CODES[method]
     scope = f"report:{batch_no}:{method_code}:{issued_date}"
     sequence = repo.sequence_value(conn, scope) + 1
     if sequence > 99:
         raise ValueError("该批次、检测方法和日期的报告编号已达到99份")
-    repo.reserve_sequence(conn, scope, sequence)
-    return f"{batch_no}{method_code}{issued_date}{sequence:02d}"
+    return f"{batch_no}{method_code}{issued_date}{sequence:02d}", (scope, sequence)
 
 
 def summary_download_filename(batch, title):
@@ -224,27 +231,24 @@ def validate_issue(test):
 @log_operation("quarantine_issue", component="files")
 def issue(conn, user, test_id, body, root):
     authorize(user)
-    conn.execute("BEGIN IMMEDIATE")
-    test = repo.get(conn, "tests", test_id)
-    if test["state"] == "issued":
-        return repo.all_items(conn, "reports", test_id)[0]
-    check_version(test, body)
-    batch = repo.get(conn, "batches", test["batchId"])
-    if body.get("expectedBatchUpdatedAt") != batch["updatedAt"]:
-        raise ValueError("检疫覆盖来源已变更，请刷新后再出具")
-    validate_issue(test)
-    document = snapshot(conn, test)
+    if conn.in_transaction:
+        raise ValueError("出具报告不能嵌入其他写事务")
+    issued_date = datetime.now().astimezone()
     report_id = uuid4().hex
-    version = 1
-    if test.get("correctionOf"):
-        previous = repo.all_items(conn, "reports", test["correctionOf"])
-        version = previous[0]["version"] + 1
-        number = previous[0]["number"]
-    else:
-        number = next_report_number(conn, batch, test["method"])
-        if not number:
-            number = f"Q-{now()[:10].replace('-', '')}-{report_id[:12].upper()}"
+    with repo.read_snapshot(conn):
+        test = repo.get(conn, "tests", test_id)
+        if test["state"] == "issued":
+            return repo.all_items(conn, "reports", test_id)[0]
+        check_version(test, body)
+        batch = repo.get(conn, "batches", test["batchId"])
+        if body.get("expectedBatchUpdatedAt") != batch["updatedAt"]:
+            raise StaleWriteError("检疫覆盖来源已变更，请刷新后再出具")
+        validate_issue(test)
+        document = snapshot(conn, test)
+        number, version, reservation = _issue_identity(conn, test, batch, report_id, issued_date)
     document["number"] = number
+    # Writer startup, queue waiting, conversion and file writes own no SQLite
+    # transaction. The tentative number is consumed only after revalidation.
     content = generate(document, root)
     item = {
         "id": report_id,
@@ -256,19 +260,68 @@ def issue(conn, user, test_id, body, root):
         "storageName": report_id + ".pdf",
         "mime": PDF_MIME,
         "updatedAt": now(),
-        "issuedDate": datetime.now().astimezone().date().isoformat(),
+        "issuedDate": issued_date.date().isoformat(),
         "issuedBy": {"id": user["id"], "name": user["displayName"]},
     }
     root.mkdir(parents=True, exist_ok=True)
     target = root / item["storageName"]
+    staged = None
     try:
-        target.write_bytes(content)
+        with tempfile.NamedTemporaryFile(dir=root, prefix=".issue-", suffix=".pdf", delete=False) as stream:
+            staged = Path(stream.name)
+            stream.write(content)
+        conn.execute("BEGIN IMMEDIATE")
+        current = repo.get(conn, "tests", test_id)
+        if current["state"] == "issued":
+            existing = repo.all_items(conn, "reports", test_id)[0]
+            conn.rollback()
+            return existing
+        current_batch = repo.get(conn, "batches", test["batchId"])
+        current_attachments = repo.all_items(conn, "attachments", test_id)
+        if current != test or current_batch != batch or current_attachments != document["attachments"]:
+            raise StaleWriteError("检测记录、覆盖来源或附件已变化，请刷新后重新出具")
+        if (number, version, reservation) != _issue_identity(conn, current, current_batch, report_id, issued_date):
+            raise StaleWriteError("报告编号或原报告版本已变化，请重试出具")
+        if reservation:
+            repo.reserve_sequence(conn, *reservation)
         repo.save(conn, "reports", item, create=True)
-        before = copy.deepcopy(test)
-        test.update(state="issued", updatedAt=now())
-        repo.save(conn, "tests", test)
-        audit(conn, user, "report_issued", before, item)
+        current.update(state="issued", updatedAt=now())
+        repo.save(conn, "tests", current)
+        audit(conn, user, "report_issued", test, item)
+        os.replace(staged, target)
+        conn.commit()
+        return item
     except BaseException:
-        target.unlink(missing_ok=True)
+        _remove_uncommitted_report(conn, item, target)
         raise
-    return item
+    finally:
+        if staged:
+            staged.unlink(missing_ok=True)
+
+
+def _issue_identity(conn, test, batch, report_id, issued_date):
+    version = 1
+    reservation = None
+    if test.get("correctionOf"):
+        previous = repo.related_by_test_ids(conn, "reports", [test["correctionOf"]], metadata=True)[
+            test["correctionOf"]
+        ]
+        version = previous[0]["version"] + 1
+        number = previous[0]["number"]
+    else:
+        number, reservation = _next_report_number(conn, batch, test["method"], issued_date.strftime("%y%m%d"))
+        if not number:
+            number = f"Q-{issued_date.strftime('%Y%m%d')}-{report_id[:12].upper()}"
+    return number, version, reservation
+
+
+def _remove_uncommitted_report(conn, item, target):
+    """Preserve a file if commit acknowledgement failed after a real commit."""
+    try:
+        conn.rollback()
+        referenced = conn.execute("SELECT 1 FROM quarantine_reports WHERE id=?", (item["id"],)).fetchone()
+    except Exception:
+        # An unknown outcome is not evidence that a published file is disposable.
+        return
+    if not referenced:
+        target.unlink(missing_ok=True)

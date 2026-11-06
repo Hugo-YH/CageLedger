@@ -1,9 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type {
   QuarantineTest,
   QuarantineAttachment,
   QuarantineBatch,
   QuarantineDetail,
+  QuarantineOverview,
+  QuarantineTestDetail,
   QuarantineMethod,
   QuarantinePage,
   SupplierHistory,
@@ -45,6 +47,44 @@ export function useQuarantineBatches(
 }
 export function useQuarantineDetail(id: string) {
   return useQuarantineQuery<QuarantineDetail>(`batches/${id}`, Boolean(id));
+}
+export function useQuarantineOverview(id: string) {
+  return useQuarantineQuery<QuarantineOverview>(`batches/${id}?view=overview`, Boolean(id));
+}
+export function useQuarantineTestDetail(id: string) {
+  return useQuarantineQuery<QuarantineTestDetail>(`tests/${id}`, Boolean(id));
+}
+
+function invalidateQuarantine(
+  client: QueryClient,
+  { batchId, testId, sources = false }: { batchId?: string; testId?: string; sources?: boolean },
+) {
+  return Promise.all([
+    client.invalidateQueries({
+      predicate: (query) => {
+        if (query.queryKey[0] !== queryKeys.quarantine[0]) return false;
+        const path = String(query.queryKey.at(-1)).split("?")[0];
+        if (["batches", "records", "reports", "suppliers", "suppliers/summary", "suppliers/details"].includes(path))
+          return true;
+        if (path === "sources") return sources;
+        if (batchId && (path === `batches/${batchId}` || path === `batches/${batchId}/activity`)) return true;
+        return Boolean(testId && path === `tests/${testId}`);
+      },
+    }),
+    ...(sources ? [client.invalidateQueries({ queryKey: queryKeys.intakeRoot })] : []),
+  ]);
+}
+
+async function updateTest(client: QueryClient, item: QuarantineTest, attachment?: QuarantineAttachment) {
+  const queryKey = [...queryKeys.quarantine, `tests/${item.id}`];
+  await client.cancelQueries({ queryKey, exact: true });
+  client.setQueryData<QuarantineTestDetail>(queryKey, (current) => ({
+    item,
+    reports: current?.reports ?? [],
+    attachments: attachment
+      ? [...(current?.attachments ?? []).filter((entry) => entry.id !== attachment.id), attachment]
+      : (current?.attachments ?? []),
+  }));
 }
 export function quarantineSourcesPath(from: string, to: string, page: number, state = "pending") {
   return `sources?view=summary&dateFrom=${from}&dateTo=${to}&offset=${(page - 1) * 30}&state=${state}`;
@@ -107,15 +147,20 @@ export function useQuarantineWrite() {
       body?: object;
       method?: "POST" | "PUT" | "DELETE";
       file?: File;
+      batchId?: string;
     }) =>
       file
         ? uploadFile<{ item: { id: string } }>(`${base}/${path}`, file)
         : requestJson<{ item: { id: string } }>(`${base}/${path}`, { method, body: JSON.stringify(body ?? {}) }),
-    onSuccess: () =>
-      Promise.all([
-        client.invalidateQueries({ queryKey: queryKeys.quarantine }),
-        client.invalidateQueries({ queryKey: queryKeys.intakeRoot }),
-      ]),
+    onSuccess: (_result, variables) => {
+      const parts = variables.path.split("/");
+      const item = (variables.body as { item?: { id?: string } } | undefined)?.item;
+      return invalidateQuarantine(client, {
+        batchId: variables.batchId || (parts[0] === "batches" ? parts[1] || item?.id : undefined),
+        testId: parts[0] === "tests" ? parts[1] : undefined,
+        sources: true,
+      });
+    },
   });
 }
 export function downloadQuarantine(path: string) {
@@ -125,24 +170,39 @@ export function downloadQuarantine(path: string) {
 export function useQuarantineRecordSave() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ item, version }: { item: QuarantineTest; version: string }) =>
+    mutationFn: ({ item, version }: { item: QuarantineTest; version: string; deferRefresh?: boolean }) =>
       requestJson<{ item: QuarantineTest }>(`${base}/tests${version ? `/${item.id}` : ""}`, {
         method: version ? "PUT" : "POST",
         body: JSON.stringify({ item, expectedUpdatedAt: version }),
       }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.quarantine }),
+    onSuccess: async ({ item }, variables) => {
+      await updateTest(client, item);
+      if (!variables.deferRefresh) return invalidateQuarantine(client, { batchId: item.batchId });
+    },
   });
 }
 export function useQuarantineAttachmentWrite() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ path, file, body }: { path: string; file?: File; body?: object }) =>
+    mutationFn: ({
+      path,
+      file,
+      body,
+    }: {
+      path: string;
+      file?: File;
+      body?: object;
+      batchId: string;
+      testId: string;
+    }) =>
       file
         ? uploadFile<{ item: QuarantineAttachment; test: QuarantineTest }>(`${base}/${path}`, file)
         : requestJson<{ item: QuarantineAttachment; test: QuarantineTest }>(`${base}/${path}`, {
             method: "PUT",
             body: JSON.stringify(body),
           }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.quarantine }),
+    onSuccess: ({ item, test }) => updateTest(client, test, item),
+    onSettled: (_result, error, variables) =>
+      invalidateQuarantine(client, { batchId: variables.batchId, testId: error ? variables.testId : undefined }),
   });
 }

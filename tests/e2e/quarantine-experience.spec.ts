@@ -196,7 +196,7 @@ test("quarantine detail and catalog failures retain navigation and retry", async
   const { batchId, batchName } = await seed(page);
   let failDetail = true;
   let failCatalog = true;
-  await page.route(`**/api/quarantine/batches/${batchId}`, (route) =>
+  await page.route(`**/api/quarantine/batches/${batchId}?view=overview`, (route) =>
     failDetail ? route.fulfill({ status: 500, json: { error: "批次详情暂时不可用" } }) : route.fallback(),
   );
   await page.route("**/api/quarantine/catalog", (route) =>
@@ -268,11 +268,12 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
       const material = page.getByRole("textbox", { name: "样品名称", exact: true });
       await material.fill("测试材料");
       let failSave = true;
-      await page.route(`**/api/quarantine/tests/${record.id}`, (route) =>
-        failSave && route.request().method() === "PUT"
-          ? route.fulfill({ status: 500, json: { error: "测试保存失败" } })
-          : route.fallback(),
-      );
+      let draftWrites = 0;
+      await page.route(`**/api/quarantine/tests/${record.id}`, (route) => {
+        if (route.request().method() !== "PUT") return route.fallback();
+        draftWrites += 1;
+        return failSave ? route.fulfill({ status: 500, json: { error: "测试保存失败" } }) : route.fallback();
+      });
       await page.getByRole("button", { name: "保存检测草稿", exact: true }).click();
       await expect(page.getByRole("alert").filter({ hasText: "测试保存失败" })).toBeVisible();
       await expect(material).toHaveValue("测试材料");
@@ -280,6 +281,8 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
       failSave = false;
       await page.getByRole("button", { name: "保存检测草稿", exact: true }).click();
       await expect(page.getByText("当前内容已保存", { exact: true })).toBeVisible();
+      const writesBeforeUpload = draftWrites;
+      await material.fill("上传前的新材料");
       let releaseUpload!: () => void;
       const uploadGate = new Promise<void>((resolve) => {
         releaseUpload = resolve;
@@ -304,8 +307,10 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
       await expect(page.getByRole("button", { name: "上传原始资料", exact: true })).toHaveClass(/ant-btn-loading/);
       releaseUpload();
       await expect(page.getByRole("alert").filter({ hasText: "测试上传失败" })).toBeVisible();
-      await expect(material).toHaveValue("测试材料");
+      await expect(material).toHaveValue("上传前的新材料");
       await expect(material).toBeEnabled();
+      await expect(page.getByText("当前内容已保存", { exact: true })).toBeVisible();
+      expect(draftWrites).toBe(writesBeforeUpload + 1);
       failUpload = false;
       await page.locator('input[type="file"]').setInputFiles(file);
       await expect(page.getByRole("status").filter({ hasText: "检疫原始资料已上传" })).toContainText("record.png");
@@ -313,6 +318,7 @@ for (const method of ["parasite", "elisa_mouse", "pcr"] as const) {
       await page.getByRole("button", { name: "保存图片信息", exact: true }).click();
       await expect(page.getByRole("status").filter({ hasText: "检疫图片信息已保存" })).toContainText("record.png");
       await expect(page.getByRole("textbox", { name: "record.png 图注", exact: true })).toHaveValue("已核对原始资料");
+      expect(draftWrites).toBe(writesBeforeUpload + 1);
     },
   );
 }

@@ -5,7 +5,7 @@ import { Alert, Anchor, Button, Card, Descriptions, Form, Typography } from "ant
 import { Modal } from "../../components/ui/Modal";
 import type {
   QuarantineBatch,
-  QuarantineDetail,
+  QuarantineAttachment,
   QuarantineProject,
   QuarantineTest,
 } from "../../../contracts/quarantine";
@@ -26,13 +26,13 @@ function initialDraft(initial: QuarantineTest) {
 export function TestEditor({
   initial,
   batch,
-  detail,
+  attachments,
   onCancel,
   onSaved,
 }: {
   initial: QuarantineTest;
   batch: QuarantineBatch;
-  detail: QuarantineDetail;
+  attachments: QuarantineAttachment[];
   onCancel: () => void;
   onSaved: (test: QuarantineTest) => void;
 }) {
@@ -121,9 +121,10 @@ export function TestEditor({
     onSaved(test);
   }
 
-  async function persist() {
+  async function persist(deferRefresh = false) {
     if (saving.current) return saving.current;
-    const pending = save.mutateAsync({ item: draft, version: version.current }).then(({ item }) => {
+    if (version.current && !dirty) return draft;
+    const pending = save.mutateAsync({ item: draft, version: version.current, deferRefresh }).then(({ item }) => {
       received(item);
       setError("");
       return item;
@@ -329,7 +330,7 @@ export function TestEditor({
               <Card title="原始资料" size="small">
                 <RecordAttachments
                   test={draft}
-                  attachments={detail.attachments}
+                  attachments={attachments}
                   persist={persist}
                   onVersion={received}
                   busy={save.isPending || fileBusy}

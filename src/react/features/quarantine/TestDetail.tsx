@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Alert, Button, Card, Collapse, Empty, Form, Select, Space, Tabs, Tag, Typography } from "antd";
 import { Modal } from "../../components/ui/Modal";
-import type { QuarantineDetail, QuarantineTest } from "../../../contracts/quarantine";
+import type { QuarantineBatch, QuarantineTestDetail, QuarantineTest } from "../../../contracts/quarantine";
 import { downloadQuarantine, useQuarantineWrite } from "../../api/quarantine";
 import { id, methodLabels, quarantineTestStateColor } from "./shared";
 import { ReportInformation, ReportProjects, ReportSamples } from "./ReportFields";
@@ -24,7 +24,7 @@ export function TestDetail({
   actionsContainer: HTMLDivElement | null;
   primaryContainer: HTMLDivElement | null;
   test: QuarantineTest;
-  detail: QuarantineDetail;
+  detail: { item: QuarantineBatch } & Omit<QuarantineTestDetail, "item">;
   onEdit: () => void;
   onCreated: (id: string) => void;
 }) {
@@ -45,6 +45,7 @@ export function TestDetail({
     try {
       const response = await write.mutateAsync({
         path: `tests/${test.id}/${name}`,
+        batchId: detail.item.id,
         body: { id: id(), supplier, expectedUpdatedAt: test.updatedAt, expectedBatchUpdatedAt: detail.item.updatedAt },
       });
       setError("");

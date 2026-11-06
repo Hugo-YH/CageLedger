@@ -4,9 +4,9 @@ from io import BytesIO
 from unittest.mock import patch
 
 from docx import Document
-from test_quarantine_document_templates import report_snapshot
 
 from server_app.domains.quarantine import summary
+from tests.test_quarantine_document_templates import report_snapshot
 
 
 class QuarantineSummaryTests(unittest.TestCase):

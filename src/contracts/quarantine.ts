@@ -99,6 +99,21 @@ export interface QuarantineReport {
   templateVersion: string;
   mime?: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 }
+export type QuarantineTestSummary = Omit<QuarantineTest, "samples" | "projects">;
+export interface QuarantineReportSummary extends QuarantineReport {
+  method: QuarantineMethod;
+}
+export interface QuarantineOverview {
+  completionReasons: string[];
+  item: QuarantineBatch;
+  tests: QuarantineTestSummary[];
+  reports: QuarantineReportSummary[];
+}
+export interface QuarantineTestDetail {
+  item: QuarantineTest;
+  attachments: QuarantineAttachment[];
+  reports: QuarantineReportSummary[];
+}
 export interface QuarantineDetail {
   completionReasons: string[];
   item: QuarantineBatch;

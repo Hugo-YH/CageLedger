@@ -510,6 +510,7 @@ npm run test:e2e
 | POST / PUT | `batches[/{id}]`、`tests[/{id}]`              | 创建或编辑，正文 `{ item, expectedUpdatedAt }`          |
 | DELETE     | `batches/{id}`                                | 删除无检测记录的批次，正文 `{ expectedUpdatedAt }`      |
 | GET        | `batches/{id}`                                | 覆盖范围、检测、附件与历史报告版本                      |
+| GET        | `tests/{id}`                                  | 单条完整检测及其附件、报告目录                          |
 | GET        | `batches/{id}/summary`                        | `kind=quarantine` 或 `self`，下载历史版式批次汇总 PDF   |
 | POST       | `tests/{id}/attachments`                      | multipart字段file；查询参数传关联样本、项目、分类及版本 |
 | GET        | `attachments/{id}`、`reports/{id}`            | 受鉴权下载；报告统一返回 PDF，历史 Word 在下载时转换    |
@@ -519,6 +520,12 @@ npm run test:e2e
 | GET        | `suppliers`                                   | 供应商、日期范围／类型、种类、方法、结果过滤，含明细    |
 
 编辑必须提供 `expectedUpdatedAt`，缺失或过期返回409；出具另传 `expectedBatchUpdatedAt`。出具重试返回已有报告，生成失败保留草稿。更正新建检测记录并关联原版本；既有 Word 报告保留原件并在下载时转换为 PDF。PDF 渲染不可用、超时或转换结果无效返回503，文件读写失败返回500。事务记录操作者与审计快照。`quarantine_batches/tests/attachments/reports` 与 `files/quarantine/` 共同组成检疫备份范围。
+
+`GET batches/{id}?view=overview` 返回 `{item,tests,reports,completionReasons}`：批次及完成条件保持完整，检测摘要省略 `samples/projects`，报告目录包含 `method`，省略冻结 `snapshot` 和存储文件名。单条 `GET tests/{id}` 返回 `{item,attachments,reports}`，只包含该检测；附件与报告目录均不暴露存储文件名。旧完整批次接口保留。页面按需加载单检测，确认整批完成仍携带全部检测的版本。
+
+正式出具先读取一致快照，在数据库事务外完成转换和暂存文件，再在短写事务中复核检测、批次、附件及候选编号，原子提交报告、状态和审计。生成期间变化返回409，编号只在最终提交时消费；相同检测的并发重复出具返回已提交报告。失败仅清理本次且确定未被提交引用的文件，提交结果不明确时保留已引用原件。
+
+草稿、汇总和历史Word转换按完整内容、标题／草稿类型、模板、文件引用和转换环境复用，合并相同转换请求；缓存有容量和回收期限限制，不代替每次鉴权及当前来源读取。新出具PDF继续直接下载不可变原件。供应商历史按完整来源内容复用聚合，分页参数不参与聚合身份；事务内未提交数据不读写共享缓存，Unicode供应商匹配、更正和范围外复检的统计口径保持。
 
 检疫批次编号首次保存后冻结，流水号一经分配不再回收。正式报告按 `{批次编号}{M|E|P}{YYMMDD}{NN}` 编号；ELISA 大小鼠共用 `E` 序列，更正版本沿用报告编号并递增独立版本号。报告下载文件名为 `{检测类型}_{实验日期}_{批次号}_{报告编号}_v{版本}.pdf`，草稿以 `草稿` 替代报告编号和版本；ELISA 文件名区分小鼠和大鼠。
 

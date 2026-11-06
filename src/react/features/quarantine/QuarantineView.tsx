@@ -17,7 +17,8 @@ import type {
 import {
   useQuarantineBatches,
   useQuarantineCatalog,
-  useQuarantineDetail,
+  useQuarantineOverview,
+  useQuarantineTestDetail,
   useQuarantineWrite,
 } from "../../api/quarantine";
 import { QuarantinePool } from "./QuarantinePool";
@@ -64,7 +65,7 @@ export function QuarantineView({
     batchPicker || isBatchManagement || isReports ? undefined : mode === "quarantine-elisa" ? "elisa" : method,
     batchPicker ? "" : batchState,
   );
-  const detail = useQuarantineDetail(batchId);
+  const detail = useQuarantineOverview(batchId);
   const catalog = useQuarantineCatalog(pendingNewRecord);
   const tests =
     detail.data?.tests.filter(
@@ -74,6 +75,17 @@ export function QuarantineView({
         (mode === "quarantine-elisa" ? t.method.startsWith("elisa") : t.method === method),
     ) ?? [];
   const selected = tests.find((t) => t.id === testId) ?? tests[0];
+  const recordId =
+    batchId && (!isBatchManagement || Boolean(testId) || Boolean(editor)) && !pendingNewRecord
+      ? editor
+        ? editor.updatedAt || testId === editor.id
+          ? editor.id
+          : ""
+        : detail.data
+          ? (selected?.id ?? "")
+          : testId
+      : "";
+  const record = useQuarantineTestDetail(recordId);
   function beginTest() {
     const nextMethod = isBatchManagement && selected ? selected.method : method;
     setPendingMethod(nextMethod);
@@ -451,7 +463,7 @@ export function QuarantineView({
               {isBatchManagement && !testId && !editor && (
                 <BatchCompletion key={detail.data.item.id} detail={detail.data} />
               )}
-              {(!isBatchManagement || Boolean(testId)) && (
+              {(!isBatchManagement || Boolean(testId) || Boolean(editor)) && (
                 <>
                   {pendingNewRecord && catalog.error && (
                     <Alert
@@ -492,24 +504,40 @@ export function QuarantineView({
                     <TestEditor
                       key={editor.id}
                       initial={editor}
-                      detail={detail.data}
+                      attachments={record.data?.item.id === editor.id ? record.data.attachments : []}
                       batch={detail.data.item}
                       onCancel={() => setEditor(null)}
                       onSaved={(test) => setTestId(test.id)}
                     />
-                  ) : selected ? (
+                  ) : selected && record.data?.item.id === selected.id ? (
                     <TestDetail
                       key={selected.id}
-                      test={selected}
+                      test={record.data.item}
                       showReports={isReports}
                       actionsContainer={recordActions}
                       primaryContainer={recordPrimary}
-                      detail={detail.data}
-                      onEdit={() => setEditor(selected)}
+                      detail={{
+                        item: detail.data.item,
+                        attachments: record.data.attachments,
+                        reports: record.data.reports,
+                      }}
+                      onEdit={() => {
+                        if (record.data) setEditor(record.data.item);
+                      }}
                       onCreated={(value) => {
                         setTestId(value);
                       }}
                     />
+                  ) : selected ? (
+                    record.error ? (
+                      <Alert
+                        type="error"
+                        title={record.error.message}
+                        action={<Button onClick={() => void record.refetch()}>重试</Button>}
+                      />
+                    ) : (
+                      <PageSkeleton label="检测记录详情" variant="detail" />
+                    )
                   ) : (
                     <Empty
                       description={

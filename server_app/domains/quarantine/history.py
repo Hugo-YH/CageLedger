@@ -1,5 +1,13 @@
+import copy
+import hashlib
+import json
+
+from server_app.cache import cache_generation, cache_get, cache_key, cache_set
+
 from . import repository as repo
 from .service import abnormal_samples, split_retest_completed
+
+HISTORY_CACHE_SECONDS = 300
 
 
 def _date_matches(item, field, filters):
@@ -8,9 +16,9 @@ def _date_matches(item, field, filters):
     )
 
 
-def supplier_history(conn, filters, *, group=None, include_details=True):
+def _matching_batches(batches, filters, group):
     matching_batches = []
-    for batch in repo.all_items(conn, "batches"):
+    for batch in batches:
         sources = {s["id"]: s for s in batch["sources"]}
         matching_by_supplier = {}
         for supplier in {s["supplier"] for s in sources.values()}:
@@ -30,12 +38,14 @@ def supplier_history(conn, filters, *, group=None, include_details=True):
         if not matching_by_supplier:
             continue
         matching_batches.append((batch, sources, matching_by_supplier))
+    return matching_batches
 
-    tests_by_batch = repo.tests_by_batch_ids(conn, [batch["id"] for batch, _, _ in matching_batches])
+
+def _history_rows(matching_batches, load_tests, filters, group, include_details):
     rows = {}
     for batch, sources, matching_by_supplier in matching_batches:
         # Keep every test in a matching batch so corrections and split retests retain their context.
-        tests = tests_by_batch.get(batch["id"], [])
+        tests = load_tests(batch["id"])
         # A correction supersedes its prior version for counts, not for history retention.
         superseded = {t["correctionOf"] for t in tests if t.get("correctionOf") and t["state"] == "issued"}
         for test in tests:
@@ -127,6 +137,65 @@ def supplier_history(conn, filters, *, group=None, include_details=True):
         }
         for row in rows.values()
     ]
+
+
+def _fingerprint(rows):
+    digest = hashlib.sha256()
+    for row in rows:
+        for value in row:
+            content = str(value).encode("utf-8")
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+    return digest.hexdigest()
+
+
+def supplier_history(conn, filters, *, group=None, include_details=True):
+    """Reuse aggregation by complete input content, independent of output page.
+
+    Hashing raw rows keeps same-version payload changes observable without
+    reparsing every project's result matrix on every page. No writer publishes
+    an uncommitted result to the shared, size-bounded cache.
+    """
+    writable = conn.in_transaction
+    generation = cache_generation()
+    selected = {
+        key: filters[key]
+        for key in ("supplier", "species", "dateType", "dateFrom", "dateTo", "method", "result")
+        if key in filters
+    }
+    with repo.read_snapshot(conn):
+        database = next((r[2] for r in conn.execute("PRAGMA database_list") if r[1] == "main"), "")
+        scope = database or f"memory:{id(conn)}"
+        batches = conn.execute(
+            "SELECT id,updated_at,payload FROM quarantine_batches ORDER BY updated_at DESC,id"
+        ).fetchall()
+        batch_key = cache_key(
+            "quarantine_history_sources", database=scope, source=_fingerprint(batches), filters=selected, group=group
+        )
+        matching = cache_get(batch_key) if not writable else None
+        if matching is None:
+            matching = _matching_batches([json.loads(row[2]) for row in batches], selected, group)
+            if not writable:
+                cache_set(batch_key, matching, ttl_seconds=HISTORY_CACHE_SECONDS, expected_generation=generation)
+        raw_tests = repo.raw_tests_by_batch_ids(conn, [batch["id"] for batch, _, _ in matching])
+        key = cache_key("quarantine_history_rows", batches=batch_key, tests=_fingerprint(raw_tests))
+        rows = cache_get(key) if not writable else None
+        if rows is None:
+            raw_by_batch = {}
+            for batch_id, payload in raw_tests:
+                raw_by_batch.setdefault(batch_id, []).append(payload)
+            # Keep full result matrices for only one batch at a time, including
+            # its corrections/retests. The cache retains compact aggregates.
+            rows = _history_rows(
+                matching,
+                lambda batch_id: [json.loads(payload) for payload in raw_by_batch.get(batch_id, [])],
+                selected,
+                group,
+                True,
+            )
+            if not writable:
+                cache_set(key, rows, ttl_seconds=HISTORY_CACHE_SECONDS, expected_generation=generation)
+    return copy.deepcopy(rows if include_details else [{**row, "details": []} for row in rows])
 
 
 def _page(params, total):

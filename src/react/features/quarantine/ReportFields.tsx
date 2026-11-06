@@ -1,5 +1,6 @@
 import { Button, DatePicker, Form, Input, Select, Space, Table, Typography } from "antd";
 import dayjs from "dayjs";
+import { useMemo } from "react";
 import type { QuarantineBatch, QuarantineProject, QuarantineTest } from "../../../contracts/quarantine";
 
 type Props = {
@@ -150,15 +151,31 @@ export function ReportProjects({ test, onChange, onRemoveProject, fields }: Prop
   );
 }
 export function ReportSamples({ test, batch, onChange, onRemoveSample }: Props) {
-  const sourceMap = new Map(batch.sources.map((source) => [source.id, source]));
-  const assigned = new Set(test.samples.flatMap((sample) => sample.sourceIds));
-  const sourceOptions = batch.sources
-    .filter(
-      (source) =>
-        !test.method.startsWith("elisa") ||
-        (test.method === "elisa_mouse" ? ["小鼠", "mouse"] : ["大鼠", "rat"]).includes(source.species.toLowerCase()),
-    )
-    .map((source) => ({ value: source.id, label: sourceLabel(source) }));
+  const sourceMap = useMemo(() => new Map(batch.sources.map((source) => [source.id, source])), [batch.sources]);
+  const assigned = useMemo(() => new Set(test.samples.flatMap((sample) => sample.sourceIds)), [test.samples]);
+  const sourceOptions = useMemo(
+    () =>
+      batch.sources
+        .filter(
+          (source) =>
+            !test.method.startsWith("elisa") ||
+            (test.method === "elisa_mouse" ? ["小鼠", "mouse"] : ["大鼠", "rat"]).includes(
+              source.species.toLowerCase(),
+            ),
+        )
+        .map((source) => ({ value: source.id, label: sourceLabel(source) })),
+    [batch.sources, test.method],
+  );
+  const optionsBySample = useMemo(
+    () =>
+      new Map(
+        test.samples.map((sample) => {
+          const own = new Set(sample.sourceIds);
+          return [sample.id, sourceOptions.filter((option) => own.has(option.value) || !assigned.has(option.value))];
+        }),
+      ),
+    [assigned, sourceOptions, test.samples],
+  );
   return (
     <>
       <Table
@@ -199,12 +216,11 @@ export function ReportSamples({ test, batch, onChange, onRemoveSample }: Props) 
             title: "混样来源",
             width: 280,
             render: (_: unknown, sample: QuarantineTest["samples"][number], index: number) => {
-              const ownIds = new Set(sample.sourceIds);
               const selected = sample.sourceIds.flatMap((id) => {
                 const source = sourceMap.get(id);
                 return source ? [source] : [];
               });
-              const options = sourceOptions.filter((option) => ownIds.has(option.value) || !assigned.has(option.value));
+              const options = optionsBySample.get(sample.id) ?? [];
               return onChange ? (
                 <Select
                   mode="multiple"

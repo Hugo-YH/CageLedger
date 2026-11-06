@@ -330,7 +330,7 @@
     "server_app/web/system_features.py": "841504e28e9a794d88cd9bb2c6bfa01c12458f15f71aab9db6ec6d1d5069ec89",
     "server_app/web/researchers.py": "cc45c24c07570828ac4a8404c9e4b555fb0197e09c5ee80f73d66ee75864a8ff",
     "server_app/web/feedback.py": "5f3c5ae8649e67d0ecd3487968115d483f35ed93b229e9e776743a092e0ef6bf",
-    "server_app/web/quarantine.py": "93afc305ef434e8850005181aff4eb504e4666061137c215b2bf7c663a9e85f3",
+    "server_app/web/quarantine.py": "ac857408fe4643bcdbaec6f9a87ee483581df9c65d981bed1067051feef33f85",
     "server_app/web/animal_inspection.py": "b92761ddca49e7bddb3814234107473db180e1b0e12e79019699ac5eb3f30493",
     "server_app/web/settlement_candidates.py": "98e30330864a812c12ed8e5e0e6eecedb837a5efb6f620f7fdac74b56c9c3ae4",
     "server_app/web/intake_summary.py": "33eba7143c5f9be95dbf9c6fd0378ba4e1f8c8aa81dc204f47d632f1e2ed2eb8",
@@ -342,7 +342,7 @@
     "server_app/web/route_definitions/operations.py": "92ac8da3c37c2ef9284e7e6554b5170f5b2732cd7c4ca9906af92baf6a1ef0e5",
     "server_app/web/route_definitions/platform.py": "6746910f672f9bbf86672a0737630e278cba79a82c664481b21dbd7c7f6b8653",
     "server_app/web/route_definitions/settlement.py": "6204780e4c4b085d94dc6168f670793f7f284da27dc6eab540c1fce3b83d22ed",
-    "server_app/web/route_definitions/support.py": "10a50855a098b0c21dcefbaa7dd72407f05024e101b071bd245447e2be13fed9"
+    "server_app/web/route_definitions/support.py": "da3848715fadefeec17cce2ade3a3824dde449e7ab68221620a7e29927f4c5ba"
   },
   "groups": [
     {
@@ -2483,8 +2483,16 @@
           "method": "GET",
           "path": "/api/quarantine/batches/{id}",
           "purpose": "批次详情",
+          "request": "id；可选view=overview",
+          "response": "完整旧批次详情；overview返回批次、检测摘要、报告目录和完成条件",
+          "protection": "read"
+        },
+        {
+          "method": "GET",
+          "path": "/api/quarantine/tests/{id}",
+          "purpose": "单检测详情",
           "request": "id",
-          "response": "批次及检测信息",
+          "response": "{item,attachments,reports}，附件和报告为元数据目录",
           "protection": "read"
         },
         {

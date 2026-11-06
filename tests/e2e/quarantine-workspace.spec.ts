@@ -132,6 +132,22 @@ test("quarantine returns to the newly saved record within an existing batch", as
   expect(detail.tests).toHaveLength(2);
 });
 
+test("quarantine opens an overview and only the selected full detection", async ({ page }) => {
+  const { batch, record } = await setup(page);
+  const reads: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "GET" && new URL(request.url()).pathname.startsWith("/api/quarantine/")) {
+      const url = new URL(request.url());
+      reads.push(url.pathname + url.search);
+    }
+  });
+  await open(page, batch.name);
+  await expect(page.getByRole("button", { name: "编辑检测", exact: true })).toBeVisible();
+  expect(reads.filter((path) => path === `/api/quarantine/batches/${batch.id}?view=overview`)).toHaveLength(1);
+  expect(reads.filter((path) => path === `/api/quarantine/tests/${record.id}`)).toHaveLength(1);
+  expect(reads).not.toContain(`/api/quarantine/batches/${batch.id}`);
+});
+
 test("quarantine section navigation and unsaved attachment metadata are protected", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const { batch } = await setup(page);

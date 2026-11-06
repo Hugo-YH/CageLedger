@@ -49,6 +49,7 @@ ROUTE_GROUPS = {
                 "/api/quarantine/sources",
                 "/api/quarantine/batches",
                 "/api/quarantine/batches/{id}",
+                "/api/quarantine/tests/{id}",
                 "/api/quarantine/batches/{id}/activity",
                 "/api/quarantine/batches/{id}/summary",
                 "/api/quarantine/records",

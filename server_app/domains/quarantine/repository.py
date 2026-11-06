@@ -1,9 +1,38 @@
 import json
 import re
+from contextlib import contextmanager
 
 from server_app.domains.intake import SPECIES_CODES
 from server_app.repositories.payload import dump_json
 from server_app.shared import clean_text
+
+
+@contextmanager
+def read_snapshot(conn):
+    """Own only a short read transaction; never finish a caller's transaction."""
+    owned = not conn.in_transaction
+    if owned:
+        conn.execute("BEGIN")
+    try:
+        yield
+    finally:
+        if owned:
+            conn.rollback()
+
+
+def raw_tests_by_batch_ids(conn, batch_ids):
+    rows = []
+    ids = list(dict.fromkeys(batch_ids))
+    for offset in range(0, len(ids), 500):
+        chunk = ids[offset : offset + 500]
+        marks = ",".join("?" for _ in chunk)
+        rows.extend(
+            conn.execute(
+                f"SELECT batch_id,payload FROM quarantine_tests WHERE batch_id IN ({marks}) ORDER BY updated_at DESC,id",
+                chunk,
+            )
+        )
+    return rows
 
 
 def ensure_schema(conn):
@@ -117,6 +146,28 @@ def tests_by_batch_ids(conn, batch_ids):
         placeholders = ",".join("?" for _ in chunk)
         for row in conn.execute(
             f"SELECT batch_id,payload FROM quarantine_tests WHERE batch_id IN ({placeholders}) ORDER BY updated_at DESC,id",
+            chunk,
+        ):
+            grouped.setdefault(row[0], []).append(json.loads(row[1]))
+    return grouped
+
+
+def related_by_test_ids(conn, table, test_ids, *, metadata=False):
+    """Preserve each test's historical ordering without one query per test."""
+    if table not in {"attachments", "reports"}:
+        raise ValueError("不支持的关联记录")
+    grouped = {}
+    ids = list(dict.fromkeys(test_ids))
+    projection = "payload"
+    if metadata:
+        projection = "json_remove(payload, '$.snapshot', '$.storageName', '$.previewStorageName')"
+    removed = " AND COALESCE(json_extract(payload, '$.removed'),0)=0" if table == "attachments" else ""
+    for offset in range(0, len(ids), 500):
+        chunk = ids[offset : offset + 500]
+        marks = ",".join("?" for _ in chunk)
+        for row in conn.execute(
+            f"SELECT test_id,{projection} FROM quarantine_{table} WHERE test_id IN ({marks}){removed} "
+            "ORDER BY updated_at DESC,id",
             chunk,
         ):
             grouped.setdefault(row[0], []).append(json.loads(row[1]))

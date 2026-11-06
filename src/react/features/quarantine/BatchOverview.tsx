@@ -17,7 +17,7 @@ import {
   Timeline,
   Typography,
 } from "antd";
-import type { QuarantineActivity, QuarantineDetail, QuarantinePage } from "../../../contracts/quarantine";
+import type { QuarantineActivity, QuarantineOverview, QuarantinePage } from "../../../contracts/quarantine";
 import { useQuarantineQuery } from "../../api/quarantine";
 import { methodLabels, quarantineTestStateColor } from "./shared";
 import { speciesLabel } from "../../../domain/intake";
@@ -94,7 +94,7 @@ export function BatchOverview({
   compact = false,
   onRecord,
 }: {
-  detail: QuarantineDetail;
+  detail: QuarantineOverview;
   compact?: boolean;
   onRecord: (id: string) => void;
 }) {

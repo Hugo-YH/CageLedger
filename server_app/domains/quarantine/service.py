@@ -340,7 +340,12 @@ def abnormal_samples(test):
     return {sid for p in test["projects"] for sid, result in p["results"].items() if result in {"positive", "suspect"}}
 
 
-def batch_detail(conn, entity_id):
+def batch_detail(conn, entity_id, *, overview=False):
+    with repo.read_snapshot(conn):
+        return _batch_detail(conn, entity_id, overview=overview)
+
+
+def _batch_detail(conn, entity_id, *, overview):
     batch = repo.get(conn, "batches", entity_id)
     tests = repo.all_items(conn, "tests", entity_id)
     source_map = {s["id"]: s for s in batch["sources"]}
@@ -377,12 +382,39 @@ def batch_detail(conn, entity_id):
     )
     from .workflow import completion_reasons
 
-    return {
+    ids = [t["id"] for t in tests]
+    reports = repo.related_by_test_ids(conn, "reports", ids, metadata=overview)
+    result = {
         "completionReasons": completion_reasons(conn, batch, tests),
         "item": batch,
-        "tests": tests,
-        "attachments": [a for t in tests for a in repo.all_items(conn, "attachments", t["id"])],
-        "reports": [r for t in tests for r in repo.all_items(conn, "reports", t["id"])],
+        "tests": [{k: v for k, v in t.items() if k not in {"samples", "projects"}} for t in tests]
+        if overview
+        else tests,
+        "reports": [
+            {**report, "method": test["method"]} if overview else report
+            for test in tests
+            for report in reports.get(test["id"], [])
+        ],
+    }
+    if not overview:
+        attachments = repo.related_by_test_ids(conn, "attachments", ids)
+        result["attachments"] = [a for t in tests for a in attachments.get(t["id"], [])]
+    return result
+
+
+def test_detail(conn, entity_id):
+    with repo.read_snapshot(conn):
+        return _test_detail(conn, entity_id)
+
+
+def _test_detail(conn, entity_id):
+    test = repo.get(conn, "tests", entity_id)
+    reports = repo.related_by_test_ids(conn, "reports", [entity_id], metadata=True)
+    attachments = repo.related_by_test_ids(conn, "attachments", [entity_id], metadata=True)
+    return {
+        "item": test,
+        "reports": [{**report, "method": test["method"]} for report in reports.get(entity_id, [])],
+        "attachments": attachments.get(entity_id, []),
     }
 
 

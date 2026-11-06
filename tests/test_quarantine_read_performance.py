@@ -3,8 +3,10 @@ import sqlite3
 import unittest
 from unittest.mock import patch
 
+from server_app.cache import invalidate_data_cache_prefixes
 from server_app.domains.quarantine import history, service
 from server_app.domains.quarantine import repository as repo
+from server_app.web import quarantine
 
 
 class QuarantineReadTests(unittest.TestCase):
@@ -149,6 +151,117 @@ class QuarantineReadTests(unittest.TestCase):
         self.assertEqual(detail["item"]["status"], "检测中")
         self.assertEqual(detail["attachments"], [])
         self.assertEqual(detail["reports"], [])
+
+    def test_overview_and_selected_record_keep_versions_without_frozen_report_payloads(self):
+        self.batch()
+        test = self.create_record()
+        report = {
+            "id": "report",
+            "testId": test["id"],
+            "number": "REPORT",
+            "version": 1,
+            "updatedAt": "2026-09-04",
+            "snapshot": {"test": test},
+            "storageName": "private.pdf",
+        }
+        repo.save(self.conn, "reports", report, create=True)
+        repo.save(
+            self.conn,
+            "attachments",
+            {
+                "id": "attachment",
+                "testId": test["id"],
+                "updatedAt": "2026-09-04",
+                "storageName": "private.png",
+                "previewStorageName": "preview.png",
+            },
+            create=True,
+        )
+        original = service.batch_detail(self.conn, "batch")
+        overview = service.batch_detail(self.conn, "batch", overview=True)
+        self.assertEqual(overview["item"], original["item"])
+        self.assertEqual(overview["completionReasons"], original["completionReasons"])
+        self.assertEqual(
+            overview["tests"], [{key: value for key, value in test.items() if key not in {"samples", "projects"}}]
+        )
+        self.assertNotIn("attachments", overview)
+        self.assertEqual(overview["reports"][0]["method"], "pcr")
+        self.assertNotIn("snapshot", overview["reports"][0])
+        self.assertNotIn("storageName", overview["reports"][0])
+        selected = service.test_detail(self.conn, test["id"])
+        self.assertEqual(selected["item"], test)
+        self.assertEqual(selected["reports"], overview["reports"])
+        self.assertEqual(
+            selected["attachments"], [{"id": "attachment", "testId": test["id"], "updatedAt": "2026-09-04"}]
+        )
+        self.assertEqual(service.batch_detail(self.conn, "batch"), original)
+        with self.assertRaises(LookupError):
+            service.test_detail(self.conn, "missing")
+
+    def test_many_detection_records_do_not_add_one_attachment_and_report_query_each(self):
+        self.batch()
+        for index in range(30):
+            test = self.create_record(f"test-{index:02d}")
+            repo.save(
+                self.conn,
+                "reports",
+                {
+                    "id": f"report-{index}",
+                    "testId": test["id"],
+                    "version": 1,
+                    "updatedAt": "2026-09-04",
+                    "snapshot": {"test": test},
+                },
+                create=True,
+            )
+        for overview, maximum in ((False, 4), (True, 3)):
+            statements = []
+            self.conn.set_trace_callback(statements.append)
+            detail = service.batch_detail(self.conn, "batch", overview=overview)
+            self.conn.set_trace_callback(None)
+            self.assertEqual(len(detail["tests"]), 30)
+            self.assertEqual(len(detail["reports"]), 30)
+            self.assertLessEqual(sum(sql.lstrip().upper().startswith("SELECT") for sql in statements), maximum)
+
+    def test_history_pages_reuse_complete_inputs_but_same_version_content_changes_are_visible(self):
+        invalidate_data_cache_prefixes("quarantine_history_")
+        self.batch()
+        test = self.create_record()
+        self.conn.commit()
+        with patch.object(history, "_history_rows", wraps=history._history_rows) as aggregate:
+            first = history.supplier_summary(self.conn, {"limit": "1"})
+            second = history.supplier_summary(self.conn, {"limit": "1", "offset": "1"})
+            self.assertEqual(first["page"]["total"], 2)
+            self.assertNotEqual(first["items"][0]["supplier"], second["items"][0]["supplier"])
+            self.assertEqual(aggregate.call_count, 1)
+            test["projects"][0]["results"]["sample"] = "suspect"
+            repo.save(self.conn, "tests", test)
+            self.conn.commit()
+            changed = history.supplier_summary(self.conn, {})
+            self.assertTrue(all(row["pending"] == 1 for row in changed["items"]))
+            self.assertEqual(aggregate.call_count, 2)
+
+    def test_history_never_reuses_or_publishes_uncommitted_statistics(self):
+        invalidate_data_cache_prefixes("quarantine_history_")
+        self.batch()
+        test = self.create_record()
+        self.conn.commit()
+        before = history.supplier_summary(self.conn, {})
+        test["projects"][0]["results"]["sample"] = "positive"
+        repo.save(self.conn, "tests", test)
+        self.assertTrue(all(row["pending"] == 1 for row in history.supplier_summary(self.conn, {})["items"]))
+        self.conn.rollback()
+        self.assertEqual(history.supplier_summary(self.conn, {}), before)
+
+    def test_invalid_summary_title_is_rejected_before_checking_the_renderer(self):
+        self.batch()
+        self.create_record()
+        with patch.object(
+            quarantine.pdf, "libreoffice_binary", side_effect=quarantine.pdf.PdfRenderError("missing")
+        ) as binary:
+            with self.assertRaisesRegex(ValueError, "报告类型无效"):
+                quarantine.get(None, self.conn, ["batches", "batch", "summary"], {"kind": "bad"})
+        binary.assert_not_called()
 
 
 if __name__ == "__main__":

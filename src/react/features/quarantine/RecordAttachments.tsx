@@ -1,6 +1,6 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Image, Input, InputNumber, Select, Space, Typography, Upload } from "antd";
 import { Modal } from "../../components/ui/Modal";
 import type { QuarantineAttachment, QuarantineTest } from "../../../contracts/quarantine";
@@ -9,7 +9,7 @@ import { downloadQuarantine, useQuarantineAttachmentWrite } from "../../api/quar
 type Props = {
   test: QuarantineTest;
   attachments: QuarantineAttachment[];
-  persist?: () => Promise<QuarantineTest>;
+  persist?: (deferRefresh?: boolean) => Promise<QuarantineTest>;
   onVersion?: (t: QuarantineTest) => void;
   busy?: boolean;
   onBusy?: (busy: boolean) => void;
@@ -38,10 +38,12 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
     setError("");
     setStatus("正在保存草稿并上传原始资料…");
     try {
-      const current = await persist();
+      const current = await persist(true);
       const res = await write.mutateAsync({
         path: `tests/${test.id}/attachments?${new URLSearchParams({ sampleId: test.method === "parasite" ? sampleId : "", projectIds: JSON.stringify(projectIds), category, expectedUpdatedAt: current.updatedAt })}`,
         file,
+        batchId: test.batchId,
+        testId: test.id,
       });
       onVersion?.(res.test);
       setStatus("");
@@ -55,14 +57,18 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
       onBusy?.(false);
     }
   }
-  const items = attachments
-    .filter((a) => a.testId === test.id && !a.removed)
-    .sort(
-      (a, b) =>
-        (a.position ?? 0) - (b.position ?? 0) ||
-        (a.uploadedAt ?? a.updatedAt).localeCompare(b.uploadedAt ?? b.updatedAt) ||
-        a.id.localeCompare(b.id),
-    );
+  const items = useMemo(
+    () =>
+      attachments
+        .filter((a) => a.testId === test.id && !a.removed)
+        .sort(
+          (a, b) =>
+            (a.position ?? 0) - (b.position ?? 0) ||
+            (a.uploadedAt ?? a.updatedAt).localeCompare(b.uploadedAt ?? b.updatedAt) ||
+            a.id.localeCompare(b.id),
+        ),
+    [attachments, test.id],
+  );
   return (
     <>
       {error && <Alert type="error" title={error} />}
@@ -136,6 +142,7 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             busy={busy}
             onBusy={onBusy}
             onStatus={setStatus}
+            onComplete={(removed, name) => feedback.success(removed ? "检疫附件已移除" : "检疫图片信息已保存", name)}
             onDirty={onDirty}
           />
         ))}
@@ -151,8 +158,13 @@ function AttachmentCard({
   busy,
   onBusy,
   onStatus,
+  onComplete,
   onDirty,
-}: Omit<Props, "attachments"> & { attachment: QuarantineAttachment; onStatus: (status: string) => void }) {
+}: Omit<Props, "attachments"> & {
+  attachment: QuarantineAttachment;
+  onStatus: (status: string) => void;
+  onComplete: (removed: boolean, name: string) => void;
+}) {
   const [draft, setDraft] = useState(a);
   const dirty = Boolean(persist) && JSON.stringify(draft) !== JSON.stringify(a);
   useEffect(() => {
@@ -173,15 +185,17 @@ function AttachmentCard({
     onStatus(removed ? "正在移除附件…" : "正在保存图片信息…");
     try {
       setError("");
-      const current = await persist!();
+      const current = await persist!(true);
       const res = await write.mutateAsync({
         path: `attachments/${a.id}`,
         body: { expectedUpdatedAt: current.updatedAt, item: { ...draft, removed } },
+        batchId: test.batchId,
+        testId: test.id,
       });
       onVersion?.(res.test);
       setRemove(false);
       onStatus("");
-      feedback.success(removed ? "检疫附件已移除" : "检疫图片信息已保存", a.name);
+      onComplete(removed, a.name);
     } catch (e) {
       onStatus("");
       setError(e instanceof Error ? e.message : "保存失败");
