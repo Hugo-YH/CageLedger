@@ -5,7 +5,7 @@ import type {
   ReceptionFilterColumn,
   ReceptionListParams,
   ReceptionListResponse,
-  ReceptionPreviewResponse,
+  ReceptionPreviewSummaryResponse,
   ReceptionCertificateAttachment,
   ReceptionRecognitionRequest,
   ReceptionRecognitionRun,
@@ -48,10 +48,11 @@ export function useReceptionFilterOptions(
 
 export function usePreviewReceptions() {
   return useMutation({
-    mutationFn: (request: ReceptionExportRequest) =>
-      requestJson<ReceptionPreviewResponse>("/api/receptions/preview", {
+    mutationFn: ({ signal, ...request }: ReceptionExportRequest & { signal?: AbortSignal }) =>
+      requestJson<ReceptionPreviewSummaryResponse>("/api/receptions/preview", {
         method: "POST",
-        body: JSON.stringify(request),
+        body: JSON.stringify({ ...request, view: "summary" }),
+        signal,
       }),
   });
 }
@@ -78,21 +79,33 @@ export function useReceptionRegistration(batchId: string, enabled = true) {
   });
 }
 
-function useInvalidateRegistration() {
+function useInvalidateRegistration(batchId: string) {
   const client = useQueryClient();
-  return () =>
+  return ({ refreshList = false, deferRegistrationRefresh = false } = {}) =>
     Promise.all([
-      client.invalidateQueries({ queryKey: queryKeys.receptionRoot }),
+      client.invalidateQueries({
+        queryKey: queryKeys.receptionRegistration(batchId),
+        exact: true,
+        refetchType: deferRegistrationRefresh ? "none" : "active",
+      }),
+      ...(refreshList ? [client.invalidateQueries({ queryKey: queryKeys.receptionListRoot })] : []),
       client.invalidateQueries({ queryKey: queryKeys.auditEventsRoot }),
     ]);
 }
 
 export function useUploadReceptionCertificate(batchId: string) {
   const client = useQueryClient();
-  const invalidate = useInvalidateRegistration();
+  const invalidate = useInvalidateRegistration(batchId);
   return useMutation({
     retry: 0,
-    mutationFn: ({ file, expectedBatchUpdatedAt }: { file: File; expectedBatchUpdatedAt: string }) => {
+    mutationFn: ({
+      file,
+      expectedBatchUpdatedAt,
+    }: {
+      file: File;
+      expectedBatchUpdatedAt: string;
+      deferRegistrationRefresh?: boolean;
+    }) => {
       const form = new FormData();
       form.append("file", file);
       const search = new URLSearchParams({ expectedBatchUpdatedAt });
@@ -101,7 +114,7 @@ export function useUploadReceptionCertificate(batchId: string) {
         form,
       );
     },
-    onSuccess: ({ attachment }) => {
+    onSuccess: ({ attachment }, variables) => {
       client.setQueryData<ReceptionRegistrationResponse>(queryKeys.receptionRegistration(batchId), (current) =>
         current
           ? {
@@ -110,34 +123,39 @@ export function useUploadReceptionCertificate(batchId: string) {
             }
           : current,
       );
-      void invalidate();
+      void invalidate({ refreshList: true, deferRegistrationRefresh: variables.deferRegistrationRefresh });
     },
   });
 }
 
 export function useRecognizeReceptionCertificate(batchId: string) {
   const client = useQueryClient();
-  const invalidate = useInvalidateRegistration();
+  const invalidate = useInvalidateRegistration(batchId);
   return useMutation({
     retry: 0,
-    mutationFn: ({ attachmentId, ...request }: ReceptionRecognitionRequest & { attachmentId: string }) =>
+    mutationFn: ({
+      attachmentId,
+      requestId,
+      expectedBatchUpdatedAt,
+      includeAllPages,
+    }: ReceptionRecognitionRequest & { attachmentId: string; deferRegistrationRefresh?: boolean }) =>
       requestJson<{ run: ReceptionRecognitionRun }>(
         `${registrationUrl(batchId)}/certificates/${encodeURIComponent(attachmentId)}/recognize`,
-        { method: "POST", body: JSON.stringify(request) },
+        { method: "POST", body: JSON.stringify({ requestId, expectedBatchUpdatedAt, includeAllPages }) },
       ),
     onSuccess: ({ run }) => {
       client.setQueryData<ReceptionRegistrationResponse>(queryKeys.receptionRegistration(batchId), (current) =>
         current ? { ...current, runs: [run, ...current.runs.filter((item) => item.id !== run.id)] } : current,
       );
     },
-    onSettled: () => {
-      void invalidate();
+    onSettled: (_data, _error, variables) => {
+      void invalidate({ deferRegistrationRefresh: variables.deferRegistrationRefresh });
     },
   });
 }
 
 export function useSaveReceptionRegistration(batchId: string) {
-  const invalidate = useInvalidateRegistration();
+  const invalidate = useInvalidateRegistration(batchId);
   return useMutation({
     retry: 0,
     mutationFn: (request: ReceptionRegistrationSaveRequest) =>
@@ -145,6 +163,6 @@ export function useSaveReceptionRegistration(batchId: string) {
         method: "PUT",
         body: JSON.stringify(request),
       }),
-    onSuccess: invalidate,
+    onSuccess: () => invalidate({ refreshList: true }),
   });
 }

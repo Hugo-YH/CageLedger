@@ -5,7 +5,11 @@ import type * as UiModule from "../../components/ui";
 import type { DrawerProps, ModalProps, TableProps } from "antd";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { ReceptionListResponse, ReceptionPreviewResponse, ReceptionRecord } from "../../../contracts/reception";
+import type {
+  ReceptionListResponse,
+  ReceptionPreviewSummaryResponse,
+  ReceptionRecord,
+} from "../../../contracts/reception";
 import { requestDownload, requestJson } from "../../api/client";
 import { AntdProvider } from "../../components/ui";
 import { UiProvider } from "../../state/ui";
@@ -89,16 +93,16 @@ const record: ReceptionRecord = {
   warnings: ["请核对性别"],
   source: { batchUpdatedAt: "batch-v1", applicationUpdatedAt: "app-time", applicationSource: "申请汇总表.xlsx" },
 };
-const preview: ReceptionPreviewResponse = {
+const preview: ReceptionPreviewSummaryResponse = {
   items: [record],
-  rows: [],
   rowCount: 2,
   applicationVersion: "app-v1",
   warnings: ["需要核对预填明细"],
+  registrationVersions: { one: null },
 };
 let client: QueryClient;
 let failList: boolean;
-let previewLoader: () => Promise<ReceptionPreviewResponse>;
+let previewLoader: () => Promise<ReceptionPreviewSummaryResponse>;
 let applicationVersion: string;
 function view() {
   return (
@@ -264,8 +268,8 @@ it("keeps the successful page and pauses selection/export after a later page fai
   expect(screen.getByTitle("2")).toHaveClass("ant-pagination-item-active");
 });
 
-it("discards a preview response after closing and clears selection when the authority source changes", async () => {
-  let resolvePreview: (value: ReceptionPreviewResponse) => void = () => {};
+it("aborts a closed preview, ignores its late response, and clears selection when the authority source changes", async () => {
+  let resolvePreview: (value: ReceptionPreviewSummaryResponse) => void = () => {};
   previewLoader = () =>
     new Promise((resolve) => {
       resolvePreview = resolve;
@@ -276,15 +280,56 @@ it("discards a preview response after closing and clears selection when the auth
   fireEvent.click(screen.getByRole("button", { name: "导出Excel" }));
   const dialog = await screen.findByRole("dialog", { name: "导出接收记录 Excel" });
   expect(within(dialog).getByRole("status", { name: "接收导出预览正在加载" })).toBeInTheDocument();
+  const [, init] = vi.mocked(requestJson).mock.calls.find(([url]) => String(url) === "/api/receptions/preview")!;
+  expect(JSON.parse(String(init?.body))).toMatchObject({ view: "summary" });
+  const signal = init?.signal;
+  expect(signal).toBeInstanceOf(AbortSignal);
+  expect(signal?.aborted).toBe(false);
   fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+  await waitFor(() => expect(signal?.aborted).toBe(true));
+  const finishClosedPreview = resolvePreview;
+  fireEvent.click(screen.getByRole("button", { name: "导出Excel" }));
+  const nextDialog = await screen.findByRole("dialog", { name: "导出接收记录 Excel" });
+  await act(async () => {
+    finishClosedPreview({ ...preview, rowCount: 99 });
+    await Promise.resolve();
+  });
+  expect(within(nextDialog).getByRole("status", { name: "接收导出预览正在加载" })).toBeInTheDocument();
+  expect(within(nextDialog).queryByText(/Excel 共 99 行/)).not.toBeInTheDocument();
   await act(async () => {
     resolvePreview(preview);
     await Promise.resolve();
   });
+  await within(nextDialog).findByText("已选择 1 个批次，Excel 共 2 行");
+  fireEvent.click(within(nextDialog).getByRole("button", { name: "取消" }));
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "导出接收记录 Excel" })).not.toBeInTheDocument());
   expect(requestDownload).not.toHaveBeenCalled();
   applicationVersion = "app-v2";
   fireEvent.click(screen.getByRole("button", { name: "刷新" }));
   await waitFor(() => expect(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` })).not.toBeChecked());
   expect(screen.getByRole("button", { name: "导出Excel" })).toBeDisabled();
+});
+
+it("retries a failed read-only preview with a new signal and accepts a summary without export rows", async () => {
+  previewLoader = vi
+    .fn<() => Promise<ReceptionPreviewSummaryResponse>>()
+    .mockRejectedValueOnce(new Error("preview offline"))
+    .mockResolvedValueOnce(preview);
+  render(view());
+  await screen.findByText(record.batchNo);
+  fireEvent.click(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` }));
+  fireEvent.click(screen.getByRole("button", { name: "导出Excel" }));
+  const dialog = await screen.findByRole("dialog", { name: "导出接收记录 Excel" });
+  await within(dialog).findByText("preview offline");
+  const previewCalls = () =>
+    vi.mocked(requestJson).mock.calls.filter(([url]) => String(url) === "/api/receptions/preview");
+  const originalSignal = previewCalls()[0][1]?.signal;
+  expect(originalSignal?.aborted).toBe(false);
+  fireEvent.click(within(dialog).getByRole("button", { name: /重\s*试/ }));
+  await within(dialog).findByText("已选择 1 个批次，Excel 共 2 行");
+  expect(previewCalls()).toHaveLength(2);
+  expect(originalSignal?.aborted).toBe(true);
+  expect(previewCalls()[1][1]?.signal).not.toBe(originalSignal);
+  expect(previewCalls()[1][1]?.signal?.aborted).toBe(false);
+  expect(requestDownload).not.toHaveBeenCalled();
 });

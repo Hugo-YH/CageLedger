@@ -44,8 +44,9 @@ def parameters(query):
     return {"limit": limit, "offset": offset, "columnFilters": filters, "sortKey": sort, "sortDir": direction}
 
 
-def record(row, source, *, complete=False):
-    batch = json.loads(row["payload"] if complete else row["summary"])
+def record(row, source, *, complete=False, batch=None):
+    if batch is None:
+        batch = json.loads(row["payload"] if complete else row["summary"])
     application = json.loads(row["application"]) if row["application"] else {}
     receipts = batch.get("receipts") or []
     dates, date_source = receipt_dates(batch)
@@ -287,7 +288,7 @@ def confirmed_lines(item, batch, saved):
     return output
 
 
-def preview(conn, actor, body):
+def preview(conn, actor, body, *, summary=False):
     authorize(actor)
     ids = body.get("ids") if isinstance(body, dict) else None
     if (
@@ -324,22 +325,27 @@ def preview(conn, actor, body):
             for identity in ids
         ):
             raise StaleWriteError("所选接收登记已变化，请刷新后重新选择并核对导出")
-    items, lines = [], []
+    items, lines, row_count = [], [], 0
     for identity in ids:
         row = rows[identity]
-        item = record(row, source, complete=True)
         batch = json.loads(row["payload"])
-        lines.extend(
+        item = record(row, source, complete=True, batch=batch)
+        batch_lines = (
             confirmed_lines(item, batch, saved[identity]) if identity in saved else registration_lines(item, batch)
         )
+        row_count += len(batch_lines)
+        if not summary:
+            lines.extend(batch_lines)
         items.append(item)
-    return {
+    result = {
         "items": items,
-        "rows": lines,
-        "rowCount": len(lines),
+        "rowCount": row_count,
         "applicationVersion": source["version"],
         "warnings": [f"{item['batchNo'] or item['id']}：{warning}" for item in items for warning in item["warnings"]],
         "registrationVersions": {
             identity: saved[identity]["updatedAt"] if identity in saved else None for identity in ids
         },
     }
+    if not summary:
+        result["rows"] = lines
+    return result

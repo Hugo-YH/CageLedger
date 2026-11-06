@@ -13,7 +13,7 @@ from zipfile import ZipFile
 from openpyxl import load_workbook
 
 from server_app.domains.intake.strain_standard import standardize_strain, supplier_full_name
-from server_app.domains.reception import repository, routes, service, workbook
+from server_app.domains.reception import application_projection, repository, routes, service, workbook
 from server_app.legacy import initialize_schema
 from server_app.repositories.audit_storage import read_payload
 from server_app.repositories.entities import upsert_intake_batch
@@ -123,6 +123,99 @@ class ReceptionTests(unittest.TestCase):
             self.assertNotEqual(repository.context(self.conn)["version"], source["version"])
             self.conn.rollback()
             self.assertEqual(repository.context(self.conn), source)
+
+    def test_projection_reuse_keeps_current_content_metadata_and_database_isolation(self):
+        application_projection._cached_rows.cache_clear()
+        self.addCleanup(application_projection._cached_rows.cache_clear)
+        item = self.index["items"][0]
+        self.conn.execute(
+            "INSERT INTO experiment_applications(id,iacuc,imported_at,payload) VALUES(?,?,?,?)",
+            ("application", item["iacuc"], "2026-11-01", json.dumps(item)),
+        )
+        self.conn.commit()
+        with patch.object(application_projection, "_encode_rows", wraps=application_projection._encode_rows) as encode:
+            source = repository.context(self.conn)
+            self.assertEqual(repository.context(self.conn), source)
+            self.assertEqual(encode.call_count, 1)
+            self.conn.execute("UPDATE experiment_applications SET imported_at='2026-11-02'")
+            current = repository.context(self.conn)
+            self.assertEqual(current["version"], source["version"])
+            self.assertEqual(current["updatedAt"], "2026-11-02")
+            self.assertEqual(encode.call_count, 1)
+            self.conn.rollback()
+        with sqlite3.connect(":memory:") as other:
+            other.row_factory = sqlite3.Row
+            initialize_schema(other)
+            other.execute(
+                "INSERT INTO experiment_applications(id,iacuc,imported_at,payload) VALUES(?,?,?,?)",
+                ("application", item["iacuc"], "2026-11-01", json.dumps({**item, "project": "另一数据库"})),
+            )
+            self.assertNotEqual(repository.context(other)["version"], source["version"])
+        self.assertEqual(repository.context(self.conn), source)
+        with (
+            patch.object(application_projection, "MAX_CACHED_CHARACTERS", 0),
+            patch.object(
+                application_projection, "_cached_rows", side_effect=AssertionError("oversized source retained")
+            ),
+        ):
+            self.assertEqual(repository.context(self.conn), source)
+
+    def test_queries_keep_global_dates_filters_and_order_without_unneeded_date_work(self):
+        for number in range(2, 15):
+            self.put(
+                reservation(
+                    number,
+                    status="received",
+                    iacuc="unmatched" if number % 2 else "Z2026001",
+                    quantity=number,
+                    receipts=[{"actualReceiptDate": "2026-10-29"}] if number % 3 else [],
+                    intakeDate="2026-10-28" if number % 4 else "",
+                )
+            )
+        source = repository.context(self.conn)
+        for filters in (
+            {},
+            {"receiptDate": ["2026-10-29"]},
+            {"receiptDate": [""]},
+            {"pi": ["共同负责人"]},
+            {"projectMatched": ["false"]},
+        ):
+            for sort in ("receiptDate", "batchNo", "quantity", "owner"):
+                with self.subTest(filters=filters, sort=sort):
+                    params = service.parameters(
+                        {"columnFilters": [json.dumps(filters)], "sortKey": [sort], "limit": ["3"], "offset": ["2"]}
+                    )
+                    rows, total = repository.page(self.conn, source, params)
+                    where, values = repository.clause(filters, conn=self.conn)
+                    order = (
+                        "(SELECT max(value) FROM json_each(d.dates))"
+                        if sort == "receiptDate"
+                        else repository.FIELDS[sort]
+                    )
+                    original = repository.BASE + "SELECT b.id" + repository.JOIN + " WHERE " + where
+                    expected = self.conn.execute(
+                        original + f" ORDER BY {order} DESC,b.id ASC", [source["json"], *values]
+                    ).fetchall()
+                    self.assertEqual(total, len(expected))
+                    self.assertEqual([row["id"] for row in rows], [row["id"] for row in expected[2:5]])
+
+        # SQLite authorizes column access during compilation. Non-date operations
+        # must not even reference intake_date through the materialized date CTE.
+        def without_date_column(action, table, column, *_):
+            return (
+                sqlite3.SQLITE_DENY
+                if action == sqlite3.SQLITE_READ and table == "intake_batches" and column == "intake_date"
+                else sqlite3.SQLITE_OK
+            )
+
+        self.conn.set_authorizer(without_date_column)
+        try:
+            rows = repository.selected(self.conn, source, [self.batch["id"]])
+            self.assertEqual([row["id"] for row in rows], [self.batch["id"]])
+            self.assertTrue(repository.filter_options(self.conn, source, "supplier", {}))
+            self.assertEqual(repository.page(self.conn, source, service.parameters({"sortKey": ["batchNo"]}))[1], 14)
+        finally:
+            self.conn.set_authorizer(None)
 
     def test_authoritative_individual_people_filters_and_scoped_options(self):
         filters = json.dumps({"pi": ["共同负责人"]})
@@ -436,6 +529,10 @@ class ReceptionTests(unittest.TestCase):
 
     def test_http_export_logs_once_and_does_not_change_source_batches(self):
         body = self.body()
+        full = service.preview(self.conn, ACTOR, body)
+        summary = service.preview(self.conn, ACTOR, body, summary=True)
+        self.assertEqual(summary, {key: value for key, value in full.items() if key != "rows"})
+        body["view"] = "summary"
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "copy.sqlite"
             with sqlite3.connect(path, factory=ClosingConnection) as target:
@@ -450,6 +547,9 @@ class ReceptionTests(unittest.TestCase):
             handler.current_user.return_value = ACTOR
             handler.read_json_body.return_value = body
             with patch.object(routes, "connect_db", side_effect=connect):
+                handler.path = "/api/receptions/preview"
+                self.assertEqual(routes.prepare(handler, {}).payload, summary)
+                handler.path = "/api/receptions/export"
                 self.assertTrue(routes.prepare(handler, {}))
             handler.send_download.assert_called_once()
             self.assertTrue(handler.send_download.call_args.args[0].startswith(b"PK"))

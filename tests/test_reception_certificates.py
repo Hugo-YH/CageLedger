@@ -731,12 +731,55 @@ class ReceptionCertificateTests(unittest.TestCase):
         self.assertEqual(json.loads(repo.run(self.conn, run["id"])["result_json"]), run["result"])
         self.assertEqual(self.payload(), before)
 
+    def test_registration_reuses_raw_sources_with_sparse_first_matches_and_per_line_binding_checks(self):
+        attachment = "source-attachment"
+        first = self.line(attachment, runId="source-run", certificateLineIndex=1)
+        seventh = self.line(attachment, runId="source-run", certificateLineIndex=7)
+        last = self.line(attachment, runId="source-run", certificateLineIndex=199)
+        raw = {"lines": [first, {**first, "quantity": 999}, seventh, last, {"unusedMalformedTail": True}]}
+        attempt = {
+            "batch_id": self.batch["id"],
+            "attachment_id": attachment,
+            "status": "completed",
+            "source_batch_version": "historical-version",
+            "result_json": json.dumps(raw),
+        }
+        inputs = [{**last, "quantity": 4}, first, seventh, {**first, "id": uuid4().hex}]
+        with (
+            patch.object(repo, "attachments", return_value=[{"id": attachment}, {"id": "another-attachment"}]),
+            patch.object(repo, "runs_by_ids", return_value={"source-run": attempt}),
+        ):
+            with patch.object(registrations.json, "loads", wraps=json.loads) as decode:
+                result = registrations._clean_lines(self.conn, self.batch["id"], self.batch, inputs)
+                self.assertEqual(decode.call_count, 1)
+            self.assertEqual([row["quantity"] for row in result], [4, 3, 3, 3])
+            self.assertEqual(
+                [row["fieldOrigins"]["quantity"] for row in result],
+                ["manual", "ai_verified", "ai_verified", "ai_verified"],
+            )
+            self.assertTrue(all(row["recognitionBatchUpdatedAt"] == "historical-version" for row in result))
+            self.assertEqual(json.loads(attempt["result_json"]), raw)
+            for changes in ({"attachmentId": "another-attachment"}, {"id": first["id"]}):
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    registrations._clean_lines(
+                        self.conn, self.batch["id"], self.batch, [first, {**first, "id": "new-input", **changes}]
+                    )
+            for changes in ({"batch_id": "another-batch"}, {"status": "running"}):
+                with (
+                    self.subTest(changes=changes),
+                    patch.object(repo, "runs_by_ids", return_value={"source-run": {**attempt, **changes}}),
+                    self.assertRaises(ValueError),
+                ):
+                    registrations._clean_lines(self.conn, self.batch["id"], self.batch, [first])
+
     def test_preview_excel_uses_confirmed_lines_and_preserves_legacy_request_compatibility(self):
         attachment = self.upload()
         saved = self.save(self.body([self.line(attachment["id"])]))
         before = self.payload()
         body = self.export_body()
         document = service.preview(self.conn, ACTOR, body)
+        summary = service.preview(self.conn, ACTOR, body, summary=True)
+        self.assertEqual(summary, {key: value for key, value in document.items() if key != "rows"})
         self.assertEqual(document["rowCount"], 1)
         self.assertEqual(document["rows"][0]["quantitySource"], "certificate_confirmed")
         self.assertEqual(document["rows"][0]["project"]["pi"], "申请PI")
@@ -763,6 +806,8 @@ class ReceptionCertificateTests(unittest.TestCase):
             self.save(self.body([self.line(attachment["id"], quantity=4)]))
         with self.assertRaises(StaleWriteError):
             service.preview(self.conn, ACTOR, body)
+        with self.assertRaises(StaleWriteError):
+            service.preview(self.conn, ACTOR, body, summary=True)
         del body["expectedRegistrationVersions"]
         self.assertEqual(service.preview(self.conn, ACTOR, body)["rows"][0]["quantity"], 4)
         self.assertEqual(self.payload(), before)

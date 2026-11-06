@@ -13,6 +13,24 @@ from . import certificate_rules as rules
 from . import certificate_service, repository
 
 
+def _source_line(cache, run_id, attempt, target):
+    if run_id not in cache:
+        cache[run_id] = ({}, iter(json.loads(attempt["result_json"])["lines"]))
+    found, remaining = cache[run_id]
+    if target not in found:
+        # Advance only as far as the original next() would. Keep first matches,
+        # sparse source indexes and the behavior of unused malformed history.
+        for line in remaining:
+            key = (line["certificateIndex"], line["certificateLineIndex"])
+            try:
+                found.setdefault(key, line)
+            except TypeError:
+                continue  # Unhashable historical indexes cannot match integer inputs.
+            if key == target:
+                break
+    return found.get(target)
+
+
 def _clean_lines(conn, batch_id, batch, inputs):
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= rules.MAX_LINES:
         raise ValueError("接收登记须包含1至200条合格证明细")
@@ -22,7 +40,7 @@ def _clean_lines(conn, batch_id, batch, inputs):
     run_ids = {line.get("runId") for line in inputs if isinstance(line.get("runId"), str) and line["runId"]}
     runs = repo.runs_by_ids(conn, sorted(run_ids))
     receipts = {item.get("id"): item for item in batch.get("receipts", []) if isinstance(item, dict) and item.get("id")}
-    rows, identities = [], set()
+    rows, identities, sources = [], set(), {}
     for value in inputs:
         identity = value.get("id")
         if (
@@ -64,14 +82,8 @@ def _clean_lines(conn, batch_id, batch, inputs):
             ):
                 raise ValueError("识别来源不存在、未完成或不属于此合格证")
             row["recognitionBatchUpdatedAt"] = attempt["source_batch_version"]
-            source = next(
-                (
-                    line
-                    for line in json.loads(attempt["result_json"])["lines"]
-                    if (line["certificateIndex"], line["certificateLineIndex"])
-                    == (row["certificateIndex"], row["certificateLineIndex"])
-                ),
-                None,
+            source = _source_line(
+                sources, row["runId"], attempt, (row["certificateIndex"], row["certificateLineIndex"])
             )
             if not source:
                 raise ValueError("识别来源行不存在，请重新核对")

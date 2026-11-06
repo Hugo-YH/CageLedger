@@ -21,6 +21,7 @@ export const queryKeys = {
   dashboardOverview: (month?: string) => ["dashboard-overview", month ?? "default"] as const,
   dashboardOverviewRoot: ["dashboard-overview"] as const,
   receptionRoot: ["reception"] as const,
+  receptionListRoot: ["reception", "list"] as const,
   receptionRegistration: (batchId: string) => ["reception", "registration", batchId] as const,
   receptions: (params: object) => ["reception", "list", params] as const,
   receptionFilterOptions: (column: string, filters: object) =>

@@ -458,8 +458,8 @@
           "method": "POST",
           "path": "/api/receptions/preview",
           "purpose": "只读生成接收登记结构、预填行数和待核对事项，不推进接收状态",
-          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion,expectedRegistrationVersions?}",
-          "response": "{items,rows,rowCount,applicationVersion,warnings}；过期或状态变化409",
+          "request": "{ids:1至200个批次,expectedVersions,expectedApplicationVersion,expectedRegistrationVersions?,view?:summary}",
+          "response": "{items,rows,rowCount,applicationVersion,warnings,registrationVersions}；view=summary省略rows，校验及行数不变；过期或状态变化409",
           "protection": "read"
         },
         {

@@ -236,6 +236,11 @@ it("automatically uploads and recognizes a selected PDF, prefills every certific
   expect(screen.getByRole("img", { name: "合格证.pdf 首页原图" })).toHaveAttribute("src", attachment.previewUrl);
   expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("href", attachment.fileUrl);
   expect(requestMultipart).toHaveBeenCalledOnce();
+  await waitFor(() =>
+    expect(
+      vi.mocked(requestJson).mock.calls.filter(([url, init]) => String(url).endsWith("/registration") && !init?.method),
+    ).toHaveLength(2),
+  );
   const recognitionCalls = vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"));
   expect(recognitionCalls).toHaveLength(1);
   expect(JSON.parse(String(recognitionCalls[0][1]?.body))).toMatchObject({ includeAllPages: false });
@@ -246,6 +251,64 @@ it("automatically uploads and recognizes a selected PDF, prefills every certific
   expect(screen.getByRole("spinbutton", { name: "明细2 证件序号" })).toHaveValue("2");
   expect(screen.getByRole("spinbutton", { name: "明细2 证内行号" })).toHaveValue("2");
   expect(requestJson).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: "PUT" }));
+});
+
+it("refreshes uploaded evidence once after automatic recognition fails, without an intermediate detail request", async () => {
+  detail = { ...detail, attachments: [] };
+  vi.mocked(requestMultipart).mockImplementation(() => {
+    detail = { ...detail, attachments: [attachment] };
+    return Promise.resolve({ attachment, reused: false });
+  });
+  let failRecognition: (reason: Error) => void = () => {};
+  mockRecognition(
+    () =>
+      new Promise((_, reject) => {
+        failRecognition = reject;
+      }),
+  );
+  render(
+    view(
+      <ReceptionCertificateDrawer
+        record={record}
+        initialFile={new File(["%PDF"], "合格证.pdf", { type: "application/pdf" })}
+        onClose={vi.fn()}
+        onSaved={saved}
+      />,
+    ),
+  );
+  await screen.findByText("正在识别合格证，完成后自动预填…");
+  const detailReads = () =>
+    vi.mocked(requestJson).mock.calls.filter(([url, init]) => String(url).endsWith("/registration") && !init?.method);
+  expect(detailReads()).toHaveLength(1);
+  await act(() => Promise.resolve().then(() => failRecognition(new Error("recognition offline"))));
+  await screen.findByText("recognition offline");
+  await waitFor(() => expect(detailReads()).toHaveLength(2));
+  expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("href", attachment.fileUrl);
+  expect(screen.getByRole("button", { name: "识别" })).toBeEnabled();
+});
+
+it("refreshes a reused upload when replacement is declined and preserves its existing draft", async () => {
+  saveCurrentLines();
+  vi.mocked(requestMultipart).mockResolvedValue({ attachment, reused: true });
+  render(view());
+  await screen.findByRole("textbox", { name: "明细1 合格证编号" });
+  fireEvent.change(screen.getByLabelText("上传合格证 PDF"), {
+    target: { files: [new File(["%PDF"], "合格证.pdf", { type: "application/pdf" })] },
+  });
+  await screen.findAllByText("替换本附件的编辑明细？");
+  expect(
+    vi.mocked(requestJson).mock.calls.filter(([url, init]) => String(url).endsWith("/registration") && !init?.method),
+  ).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "保留当前明细" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "上传" })).toBeEnabled());
+  expect(
+    vi.mocked(requestJson).mock.calls.filter(([url, init]) => String(url).endsWith("/registration") && !init?.method),
+  ).toHaveLength(2);
+  expect(vi.mocked(requestJson).mock.calls.some(([url]) => String(url).endsWith("/recognize"))).toBe(false);
+  expect(screen.getByRole("textbox", { name: "明细1 合格证编号" })).toHaveValue("CERT-1");
+  expect(
+    client.getQueryData<ReceptionRegistrationResponse>(queryKeys.receptionRegistration("b1"))?.attachments,
+  ).toEqual([attachment]);
 });
 
 it("omits the generic prefill notice and read-only comparison while keeping relevant highlighted differences", async () => {

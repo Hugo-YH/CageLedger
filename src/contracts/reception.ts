@@ -195,3 +195,7 @@ export interface ReceptionPreviewResponse {
   applicationVersion: string;
   warnings: string[];
 }
+
+export interface ReceptionPreviewSummaryResponse extends Omit<ReceptionPreviewResponse, "rows"> {
+  registrationVersions: Record<string, string | null>;
+}

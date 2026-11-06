@@ -1,6 +1,7 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { Alert, App, Button, Empty, Flex, Form, Image, Radio, Select, Space, Spin, Typography } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type {
@@ -18,6 +19,7 @@ import {
   useSaveReceptionRegistration,
   useUploadReceptionCertificate,
 } from "../../api/reception";
+import { queryKeys } from "../../api/queryKeys";
 import { ActionIcon, HelpPopover, Modal } from "../../components/ui";
 import { formatDateTime, PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
@@ -48,6 +50,7 @@ export function ReceptionCertificateDrawer({
 }) {
   const active = useContext(DialogActivityContext);
   const query = useReceptionRegistration(record.batchId, active);
+  const queryClient = useQueryClient();
   const upload = useUploadReceptionCertificate(record.batchId);
   const recognize = useRecognizeReceptionCertificate(record.batchId);
   const save = useSaveReceptionRegistration(record.batchId);
@@ -129,7 +132,7 @@ export function ReceptionCertificateDrawer({
     target: ReceptionCertificateAttachment,
     isCurrent: () => boolean,
     mode: "auto" | "all",
-    retry = false,
+    { retry = false, deferRegistrationRefresh = false } = {},
   ) {
     if (!snapshot) return;
     if (lines.some((line) => line.attachmentId === target.id)) {
@@ -159,6 +162,7 @@ export function ReceptionCertificateDrawer({
       const { run } = await recognize.mutateAsync({
         attachmentId: target.id,
         ...request,
+        deferRegistrationRefresh,
       });
       if (!isCurrent()) return;
       setPendingRun(run);
@@ -190,16 +194,24 @@ export function ReceptionCertificateDrawer({
     const mode = recognitionMode;
     setError("");
     setPhase("upload");
+    let uploaded = false;
     try {
-      const result = await upload.mutateAsync({ file, expectedBatchUpdatedAt: snapshot.batch.updatedAt });
+      const result = await upload.mutateAsync({
+        file,
+        expectedBatchUpdatedAt: snapshot.batch.updatedAt,
+        deferRegistrationRefresh: true,
+      });
+      uploaded = true;
       if (!isCurrent()) return;
       setAttachmentId(result.attachment.id);
       setRecognitionModes((current) => ({ ...current, [result.attachment.id]: mode }));
       setPendingRun(null);
-      await recognizeAttachment(result.attachment, isCurrent, mode);
+      await recognizeAttachment(result.attachment, isCurrent, mode, { deferRegistrationRefresh: true });
     } catch (reason) {
       if (isCurrent()) setError(errorMessage(reason, "上传失败，请重新选择 PDF 重试。当前登记草稿已保留。"));
     } finally {
+      if (uploaded)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.receptionRegistration(record.batchId), exact: true });
       busy.current = false;
       if (isCurrent()) setPhase(null);
     }
@@ -218,7 +230,9 @@ export function ReceptionCertificateDrawer({
     const isCurrent = begin();
     setError("");
     try {
-      await recognizeAttachment(attachment, isCurrent, recognitionMode, retryRecognitionId === attachment.id);
+      await recognizeAttachment(attachment, isCurrent, recognitionMode, {
+        retry: retryRecognitionId === attachment.id,
+      });
     } finally {
       busy.current = false;
       if (isCurrent()) setPhase(null);

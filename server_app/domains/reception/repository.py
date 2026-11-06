@@ -1,12 +1,10 @@
-import hashlib
-import json
-
 from server_app.config import IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH
 from server_app.repositories.iacuc import read_iacuc_index
 from server_app.repositories.intake_identifiers import member_filter, members_available
-from server_app.repositories.person_names import person_options, split_person_names
+from server_app.repositories.person_names import person_options
 from server_app.runtime_logging import log_stage
 
+from .application_projection import PROJECT_FIELDS, encode_items, encode_rows
 from .dates import sql_valid_date
 
 FIELDS = {
@@ -22,14 +20,17 @@ FIELDS = {
     "owner": "json_extract(a.application,'$.owner')",
     "projectMatched": "CASE WHEN a.matches=1 THEN 'true' ELSE 'false' END",
 }
-PROJECT_FIELDS = ("iacuc", "project", "pi", "owner", "funding", "fundCode", "projectEndDate")
-BASE = """
+APPLICATIONS_BASE = """
 WITH application_rows AS (
  SELECT upper(trim(json_extract(value,'$.iacuc'))) code, value FROM json_each(?)
 ), applications AS (
  SELECT code, count(*) matches, CASE WHEN count(*)=1 THEN max(value) END application
  FROM application_rows WHERE code IS NOT NULL AND code!='' GROUP BY code
-), batch_actual_dates AS MATERIALIZED (
+)
+"""
+BASE = (
+    APPLICATIONS_BASE
+    + """, batch_actual_dates AS MATERIALIZED (
  SELECT b.id,
  (SELECT json_group_array(value) FROM (
    SELECT DISTINCT trim(json_extract(r.value,'$.actualReceiptDate')) value
@@ -45,11 +46,23 @@ WITH application_rows AS (
  FROM intake_batches b JOIN batch_actual_dates d ON d.id=b.id
 )
 """
+)
 BASE = BASE.replace("ACTUAL_DATE_VALID", sql_valid_date("trim(json_extract(r.value,'$.actualReceiptDate'))"))
 BASE = BASE.replace("ORIGINAL_DATE_VALID", sql_valid_date("trim(b.intake_date)"))
-JOIN = (
-    " FROM intake_batches b LEFT JOIN applications a ON a.code=upper(trim(b.iacuc)) JOIN reception_dates d ON d.id=b.id"
-)
+APPLICATION_JOIN = " LEFT JOIN applications a ON a.code=upper(trim(b.iacuc))"
+JOIN = " FROM intake_batches b" + APPLICATION_JOIN + " JOIN reception_dates d ON d.id=b.id"
+
+
+def query_source(*, dates, projects=True):
+    base = BASE if dates else APPLICATIONS_BASE
+    join = " FROM intake_batches b" + (APPLICATION_JOIN if projects else "")
+    if dates:
+        join += " JOIN reception_dates d ON d.id=b.id"
+    return base, join
+
+
+def project_filters(filters):
+    return any(filters.get(key) for key in ("pi", "owner", "projectMatched"))
 
 
 def context(conn):
@@ -59,21 +72,12 @@ def context(conn):
     rows = conn.execute(
         f"SELECT json_extract(payload,{projection}) fields,imported_at FROM experiment_applications ORDER BY rowid"
     ).fetchall()
-    index = (
-        {
-            "items": [dict(zip(PROJECT_FIELDS, json.loads(row["fields"]), strict=True)) for row in rows],
-            "updatedAt": max(row["imported_at"] for row in rows),
-            "source": "database",
-        }
-        if rows
-        else read_iacuc_index(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
-    )
-    items = [{key: item.get(key) for key in PROJECT_FIELDS} for item in index.get("items", [])]
-    for item in items:
-        for key in ("pi", "owner"):
-            item[f"_{key}People"] = list(split_person_names(item.get(key)))
-    content = json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    version = hashlib.sha256(content.encode()).hexdigest()
+    if rows:
+        content, version = encode_rows(tuple(row["fields"] for row in rows))
+        index = {"updatedAt": max(row["imported_at"] for row in rows), "source": "database"}
+    else:
+        index = read_iacuc_index(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
+        content, version = encode_items(index.get("items", []))
     return {"json": content, "version": version, "updatedAt": index.get("updatedAt"), "source": index.get("source")}
 
 
@@ -115,9 +119,11 @@ def clause(filters, *, exclude="", conn=None):
 
 
 def page(conn, source, params):
-    where, values = clause(params["columnFilters"], conn=conn)
+    filters = params["columnFilters"]
+    where, values = clause(filters, conn=conn)
+    base, join = query_source(dates=bool(filters.get("receiptDate")), projects=project_filters(filters))
     with log_stage("reception_read", "count", component="reception"):
-        count = conn.execute(BASE + "SELECT count(*)" + JOIN + " WHERE " + where, [source["json"], *values]).fetchone()[
+        count = conn.execute(base + "SELECT count(*)" + join + " WHERE " + where, [source["json"], *values]).fetchone()[
             0
         ]
     order = FIELDS.get(params["sortKey"], "b.intake_date")
@@ -129,7 +135,8 @@ def page(conn, source, params):
         f"'{key}',json_extract(b.payload,'$.{key}')"
         for key in ("strainRaw", "strainStandard", "specification", "receipts", "species", "intakeDate")
     )
-    sql = BASE + f"SELECT b.id,b.updated_at,a.application,json_object({projection},{extra}) summary" + JOIN
+    base, join = query_source(dates=params["sortKey"] == "receiptDate" or bool(filters.get("receiptDate")))
+    sql = base + f"SELECT b.id,b.updated_at,a.application,json_object({projection},{extra}) summary" + join
     with log_stage("reception_read", "page", component="reception"):
         rows = conn.execute(
             sql + f" WHERE {where} ORDER BY {order} {direction}, b.id ASC LIMIT ? OFFSET ?",
@@ -140,17 +147,21 @@ def page(conn, source, params):
 
 def filter_options(conn, source, column, filters):
     where, values = clause(filters, exclude=column, conn=conn)
+    base, join = query_source(
+        dates=column == "receiptDate" or bool(filters.get("receiptDate")),
+        projects=column in ("pi", "owner", "projectMatched") or project_filters(filters),
+    )
     if column == "receiptDate":
-        sql = BASE + "SELECT r.value value,count(DISTINCT b.id) count" + JOIN
+        sql = base + "SELECT r.value value,count(DISTINCT b.id) count" + join
         sql += " LEFT JOIN json_each(d.dates) r"
         sql += f" WHERE {where} GROUP BY value ORDER BY value"
     elif column in ("purchaseOrderNo", "orderNo", "batchNo") and members_available(conn):
-        sql = BASE + "SELECT coalesce(im.value,'') value,count(DISTINCT b.id) count" + JOIN
+        sql = base + "SELECT coalesce(im.value,'') value,count(DISTINCT b.id) count" + join
         sql += " LEFT JOIN intake_identifier_members im ON im.batch_id=b.id AND im.kind=?"
         sql += f" WHERE {where} GROUP BY value ORDER BY value"
         values = [column, *values]
     else:
-        sql = BASE + f"SELECT coalesce({FIELDS[column]},'') value,count(*) count" + JOIN
+        sql = base + f"SELECT coalesce({FIELDS[column]},'') value,count(*) count" + join
         sql += f" WHERE {where} GROUP BY value ORDER BY value"
     items = [
         {"value": str(row["value"] or ""), "label": str(row["value"] or "未填写"), "count": row["count"]}
@@ -160,6 +171,7 @@ def filter_options(conn, source, column, filters):
 
 
 def selected(conn, source, ids):
-    sql = BASE + "SELECT b.id,b.updated_at,b.payload,a.application" + JOIN
+    base, join = query_source(dates=False)
+    sql = base + "SELECT b.id,b.updated_at,b.payload,a.application" + join
     sql += " WHERE b.status='received' AND b.id IN (" + ",".join("?" for _ in ids) + ")"
     return conn.execute(sql, [source["json"], *ids]).fetchall()

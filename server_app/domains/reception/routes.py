@@ -40,7 +40,9 @@ def prepare(handler, params):
         with connect_db() as conn:
             conn.execute("PRAGMA query_only=ON")
             conn.execute("BEGIN")
-            document = service.preview(conn, actor, body)
+            document = service.preview(
+                conn, actor, body, summary=not exporting and isinstance(body, dict) and body.get("view") == "summary"
+            )
         if not exporting:
             return JsonResponse(document)
         content = workbook.generate(document)

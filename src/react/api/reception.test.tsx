@@ -63,7 +63,9 @@ it("reads certificate details only on demand with cancellation and no prior-batc
 
 it("uploads the original PDF as multipart and invalidates reception details, list and audit", async () => {
   client.setQueryData(queryKeys.receptions(params), { items: [] });
-  client.setQueryData(queryKeys.receptionRegistration("batch-1"), { attachments: [] });
+  client.setQueryData(queryKeys.receptionRegistration("batch-1"), { attachments: [{ id: "a1" }] });
+  client.setQueryData(queryKeys.receptionRegistration("other-batch"), { attachments: [] });
+  client.setQueryData(queryKeys.receptionFilterOptions("pi", {}), { items: [] });
   client.setQueryData(queryKeys.auditEvents({}), { items: [] });
   vi.mocked(requestMultipart).mockResolvedValue({ attachment: { id: "a1" }, reused: false });
   const { result } = renderHook(() => useUploadReceptionCertificate("batch-1"), { wrapper });
@@ -76,10 +78,40 @@ it("uploads the original PDF as multipart and invalidates reception details, lis
   expect(form.get("file")).toBe(file);
   expect(client.getQueryState(queryKeys.receptions(params))?.isInvalidated).toBe(true);
   expect(client.getQueryState(queryKeys.receptionRegistration("batch-1"))?.isInvalidated).toBe(true);
+  expect(client.getQueryData(queryKeys.receptionRegistration("batch-1"))).toEqual({ attachments: [{ id: "a1" }] });
+  expect(client.getQueryState(queryKeys.receptionRegistration("other-batch"))?.isInvalidated).toBe(false);
+  expect(client.getQueryState(queryKeys.receptionFilterOptions("pi", {}))?.isInvalidated).toBe(false);
   expect(client.getQueryState(queryKeys.auditEvents({}))?.isInvalidated).toBe(true);
 });
 
+it("refreshes a standalone upload's active registration without needing a recognition request", async () => {
+  let attachments: Array<{ id: string }> = [];
+  vi.mocked(requestJson).mockImplementation(() => Promise.resolve({ attachments, runs: [] }));
+  vi.mocked(requestMultipart).mockImplementation(() => {
+    attachments = [{ id: "a1" }];
+    return Promise.resolve({ attachment: attachments[0], reused: false });
+  });
+  const { result } = renderHook(
+    () => ({ detail: useReceptionRegistration("batch-1"), upload: useUploadReceptionCertificate("batch-1") }),
+    { wrapper },
+  );
+  await waitFor(() => expect(result.current.detail.isSuccess).toBe(true));
+  await act(async () => {
+    await result.current.upload.mutateAsync({
+      file: new File(["%PDF"], "certificate.pdf", { type: "application/pdf" }),
+      expectedBatchUpdatedAt: "b1",
+    });
+  });
+  await waitFor(() => expect(requestJson).toHaveBeenCalledTimes(2));
+  expect(result.current.detail.data?.attachments).toEqual([{ id: "a1" }]);
+});
+
 it("keeps recognition and registration writes explicit, versioned and without automatic retries", async () => {
+  client.setQueryData(queryKeys.receptions(params), { items: [] });
+  client.setQueryData(queryKeys.receptionRegistration("batch/1"), { attachments: [], runs: [] });
+  client.setQueryData(queryKeys.receptionRegistration("other-batch"), { attachments: [], runs: [] });
+  client.setQueryData(queryKeys.receptionFilterOptions("pi", {}), { items: [] });
+  client.setQueryData(queryKeys.auditEvents({}), { items: [] });
   const { result } = renderHook(
     () => ({
       recognize: useRecognizeReceptionCertificate("batch/1"),
@@ -93,6 +125,9 @@ it("keeps recognition and registration writes explicit, versioned and without au
     await expect(result.current.recognize.mutateAsync(recognition)).rejects.toThrow("network failure");
   });
   expect(requestJson).toHaveBeenCalledTimes(1);
+  expect(client.getQueryState(queryKeys.receptionRegistration("batch/1"))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(queryKeys.auditEvents({}))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(queryKeys.receptions(params))?.isInvalidated).toBe(false);
   vi.mocked(requestJson).mockResolvedValue({ run: { id: "r1", status: "completed" } });
   await act(async () => {
     await result.current.recognize.mutateAsync(recognition);
@@ -101,6 +136,9 @@ it("keeps recognition and registration writes explicit, versioned and without au
     method: "POST",
     body: JSON.stringify({ requestId: "same-request", expectedBatchUpdatedAt: "b1" }),
   });
+  expect(client.getQueryState(queryKeys.receptions(params))?.isInvalidated).toBe(false);
+  expect(client.getQueryState(queryKeys.receptionRegistration("other-batch"))?.isInvalidated).toBe(false);
+  expect(client.getQueryState(queryKeys.receptionFilterOptions("pi", {}))?.isInvalidated).toBe(false);
   const saveRequest = {
     requestId: "save-1",
     expectedBatchUpdatedAt: "b1",
@@ -117,6 +155,10 @@ it("keeps recognition and registration writes explicit, versioned and without au
     method: "PUT",
     body: JSON.stringify(saveRequest),
   });
+  expect(client.getQueryState(queryKeys.receptions(params))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(queryKeys.receptionRegistration("batch/1"))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(queryKeys.receptionRegistration("other-batch"))?.isInvalidated).toBe(false);
+  expect(client.getQueryState(queryKeys.receptionFilterOptions("pi", {}))?.isInvalidated).toBe(false);
 });
 afterEach(() => {
   cleanup();
@@ -157,18 +199,23 @@ it("freezes both source versions for preview and download and invalidates audit 
     rowCount: 2,
     applicationVersion: "application-v1",
     warnings: ["需核对"],
+    registrationVersions: { "batch-1": null },
   });
   vi.mocked(requestDownload).mockRejectedValueOnce(new Error("数据已变化")).mockResolvedValueOnce("接收.xlsx");
   client.setQueryData(queryKeys.auditEvents({}), { items: [] });
   const { result } = renderHook(() => ({ preview: usePreviewReceptions(), export: useExportReceptions() }), {
     wrapper,
   });
+  const controller = new AbortController();
   await act(async () => {
-    await result.current.preview.mutateAsync(request);
+    const summary = await result.current.preview.mutateAsync({ ...request, signal: controller.signal });
+    expect(summary).not.toHaveProperty("rows");
+    expect(summary.registrationVersions).toEqual({ "batch-1": null });
   });
   expect(requestJson).toHaveBeenCalledWith("/api/receptions/preview", {
     method: "POST",
-    body: JSON.stringify(request),
+    body: JSON.stringify({ ...request, view: "summary" }),
+    signal: controller.signal,
   });
   await act(async () => {
     await expect(result.current.export.mutateAsync(request)).rejects.toThrow("数据已变化");

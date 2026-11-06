@@ -12,13 +12,13 @@ import {
   Typography,
   type TableProps,
 } from "antd";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import type {
   ReceptionExportRequest,
   ReceptionFilterColumn,
   ReceptionListParams,
-  ReceptionPreviewResponse,
+  ReceptionPreviewSummaryResponse,
   ReceptionRecord,
   ReceptionSortKey,
 } from "../../../contracts/reception";
@@ -38,6 +38,7 @@ import { ActionIcon, CommandBar, DataTable, Modal, ModalPresence } from "../../c
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
+import { DialogActivityContext } from "../../state/dialogActivity";
 import { ReceptionCertificateDrawer } from "./ReceptionCertificateDrawer";
 import { certificateFileError } from "./certificateDraft";
 
@@ -511,24 +512,28 @@ function ReceptionExportDialog({
   const feedback = useOperationFeedback();
   const { mutateAsync: preview } = usePreviewReceptions();
   const download = useExportReceptions();
-  const [result, setResult] = useState<ReceptionPreviewResponse | null>(null);
+  const active = useContext(DialogActivityContext);
+  const [result, setResult] = useState<ReceptionPreviewSummaryResponse | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const busy = useRef(false);
   const { begin } = useLatestRequest();
   useEffect(() => {
+    if (!active) return;
+    const controller = new AbortController();
     const isCurrent = begin();
     setResult(null);
     setError("");
-    void preview(request).then(
+    void preview({ ...request, signal: controller.signal }).then(
       (response) => {
-        if (isCurrent()) setResult(response);
+        if (!controller.signal.aborted && isCurrent()) setResult(response);
       },
       (reason: unknown) => {
-        if (isCurrent()) setError(errorMessage(reason, "导出预览加载失败，请重试。"));
+        if (!controller.signal.aborted && isCurrent()) setError(errorMessage(reason, "导出预览加载失败，请重试。"));
       },
     );
-  }, [attempt, begin, preview, request]);
+    return () => controller.abort();
+  }, [active, attempt, begin, preview, request]);
 
   async function exportExcel() {
     if (busy.current || !result || blocked) return;
@@ -536,7 +541,11 @@ function ReceptionExportDialog({
     setError("");
     const isCurrent = begin();
     try {
-      await download.mutateAsync({ ...request, expectedApplicationVersion: result.applicationVersion });
+      await download.mutateAsync({
+        ...request,
+        expectedApplicationVersion: result.applicationVersion,
+        expectedRegistrationVersions: result.registrationVersions,
+      });
       if (!isCurrent()) return;
       feedback.success("接收记录 Excel 已生成，下载已开始");
       onClose();
