@@ -14,6 +14,7 @@ from server_app.domains.animal_management import (
 )
 from server_app.domains.animal_management.catalog_draft import draft_status, get_draft, list_catalog_versions
 from server_app.shared import clean_text
+from server_app.shared.concurrency import StaleWriteError
 
 
 def handle_get(handler, path):
@@ -22,7 +23,7 @@ def handle_get(handler, path):
         if not user:
             return True
         with connect_db() as conn:
-            handler.send_json(catalog_payload(conn, user))
+            handler.send_json(catalog_payload(conn, user, view=_filters(handler.path)["view"]))
         return True
     if path in {
         "/api/animal-inspection-catalog/draft",
@@ -89,12 +90,14 @@ def save_inspection(handler, inspection_id):
         handler.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
     except PermissionError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+    except StaleWriteError as exc:
+        handler.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
     except ValueError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
 
 def submit_inspection_record(handler, inspection_id):
-    _write(handler, lambda conn, user: submit_inspection(conn, user, inspection_id))
+    _write(handler, lambda conn, user: submit_inspection(conn, user, inspection_id, handler.read_optional_json_body()))
 
 
 def update_finding_record(handler, finding_id, *, recheck=False, resolve=False):
@@ -120,5 +123,7 @@ def _write(handler, operation):
         handler.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
     except PermissionError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
+    except StaleWriteError as exc:
+        handler.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
     except ValueError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)

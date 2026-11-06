@@ -182,6 +182,19 @@ export interface AnimalInspectionDetail {
   findings: InspectionFinding[];
   catalog: InspectionCatalogResponse;
 }
+export type AnimalInspectionEdit = Pick<AnimalInspectionDetail, "item" | "answers">;
+export interface AnimalInspectionDisplay extends AnimalInspectionEdit {
+  catalog: { nodes: Array<Pick<InspectionCatalogNode, "moduleCode" | "code" | "name">> };
+  findings: Array<
+    Pick<InspectionFindingSummary, "id" | "nodeCode" | "status" | "actionNote"> & { attachmentCount: number }
+  >;
+}
+export interface InspectionCatalogSummary extends Pick<
+  InspectionCatalogResponse,
+  "version" | "modules" | "reviewNotice"
+> {
+  moduleItemCounts: Record<InspectionModuleCode, number>;
+}
 
 export interface AnimalInspectionListParams {
   limit: number;

@@ -15,11 +15,11 @@ vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () =>
 
 const api = vi.hoisted(() => ({ draftEnabled: vi.fn(), retry: vi.fn() }));
 vi.mock("../../api/animalManagement", () => ({
-  useAnimalInspectionCatalog: () => ({
+  useAnimalInspectionCatalogSummary: () => ({
     data: {
       version: { status: "active", version: "v1", imported_at: "2026-01-01", source: "test" },
       modules: [],
-      nodes: [],
+      moduleItemCounts: { basicAssessment: 0, advancedAssessment: 0, abnormalAnimalAssessment: 0 },
       reviewNotice: "",
     },
     isLoading: false,

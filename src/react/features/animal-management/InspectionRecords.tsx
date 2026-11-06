@@ -1,9 +1,10 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useState } from "react";
 import { List as MobileList } from "antd-mobile";
-import { Button, Card, Empty, Form, Select, Tag } from "antd";
+import { Alert, Button, Card, Empty, Form, Select, Tag } from "antd";
 import type { InspectionModuleCode, SessionUser } from "../../api/contracts";
-import { downloadAnimalInspectionPdf, useAnimalInspections } from "../../api/animalManagement";
+import { useAnimalInspections } from "../../api/animalManagement";
+import { useInspectionPdfDownload } from "./useInspectionPdfDownload";
 import { PageSkeleton, PageState, Pager, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton } from "../../components/ui/ActionButton";
 import { MobilePage } from "../../components/ui/MobilePage";
@@ -19,6 +20,7 @@ import { pageSize, moduleLabel, formatDate } from "./inspectionListFormatting";
 
 export function InspectionRecords({ user, navigate }: { user: SessionUser; navigate: (view: WorkspaceView) => void }) {
   const isMobile = useIsMobileLayout();
+  const pdf = useInspectionPdfDownload();
   const [offset, setOffset] = useState(0);
   const [room, setRoom] = useState("");
   const [status, setStatus] = useState("");
@@ -40,10 +42,24 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
   }
 
   const refreshStatus = <ListRefreshStatus active={query.isFetching} />;
-  const feedback =
-    query.isError && retained.data ? (
-      <InspectionListError refreshing={query.isFetching} retry={() => void query.refetch()} />
-    ) : null;
+  const feedback = (
+    <>
+      {query.isError && retained.data ? (
+        <InspectionListError refreshing={query.isFetching} retry={() => void query.refetch()} />
+      ) : null}
+      {pdf.failure && (
+        <Alert
+          type="error"
+          title={pdf.failure.message}
+          action={
+            <Button disabled={retained.blocked || !retained.data} onClick={() => void pdf.download(pdf.failure!.id)}>
+              重试导出
+            </Button>
+          }
+        />
+      )}
+    </>
+  );
   const filters = (
     <Form className="inspection-list-filters" component="div" layout={isMobile ? "vertical" : "inline"}>
       <Form.Item label="饲养间">
@@ -224,9 +240,9 @@ export function InspectionRecords({ user, navigate }: { user: SessionUser; navig
                           {
                             icon: <ActionIcon name="download" />,
                             key: `export-${item.id}`,
-                            label: "导出 PDF",
-                            disabled: retained.blocked,
-                            onClick: () => void downloadAnimalInspectionPdf(item.id),
+                            label: pdf.pendingId === item.id ? "正在导出 PDF…" : "导出 PDF",
+                            disabled: retained.blocked || Boolean(pdf.pendingId),
+                            onClick: () => void pdf.download(item.id),
                           },
                         ]}
                       >

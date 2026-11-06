@@ -281,7 +281,7 @@ test(
       }),
     );
     let detailRoute: Route | undefined;
-    await page.route("**/api/animal-inspections/resilient-inspection", (route) => {
+    await page.route("**/api/animal-inspections/resilient-inspection?view=display", (route) => {
       detailRoute = route;
     });
     await openNavigationEntry(page, "动物管理", "巡检记录");

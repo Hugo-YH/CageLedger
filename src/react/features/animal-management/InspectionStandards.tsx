@@ -4,7 +4,7 @@ import { Alert, Button, Card, Col, Descriptions, Row, Tag, Typography } from "an
 
 import type { SessionUser } from "../../api/contracts";
 import {
-  useAnimalInspectionCatalog,
+  useAnimalInspectionCatalogSummary,
   useAnimalInspectionCatalogDraft,
   useAnimalInspectionCatalogDraftStatus,
 } from "../../api/animalManagement";
@@ -15,7 +15,7 @@ import { useIsMobileLayout } from "../../hooks/useIsMobileLayout";
 import type { WorkspaceView } from "../../state/ui";
 import { InspectionCatalogEditor } from "./InspectionCatalogEditor";
 import { InspectionVersionHistoryModal } from "./InspectionVersionHistoryModal";
-import { moduleItemCount } from "./model";
+import { inspectionCatalogSummary } from "./model";
 
 export function InspectionStandards({
   user,
@@ -35,7 +35,7 @@ export function InspectionStandards({
   const isAdmin = user.role === "admin";
   const [editing, setEditing] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
-  const catalog = useAnimalInspectionCatalog();
+  const catalog = useAnimalInspectionCatalogSummary(inspectionCatalogSummary);
   const draftStatus = useAnimalInspectionCatalogDraftStatus(isAdmin);
   const draft = useAnimalInspectionCatalogDraft(isAdmin && editing);
   if (catalog.isLoading) return <PageSkeleton label="巡检标准" variant="detail" />;
@@ -139,7 +139,7 @@ export function InspectionStandards({
                 <Typography.Text type="secondary">巡检模块</Typography.Text>
                 <Typography.Title level={4}>{module.name}</Typography.Title>
                 <Typography.Paragraph type="secondary">{module.description}</Typography.Paragraph>
-                <Tag color="blue">{moduleItemCount(catalog.data.nodes, module.code)} 个巡检条目</Tag>
+                <Tag color="blue">{catalog.data.moduleItemCounts[module.code]} 个巡检条目</Tag>
               </Card>
             </Col>
           ))}

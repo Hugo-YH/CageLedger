@@ -77,12 +77,14 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_catalog_nodes_module ON inspection_catalog_nodes(version, module_code, sort_order)",
     "CREATE INDEX IF NOT EXISTS idx_animal_inspections_room_updated ON animal_inspections(room_id, updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_animal_inspections_updated_id ON animal_inspections(updated_at DESC, id DESC)",
     "CREATE INDEX IF NOT EXISTS idx_animal_inspections_status_updated ON animal_inspections(status, updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_animal_inspections_created_by ON animal_inspections(created_by, updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_animal_answers_inspection ON animal_inspection_answers(inspection_id, module_code)",
     "CREATE INDEX IF NOT EXISTS idx_animal_findings_room_status ON animal_inspection_findings(room_id, status, severity, updated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_animal_findings_recheck ON animal_inspection_findings(recheck_due_at, status)",
     "CREATE INDEX IF NOT EXISTS idx_animal_attachments_finding ON animal_inspection_attachments(finding_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_animal_finding_events_finding_at ON animal_inspection_finding_events(finding_id, at)",
 )
 
 # Only non-unique indexes with equivalent leading columns are retired. Create

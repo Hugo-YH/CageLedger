@@ -2,6 +2,7 @@
 
 import mimetypes
 from http import HTTPStatus
+from urllib.parse import parse_qs, urlparse
 
 from server_app.config import ANIMAL_INSPECTION_CATALOG_PATH, ANIMAL_INSPECTION_IMAGES_PATH
 from server_app.db import connect_db
@@ -72,7 +73,8 @@ class ReadInspectionActionsMixin:
             return
         try:
             with connect_db() as conn:
-                self.send_json(get_animal_inspection(conn, user, inspection_id))
+                view = parse_qs(urlparse(self.path).query).get("view", [""])[0]
+                self.send_json(get_animal_inspection(conn, user, inspection_id, view=view))
         except LookupError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.NOT_FOUND)
         except PermissionError as exc:

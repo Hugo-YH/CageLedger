@@ -117,6 +117,21 @@ test("section normal confirmation preserves finding metadata and saves every ans
   await expect(first.getByRole("button", { name: "异常", exact: true })).toHaveAttribute("aria-pressed", "true");
   await section.getByRole("button", { name: "全部正常", exact: true }).click();
   await expect(section.locator(".inspection-section-state")).toContainText("已确认");
+  const normalButtons = module.getByRole("button", { name: "全部正常", exact: true });
+  for (let index = 0; index < (await normalButtons.count()); index += 1) await normalButtons.nth(index).click();
+  const catalog = await (await page.request.get("/api/animal-inspection-catalog")).json();
+  const expectedAnswers = catalog.nodes.filter(
+    (node: { moduleCode: string; nodeType: string }) =>
+      node.moduleCode === "basicAssessment" && node.nodeType === "ITEM",
+  ).length;
+  const draftWrites: string[] = [];
+  const editReads: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PUT" && /\/api\/animal-inspections\/[^/?]+$/.test(request.url()))
+      draftWrites.push(request.url());
+    if (request.method() === "GET" && /\/api\/animal-inspections\/[^/?]+\?view=edit$/.test(request.url()))
+      editReads.push(request.url());
+  });
   const savedResponse = page.waitForResponse(
     (response) => response.url().endsWith("/api/animal-inspections") && response.request().method() === "POST",
   );
@@ -124,7 +139,7 @@ test("section normal confirmation preserves finding metadata and saves every ans
   const response = await savedResponse;
   expect(response.ok(), await response.text()).toBe(true);
   const payload = response.request().postDataJSON();
-  expect(payload.answers).toHaveLength(sectionAnswerCount);
+  expect(payload.answers).toHaveLength(expectedAnswers);
   expect(payload.answers.every((answer: { outcome: string }) => answer.outcome === "normal")).toBe(true);
   const originalFinding = payload.answers.find(
     (answer: { animalIdentifier?: string }) => answer.animalIdentifier === "TEST-ANIMAL",
@@ -135,6 +150,32 @@ test("section normal confirmation preserves finding metadata and saves every ans
     note: "保留现场记录",
     outcome: "normal",
   });
-  const detail = await (await page.request.get(`/api/animal-inspections/${(await response.json()).item.id}`)).json();
+  const saved = await response.json();
+  const detail = await (await page.request.get(`/api/animal-inspections/${saved.item.id}`)).json();
   expect(detail.answers).toHaveLength(payload.answers.length);
+  await expect(page.getByRole("button", { name: "提交巡检", exact: true })).toBeEnabled();
+  const submittedResponse = page.waitForResponse((result) =>
+    result.url().endsWith(`/api/animal-inspections/${saved.item.id}/submit`),
+  );
+  await page.getByRole("button", { name: "提交巡检", exact: true }).click();
+  const submitted = await submittedResponse;
+  expect(submitted.ok(), await submitted.text()).toBe(true);
+  expect(submitted.request().postDataJSON()).toEqual({ expectedUpdatedAt: saved.item.updatedAt });
+  expect(draftWrites).toEqual([]);
+  expect(editReads).toEqual([]);
+  await expect(page.getByRole("status").filter({ hasText: "巡检已提交" })).toBeVisible();
+  await openNavigationEntry(page, "动物管理", "巡检记录");
+  const row = page.locator(`.ant-table-row[data-row-key="${saved.item.id}"]`);
+  const displayed = page.waitForResponse((result) =>
+    result.url().endsWith(`/api/animal-inspections/${saved.item.id}?view=display`),
+  );
+  await row.getByRole("button", { name: "详情", exact: true }).click();
+  const display = await (await displayed).json();
+  expect(display.answers).toHaveLength(expectedAnswers);
+  expect(display.catalog.nodes.every((node: object) => !("config" in node))).toBe(true);
+  const recordDialog = page.getByRole("dialog");
+  await expect(recordDialog.getByRole("button", { name: "导出 PDF", exact: true })).toBeEnabled();
+  const download = page.waitForEvent("download");
+  await recordDialog.getByRole("button", { name: "导出 PDF", exact: true }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.pdf$/i);
 });

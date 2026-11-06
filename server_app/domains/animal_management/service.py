@@ -1,16 +1,20 @@
 """Inspection use-case orchestration; persistence and permission rules are explicit dependencies."""
 
+import hashlib
 import json
 from collections import Counter
 
 from server_app.config import ANIMAL_INSPECTION_ATTACHMENTS_PATH
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
-from server_app.pdf.animal_inspection import render_animal_inspection_pdf
+from server_app.pdf.animal_inspection import animal_inspection_html, render_animal_inspection_pdf
+from server_app.pdf.cache import pdf_export_cache
 from server_app.shared import clean_text, new_id, now_iso
+from server_app.shared.concurrency import begin_write, require_exact_version
 
 from .catalog import CATALOG_VERSION, ensure_catalog_rows
 from .catalog import catalog_payload as read_catalog_payload
 from .catalog_payload import prepare_catalog_payload
+from .inspection_read_model import REVIEW_NOTICE, catalog_summary, display_catalog, display_findings, inspection_answers
 from .inspection_repository import _attachment_payload as _attachment_payload
 from .inspection_repository import _attachment_values as _attachment_values
 from .inspection_repository import _distinct as _distinct
@@ -41,10 +45,12 @@ def ensure_catalog(conn):
     return ensure_catalog_rows(conn)
 
 
-def catalog_payload(conn, actor):
+def catalog_payload(conn, actor, *, view=""):
     _require_actor(actor)
+    if view == "summary":
+        return catalog_summary(conn)
     payload = prepare_catalog_payload(read_catalog_payload(conn))
-    payload["reviewNotice"] = "巡检标准、图例和建议处置为内部参考资料；医疗与安乐死建议需经兽医和伦理流程确认。"
+    payload["reviewNotice"] = REVIEW_NOTICE
     return payload
 
 
@@ -123,16 +129,19 @@ def list_inspections(conn, actor, filters):
     return {"items": items, "page": {"offset": offset, "limit": limit, "total": total}, "filterOptions": options}
 
 
-def get_inspection(conn, actor, inspection_id):
+def get_inspection(conn, actor, inspection_id, *, view=""):
     item = _inspection_row(conn, inspection_id)
     _require_view(actor, item)
-    answers = [
-        dict(row) | {"payload": json.loads(row["payload"])}
-        for row in conn.execute(
-            "SELECT * FROM animal_inspection_answers WHERE inspection_id = ? ORDER BY module_code, node_code",
-            (inspection_id,),
-        )
-    ]
+    answers = inspection_answers(conn, inspection_id)
+    if view == "edit":
+        return {"item": item, "answers": answers}
+    if view == "display":
+        return {
+            "item": item,
+            "answers": answers,
+            "findings": display_findings(conn, inspection_id),
+            "catalog": display_catalog(conn),
+        }
     findings = _finding_payloads(
         conn,
         conn.execute(
@@ -145,12 +154,17 @@ def get_inspection(conn, actor, inspection_id):
 
 def create_or_update_inspection(conn, actor, inspection_id, body):
     _require_actor(actor)
+    begin_write(conn)
     room_id = clean_text(body.get("roomId"))
     modules = clean_modules(body.get("moduleCodes"))
     answers = clean_answers(body.get("answers"))
     if inspection_id:
         current = _inspection_row(conn, inspection_id)
         _require_draft_write(actor, current)
+        if "expectedUpdatedAt" in body:
+            require_exact_version(
+                current["updatedAt"], body["expectedUpdatedAt"], "巡检草稿已被其他操作更新，请刷新后重新编辑。"
+            )
         room_id = room_id or current["roomId"]
         modules = modules or current["moduleCodes"]
         created_at = current["createdAt"]
@@ -211,9 +225,14 @@ def create_or_update_inspection(conn, actor, inspection_id, body):
     return {"item": _inspection_row(conn, inspection_id), "auditLogs": merge_audit_logs([], [audit])}
 
 
-def submit_inspection(conn, actor, inspection_id):
+def submit_inspection(conn, actor, inspection_id, body=None):
+    begin_write(conn)
     item = _inspection_row(conn, inspection_id)
     _require_draft_write(actor, item)
+    if body is not None and "expectedUpdatedAt" in body:
+        require_exact_version(
+            item["updatedAt"], body["expectedUpdatedAt"], "巡检草稿已被其他操作更新，请刷新后重新编辑。"
+        )
     answers = [
         dict(row)
         for row in conn.execute("SELECT * FROM animal_inspection_answers WHERE inspection_id = ?", (inspection_id,))
@@ -221,10 +240,31 @@ def submit_inspection(conn, actor, inspection_id):
     _validate_submission(conn, item, answers)
     now = now_iso()
     submitted = {**item, "status": "submitted", "submittedAt": now, "updatedAt": now}
-    conn.execute(
-        "UPDATE animal_inspections SET status = ?, submitted_at = ?, updated_at = ?, payload = ? WHERE id = ?",
-        ("submitted", now, now, json.dumps(submitted, ensure_ascii=False), inspection_id),
-    )
+    if body is not None and "expectedUpdatedAt" in body:
+        # Skipping an unchanged pre-submit save must still freeze the current room.
+        room, snapshot = _room_snapshot(conn, item["roomId"])
+        submitted.update(
+            roomName=room.get("name", ""), facility=room.get("facility") or room.get("area") or "", snapshot=snapshot
+        )
+        conn.execute(
+            """UPDATE animal_inspections SET status = ?, submitted_at = ?, updated_at = ?, payload = ?,
+                   room_name = ?, facility = ?, snapshot_json = ? WHERE id = ?""",
+            (
+                "submitted",
+                now,
+                now,
+                json.dumps(submitted, ensure_ascii=False),
+                submitted["roomName"],
+                submitted["facility"],
+                json.dumps(snapshot, ensure_ascii=False),
+                inspection_id,
+            ),
+        )
+    else:
+        conn.execute(
+            "UPDATE animal_inspections SET status = ?, submitted_at = ?, updated_at = ?, payload = ? WHERE id = ?",
+            ("submitted", now, now, json.dumps(submitted, ensure_ascii=False), inspection_id),
+        )
     conn.execute("DELETE FROM animal_inspection_findings WHERE inspection_id = ?", (inspection_id,))
     findings = []
     for answer in answers:
@@ -258,7 +298,7 @@ def submit_inspection(conn, actor, inspection_id):
         "animal_inspection.submitted",
         "animal_inspection",
         inspection_id,
-        f"{actor['displayName']} 提交饲养间 {item['roomName']} 巡检记录，生成 {len(findings)} 项待处理异常",
+        f"{actor['displayName']} 提交饲养间 {submitted['roomName']} 巡检记录，生成 {len(findings)} 项待处理异常",
         [],
         now,
         item,
@@ -455,10 +495,12 @@ def get_attachment(conn, actor, attachment_id):
 
 
 def export_inspection_pdf(conn, actor, inspection_id):
-    detail = get_inspection(conn, actor, inspection_id)
-    return render_animal_inspection_pdf(
-        detail
-    ), f"实验动物巡检报告 {detail['item']['roomName']} {detail['item']['createdAt'][:10]}.pdf"
+    # Authorize and read the current inputs even when the rendered artifact exists.
+    detail = get_inspection(conn, actor, inspection_id, view="display")
+    html = animal_inspection_html(detail)
+    key = "animal-inspection:" + hashlib.sha256(html.encode("utf-8")).hexdigest()
+    body = pdf_export_cache.render_cached(key, lambda: render_animal_inspection_pdf(detail))
+    return body, f"实验动物巡检报告 {detail['item']['roomName']} {detail['item']['createdAt'][:10]}.pdf"
 
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}

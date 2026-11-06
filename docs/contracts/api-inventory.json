@@ -2118,8 +2118,8 @@
           "method": "GET",
           "path": "/api/animal-inspection-catalog",
           "purpose": "已发布目录",
-          "request": "无",
-          "response": "目录",
+          "request": "可选view=summary；省略保持完整目录",
+          "response": "完整目录或{version,modules,reviewNotice,moduleItemCounts}",
           "protection": "cache_read",
           "permission": "login"
         },
@@ -2201,8 +2201,8 @@
           "method": "GET",
           "path": "/api/animal-inspections/{id}",
           "purpose": "巡检详情",
-          "request": "id",
-          "response": "巡检详情",
+          "request": "id；可选view=edit|display；省略保持完整详情",
+          "response": "完整详情，编辑投影{item,answers}，展示投影含名称、处置及照片计数",
           "protection": "read"
         },
         {
@@ -2217,7 +2217,7 @@
           "method": "PUT",
           "path": "/api/animal-inspections/{id}",
           "purpose": "编辑巡检",
-          "request": "巡检字段",
+          "request": "巡检字段；可选expectedUpdatedAt，显式提供精确校验，冲突409",
           "response": "{item}",
           "protection": "inspection_write"
         },
@@ -2225,7 +2225,7 @@
           "method": "POST",
           "path": "/api/animal-inspections/{id}/submit",
           "purpose": "提交巡检",
-          "request": "空JSON",
+          "request": "可选JSON {expectedUpdatedAt}；省略兼容，显式提供精确校验，冲突409",
           "response": "{item,findings}",
           "protection": "inspection_write"
         },

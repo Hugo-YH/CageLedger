@@ -5,7 +5,9 @@ import type {
   InspectionFinding,
   InspectionModuleCode,
   InspectionOutcome,
+  InspectionCatalogResponse,
 } from "../../api/contracts";
+import type { InspectionCatalogSummary } from "../../../contracts/animalManagement";
 
 export const MODULE_LABELS: Record<InspectionModuleCode, string> = {
   basicAssessment: "基础评估",
@@ -39,6 +41,18 @@ export function moduleItemCount(nodes: InspectionCatalogNode[], moduleCode: Insp
     return abnormalAnimalBodyRegions(nodes).reduce((sum, region) => sum + region.itemCount, 0);
   }
   return catalogItems(nodes, moduleCode).length;
+}
+export function inspectionCatalogSummary(catalog: InspectionCatalogResponse): InspectionCatalogSummary {
+  return {
+    version: catalog.version,
+    modules: catalog.modules,
+    reviewNotice: catalog.reviewNotice,
+    moduleItemCounts: {
+      basicAssessment: moduleItemCount(catalog.nodes, "basicAssessment"),
+      advancedAssessment: moduleItemCount(catalog.nodes, "advancedAssessment"),
+      abnormalAnimalAssessment: moduleItemCount(catalog.nodes, "abnormalAnimalAssessment"),
+    },
+  };
 }
 
 export function categoryLabel(item: InspectionCatalogNode, nodes: InspectionCatalogNode[]) {
@@ -189,7 +203,7 @@ export function setResumeInspectionId(id: string) {
 
 export function summarizeInspectionOutcomes(
   answers: AnimalInspectionDetail["answers"],
-  nodes: InspectionCatalogNode[],
+  nodes: Array<Pick<InspectionCatalogNode, "moduleCode" | "code" | "name">>,
 ): Array<{
   code: InspectionModuleCode;
   counts: Record<"normal" | "abnormal", number>;

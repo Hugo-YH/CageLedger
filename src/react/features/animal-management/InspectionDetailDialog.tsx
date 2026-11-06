@@ -1,24 +1,16 @@
-import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Alert, Button, Card, Collapse, Descriptions, Empty, Space, Tag, Typography } from "antd";
 import { Modal } from "../../components/ui/Modal";
-import { downloadAnimalInspectionPdf, useAnimalInspection } from "../../api/animalManagement";
+import { useAnimalInspectionDisplay } from "../../api/animalManagement";
+import { useInspectionPdfDownload } from "./useInspectionPdfDownload";
 import { PageSkeleton } from "../../components/WorkspaceUi";
 import { FINDING_STATUS_LABELS, summarizeInspectionOutcomes, MODULE_LABELS } from "./model";
 import { formatDate } from "./inspectionListFormatting";
 
 export function InspectionDetailDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const feedback = useOperationFeedback();
-  const query = useAnimalInspection(id);
-  async function exportPdf() {
-    try {
-      await downloadAnimalInspectionPdf(id);
-      feedback.success("巡检 PDF 已生成，下载已开始");
-    } catch (error) {
-      feedback.error("巡检 PDF 导出失败", error instanceof Error ? error.message : "请重试");
-    }
-  }
+  const query = useAnimalInspectionDisplay(id);
+  const pdf = useInspectionPdfDownload();
   const outcomeSummary = query.data ? summarizeInspectionOutcomes(query.data.answers, query.data.catalog.nodes) : [];
   const abnormalities = outcomeSummary.flatMap((module) => module.items.filter((item) => item.outcome === "abnormal"));
   return (
@@ -26,7 +18,12 @@ export function InspectionDetailDialog({ id, onClose }: { id: string; onClose: (
       className="inspection-detail-modal"
       destroyOnHidden
       footer={
-        <Button icon={<ActionIcon name="download" />} onClick={() => void exportPdf()}>
+        <Button
+          icon={<ActionIcon name="download" />}
+          loading={Boolean(pdf.pendingId)}
+          disabled={!query.isSuccess || !query.data}
+          onClick={() => void pdf.download(id)}
+        >
           导出 PDF
         </Button>
       }
@@ -36,6 +33,17 @@ export function InspectionDetailDialog({ id, onClose }: { id: string; onClose: (
       width={860}
     >
       {query.isPending ? <PageSkeleton compact label="巡检结论与处置记录" rows={4} variant="detail" /> : null}
+      {pdf.failure && (
+        <Alert
+          type="error"
+          title={pdf.failure.message}
+          action={
+            <Button disabled={!query.isSuccess || !query.data} onClick={() => void pdf.download(id)}>
+              重试导出
+            </Button>
+          }
+        />
+      )}
       {query.isError || (query.isSuccess && !query.data) ? (
         <Alert
           action={
@@ -108,7 +116,7 @@ export function InspectionDetailDialog({ id, onClose }: { id: string; onClose: (
                         {FINDING_STATUS_LABELS[finding.status]} · {finding.actionNote || "待补充处置措施"}
                       </Typography.Paragraph>
                     </div>
-                    {finding.attachments.length ? <Tag>{finding.attachments.length} 张照片</Tag> : null}
+                    {finding.attachmentCount ? <Tag>{finding.attachmentCount} 张照片</Tag> : null}
                   </div>
                 ))}
               </Space>
