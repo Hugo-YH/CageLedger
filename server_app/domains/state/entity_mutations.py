@@ -3,9 +3,10 @@
 import sqlite3
 
 from server_app.domains.cages import sync_slot_statuses
-from server_app.domains.intake import collect_cage_card_qr_ids, is_cage_card_qr_id, next_cage_card_qr_id
+from server_app.domains.intake import collect_cage_card_qr_ids, is_cage_card_qr_id
 from server_app.domains.intake.calendar_batch import normalize_calendar_batch
 from server_app.domains.intake.purpose import intake_purpose, is_direct_sampling
+from server_app.domains.intake.rules import CageCardQrAllocator
 from server_app.domains.state.entity_rules import (
     normalize_entity_batch as normalize_entity_batch_rule,
 )
@@ -59,6 +60,7 @@ def ensure_intake_batch_card_qr_ids(state, batch, *, used_qr_ids=None):
         if used_qr_ids is None
         else {clean_text(value).upper() for value in used_qr_ids if is_cage_card_qr_id(value)}
     )
+    allocator = CageCardQrAllocator(used_qr_ids)
     cards = []
     for index in range(card_count):
         existing = (
@@ -68,9 +70,9 @@ def ensure_intake_batch_card_qr_ids(state, batch, *, used_qr_ids=None):
         qr_id = (
             existing_qr_id
             if is_cage_card_qr_id(existing_qr_id) and existing_qr_id not in used_qr_ids
-            else next_cage_card_qr_id(used_qr_ids)
+            else allocator.next()
         )
-        used_qr_ids.add(qr_id)
+        allocator.reserve(qr_id)
         cards.append(
             {
                 **existing,

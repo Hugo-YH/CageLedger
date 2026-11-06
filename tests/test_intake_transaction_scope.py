@@ -11,6 +11,7 @@ from unittest.mock import patch
 from server_app.domains.intake.rules import collect_cage_card_qr_ids, encode_cage_card_sequence, is_cage_card_qr_id
 from server_app.domains.state import intake_commands
 from server_app.domains.state.persistence import assemble_state
+from server_app.persistence.indexes import create_performance_indexes
 from server_app.repositories.audit_storage import read_payload
 from server_app.repositories.entities import upsert_intake_batch, upsert_placement_task
 from server_app.repositories.intake_transactions import read_intake_context, reserved_card_qr_ids
@@ -111,6 +112,24 @@ class IntakeTransactionScopeTests(unittest.TestCase):
                 if is_cage_card_qr_id(value)
             }
             self.assertEqual(actual, original)
+
+    def test_context_associations_use_indexes_and_index_setup_is_idempotent(self):
+        with self.connect() as conn:
+            changes = conn.total_changes
+            create_performance_indexes(conn)
+            create_performance_indexes(conn)
+            self.assertEqual(conn.total_changes, changes)
+            statements = []
+            conn.set_trace_callback(statements.append)
+            context = read_intake_context(conn, ["target"])
+            conn.set_trace_callback(None)
+            self.assertEqual([item["id"] for item in context["placementTasks"]], ["own-task"])
+            self.assertEqual({item["id"] for item in context["occupancies"]}, {"own-occ", "unlinked-own-occ"})
+            for table in ("placement_tasks", "occupancies"):
+                query = next(query for query in statements if f"FROM {table} WHERE" in query)
+                plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + query)]
+                self.assertTrue(any(f"SEARCH {table} " in item for item in plan), plan)
+                self.assertFalse(any(f"SCAN {table} " in item for item in plan), plan)
 
     def test_qr_allocation_does_not_reuse_unrelated_codes_or_change_other_rows(self):
         before = self.snapshot()[0]

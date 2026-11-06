@@ -47,7 +47,7 @@ const totals = (): IntakeStatisticsTotals => ({
 
 export function resolveStatisticsPrincipal(
   code: string,
-  response: { items: IacucIndexItem[]; count?: number },
+  response: { items: Pick<IacucIndexItem, "iacuc" | "pi">[]; count?: number },
 ): IntakeStatisticsPrincipal {
   const matches = response.items.filter((item) => intakeStatisticsCode(item.iacuc) === code);
   if (!matches.length) return { pi: "", issue: "项目汇总表未找到该 IACUC" };

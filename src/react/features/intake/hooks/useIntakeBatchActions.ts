@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { IntakeBatchListItem } from "../../../api/contracts";
+import type { IntakePrintBatch } from "../../../../contracts/intake";
 import { ApiError } from "../../../api/client";
 import { useConfirmIntakeBatchesReceipt, useDeleteIntakeBatch, useMarkIntakeBatchesPrinted } from "../../../api/intake";
 import { canConfirmIntakeReceipt, isDirectSampling } from "../../../../domain/intake";
@@ -23,7 +24,7 @@ export function useIntakeBatchActions(selection: ReturnType<typeof useIntakeSele
     setBulkNotice(message);
     setBulkNoticeKind(kind);
   }
-  async function markPrinted(targets: IntakeBatchListItem[]) {
+  async function markPrinted(targets: Pick<IntakePrintBatch, "id" | "intakePurpose" | "status">[]) {
     const printable = targets.filter(
       (item) => !isDirectSampling(item) && (item.status === "pending_print" || item.status === "draft"),
     );

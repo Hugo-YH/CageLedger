@@ -2,6 +2,7 @@ import http.cookiejar
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -142,6 +143,42 @@ class ApiContractTests(unittest.TestCase):
             opener=self.opener,
         )
         self.assertEqual(login_combined, combined)
+
+    def test_iacuc_batch_lookup_is_authorized_bounded_and_read_only(self):
+        path = "/api/iacuc-index/lookup"
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            request_json(self.base_url, path, method="POST", body={"codes": ["SYNTHETIC-LOOKUP-MISSING"]})
+        with error.exception as response:
+            self.assertEqual(response.code, 401)
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        request_json(
+            self.base_url,
+            "/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "admin123"},
+            opener=opener,
+        )
+        database = Path(self.temp_dir.name) / "cageledger.sqlite"
+        with sqlite3.connect(database) as conn:
+            before = conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
+        status, result, _ = request_json(
+            self.base_url,
+            path,
+            method="POST",
+            body={"codes": [" synthetic-lookup-missing ", "SYNTHETIC-LOOKUP-MISSING"]},
+            opener=opener,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(result["items"], [])
+        self.assertEqual(result["counts"], {"SYNTHETIC-LOOKUP-MISSING": 0})
+        self.assertIn("updatedAt", result)
+        for body in ({"codes": []}, {"codes": ["x"] * 201}, []):
+            with self.subTest(body=body), self.assertRaises(urllib.error.HTTPError) as error:
+                request_json(self.base_url, path, method="POST", body=body, opener=opener)
+            with error.exception as response:
+                self.assertEqual(response.code, 400)
+        with sqlite3.connect(database) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0], before)
 
     def test_authenticated_list_shapes(self):
         status, login, _ = request_json(

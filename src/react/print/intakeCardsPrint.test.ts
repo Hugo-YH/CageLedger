@@ -1,9 +1,40 @@
 import { describe, expect, it } from "vitest";
-import type { IntakeBatch } from "../api/contracts";
+import type { IntakeBatch, IntakePrintBatch } from "../../contracts/intake";
 import { intakeCardsPrintHtml, planIntakeCardPrint } from "./intakeCards";
 import { qrCodeMatrix, qrCodeSvg } from "./qrCode";
 
 describe("print templates", () => {
+  it("renders the dedicated read-only print projection without original messages, recognition or receipt history", () => {
+    const item: IntakePrintBatch = {
+      id: "print",
+      updatedAt: "source-version",
+      intakePurpose: "housing",
+      status: "pending_print",
+      finalCardCount: 1,
+      pi: "项目负责人",
+      owner: "实验负责人",
+      batchNo: "批次",
+      iacuc: "Z1",
+      supplier: "供应商",
+      strainStandard: "C57",
+      strainRaw: "C57",
+      specification: "8周龄",
+      intakeDate: "2026-10-01",
+      endDate: "2026-10-31",
+      roomName: "8101",
+      quantity: 5,
+      cards: [{ id: "persisted-card", qrId: "ABCD", suggestedQuantity: "5" }],
+    };
+    const html = intakeCardsPrintHtml([item], { contactPhones: { print: "13800000000" } });
+    expect(html).toContain("项目负责人");
+    expect(html).toContain("13800000000");
+    expect(html).toContain("8周龄");
+    expect(html).toContain('aria-label="笼卡二维码"');
+    expect(html).toContain("5/5");
+    expect(item).not.toHaveProperty("rawMessage");
+    expect(item).not.toHaveProperty("recognition");
+    expect(item).not.toHaveProperty("receipts");
+  });
   it("excludes direct-sampling batches even if stale card data is supplied", () => {
     const batch = {
       intakePurpose: "direct_sampling",

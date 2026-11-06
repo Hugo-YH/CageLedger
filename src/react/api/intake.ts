@@ -13,6 +13,7 @@ import type {
   PagedResponse,
 } from "./contracts";
 import type { IntakeRecognitionMergePreview } from "../../contracts/intake";
+import type { IntakePrintBatch } from "../../contracts/intake";
 import { ApiError, requestDownload, requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
@@ -72,17 +73,20 @@ export function useIntakeBatchDetail(id: string) {
   });
 }
 
-export async function fetchIntakeBatchesForPrint(items: IntakeBatchListItem[]) {
-  const result: IntakeBatch[] = [];
+export async function fetchIntakeBatchesForPrint(items: IntakeBatchListItem[], signal?: AbortSignal) {
+  const result: IntakePrintBatch[] = [];
   for (let offset = 0; offset < items.length; offset += 200) {
+    signal?.throwIfAborted();
     const part = items.slice(offset, offset + 200);
-    const response = await requestJson<{ items: IntakeBatch[] }>("/api/intake-batches/print-data", {
+    const response = await requestJson<{ items: IntakePrintBatch[] }>("/api/intake-batches/print-data", {
       method: "POST",
+      ...(signal ? { signal } : {}),
       body: JSON.stringify({
         ids: part.map((item) => item.id),
         expectedVersions: Object.fromEntries(part.map((item) => [item.id, String(item.updatedAt || "")])),
       }),
     });
+    signal?.throwIfAborted();
     result.push(...response.items);
   }
   return result;

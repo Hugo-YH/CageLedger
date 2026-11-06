@@ -116,17 +116,39 @@ def collect_cage_card_qr_ids(state, exclude_batch_id=""):
     return used
 
 
+class CageCardQrAllocator:
+    """Request-local sequence cursor over the caller's current reservation set."""
+
+    def __init__(self, used_qr_ids):
+        self.used_qr_ids = used_qr_ids
+        self.next_sequence = None
+
+    def reserve(self, qr_id):
+        self.used_qr_ids.add(qr_id)
+        if self.next_sequence is not None:
+            sequence = decode_cage_card_sequence(qr_id)
+            if sequence:
+                self.next_sequence = max(self.next_sequence, sequence + 1)
+
+    def next(self):
+        # Existing cards can be retained without ever scanning the global set.
+        if self.next_sequence is None:
+            self.next_sequence = 1
+            for qr_id in self.used_qr_ids:
+                sequence = decode_cage_card_sequence(qr_id)
+                if sequence:
+                    self.next_sequence = max(self.next_sequence, sequence + 1)
+        for _ in range(CAGE_CARD_QR_CAPACITY):
+            candidate = encode_cage_card_sequence(self.next_sequence)
+            self.next_sequence += 1
+            if candidate not in self.used_qr_ids:
+                return candidate
+        raise ValueError("笼卡短码已用尽")
+
+
 def next_cage_card_qr_id(used_qr_ids):
-    next_sequence = 1
-    for qr_id in used_qr_ids:
-        sequence = decode_cage_card_sequence(qr_id)
-        if sequence:
-            next_sequence = max(next_sequence, sequence + 1)
-    for offset in range(CAGE_CARD_QR_CAPACITY):
-        candidate = encode_cage_card_sequence(next_sequence + offset)
-        if candidate not in used_qr_ids:
-            return candidate
-    raise ValueError("笼卡短码已用尽")
+    # Preserve the standalone helper's non-mutating contract.
+    return CageCardQrAllocator(used_qr_ids).next()
 
 
 def cage_card_qr_id(batch, sequence):

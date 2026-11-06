@@ -2,21 +2,22 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createIntakeDraft } from "../../../../domain/intake";
-import type { IntakeBatch } from "../../../api/contracts";
+import type { IntakeBatchListItem } from "../../../api/contracts";
 import { listAllIntakeBatchSummaries } from "../../../api/intake";
 import { useSelectionScope } from "../../../hooks/useSelectionScope";
 import { useIntakeSelection } from "./useIntakeSelection";
+import { intakeBatchSummary } from "../intakeBatchSummary";
 
 const { info } = vi.hoisted(() => ({ info: vi.fn() }));
 vi.mock("antd", () => ({ App: { useApp: () => ({ message: { info } }) } }));
 vi.mock("../../../api/intake", () => ({ listAllIntakeBatchSummaries: vi.fn() }));
 vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => ({ message: { info } }) }));
-const items = ["a", "b"].map((id) => ({ ...createIntakeDraft("测试"), id }));
+const items = ["a", "b"].map((id) => intakeBatchSummary({ ...createIntakeDraft("测试"), id }));
 const params = { limit: 10, offset: 0 };
 
 function deferredList() {
-  let resolve!: (items: IntakeBatch[]) => void;
-  const promise = new Promise<IntakeBatch[]>((fulfill) => {
+  let resolve!: (items: IntakeBatchListItem[]) => void;
+  const promise = new Promise<IntakeBatchListItem[]>((fulfill) => {
     resolve = fulfill;
   });
   vi.mocked(listAllIntakeBatchSummaries).mockReturnValueOnce(promise);
@@ -30,6 +31,42 @@ function useScopedSelection({ filter }: { filter: string; page: number; pageSize
 }
 
 describe("intake selection", () => {
+  it("projects complete write responses on every selection entry without losing action or quarantine fields", async () => {
+    const full = {
+      ...createIntakeDraft("测试"),
+      id: "full",
+      rawMessage: "large original",
+      updatedAt: "v1",
+      cards: [{ id: "card", index: 1, label: "1", qrId: "Q001", suggestedQuantity: "5" }],
+      recognition: { extractedText: "large evidence", fieldSources: {}, warnings: [] },
+      quarantineStatus: "检疫中" as const,
+      quarantineBatches: [{ id: "quarantine", name: "检疫批", completedAt: "" }],
+      batchNumberInfo: { status: "parsed" as const, iacuc: "Z1", approvalDate: "2026-10-01", sequence: "01" },
+    };
+    const before = structuredClone(full);
+    const { result } = renderHook(useIntakeSelection);
+    act(() => result.current.toggle(full, true));
+    const assertSummary = () => {
+      const selected = result.current.selectedItems[0];
+      expect(selected).toMatchObject({
+        id: "full",
+        updatedAt: expect.any(String),
+        quarantineStatus: "检疫中",
+        quarantineBatches: full.quarantineBatches,
+        batchNumberInfo: full.batchNumberInfo,
+      });
+      for (const key of ["cards", "rawMessage", "recognition", "receipts"]) expect(selected).not.toHaveProperty(key);
+    };
+    assertSummary();
+    act(() => result.current.update([{ ...full, updatedAt: "v2", status: "received" }]));
+    assertSummary();
+    expect(result.current.selectedItems[0]).toMatchObject({ updatedAt: "v2", status: "received" });
+    act(() => result.current.clear());
+    vi.mocked(listAllIntakeBatchSummaries).mockResolvedValueOnce([full]);
+    await act(() => result.current.toggleAll(params));
+    assertSummary();
+    expect(full).toEqual(before);
+  });
   it("keeps selection while reflecting saved purpose and receipt status", () => {
     const { result } = renderHook(useIntakeSelection);
     act(() => {

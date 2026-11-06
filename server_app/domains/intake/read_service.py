@@ -5,6 +5,33 @@ import json
 from server_app.domains.intake.repository import get_batch_payload
 from server_app.shared.concurrency import StaleWriteError
 
+PRINT_FIELDS = (
+    "id",
+    "updatedAt",
+    "intakePurpose",
+    "status",
+    "finalCardCount",
+    "pi",
+    "owner",
+    "batchNo",
+    "iacuc",
+    "supplier",
+    "strainStandard",
+    "strainRaw",
+    "specification",
+    "intakeDate",
+    "endDate",
+    "roomName",
+    "quantity",
+)
+PRINT_CARD_FIELDS = ("id", "qrId", "suggestedQuantity")
+
+
+def print_projection(item):
+    result = {key: item[key] for key in PRINT_FIELDS if key in item}
+    result["cards"] = [{key: card[key] for key in PRINT_CARD_FIELDS if key in card} for card in item.get("cards", [])]
+    return result
+
 
 def read_batch(conn, actor, identity):
     if not actor or not actor.get("id"):
@@ -44,4 +71,4 @@ def print_data(conn, actor, body):
             raise ValueError("请提供所选批次的版本")
         if any(str(items[i].get("updatedAt") or "") != versions[i] for i in ids):
             raise StaleWriteError("所选批次已更新，请刷新列表后重新核对打印内容")
-    return {"items": [items[i] for i in ids]}
+    return {"items": [print_projection(items[i]) for i in ids]}

@@ -318,7 +318,7 @@
   },
   "routingSurface": {
     "server_app/web/router.py": "cb035f7413e85dc0519c0ac75ac53792d983508b7094acec2c7c907c0a31c3f6",
-    "server_app/web/router_registry.py": "ef20a211ab0ed979cb29c6b214ad338dc813fccb1c64e62c2077a7103d5f0218",
+    "server_app/web/router_registry.py": "8e7fb2aa306fabaae246bfaf08f31f773f89bf2d50587d1a38ec91e2eb82d240",
     "server_app/web/route_registration.py": "4ccfd221b7233e3a75ecb1bfa4ecfe9d306fcb6b23139fa1479a389ce30ceadc",
     "server_app/web/route_specs.py": "ba91da3843f8b74f953415e6c0e3ae1eafba9adda3cc30d70d1b9fd2b68fe355",
     "server_app/web/read_routes.py": "0f2737bacd52aa9bb111c46c177d9972019ceb6fa9e8152de59dc0f8bbc4f776",
@@ -691,6 +691,15 @@
           "request": "q,limit",
           "response": "{items,count,updatedAt,source}",
           "protection": "read"
+        },
+        {
+          "method": "POST",
+          "path": "/api/iacuc-index/lookup",
+          "purpose": "批量精确读取伦理号的项目负责人；保留缺失与歧义",
+          "request": "{codes:[1至200个有效伦理号]}",
+          "response": "{items:[{iacuc,pi}],counts,updatedAt}；每号最多80项，counts保留完整匹配数",
+          "protection": "read",
+          "clients": ["src/react/api/intakeStatistics.ts"]
         },
         {
           "method": "GET",
@@ -1345,9 +1354,9 @@
         {
           "method": "POST",
           "path": "/api/intake-batches/print-data",
-          "purpose": "按所见版本批量读取笼卡打印完整数据；不改变状态或审计",
+          "purpose": "按所见版本批量读取笼卡打印投影；不改变状态或审计",
           "request": "{ids:[1至200个唯一ID],expectedVersions?:{id:updatedAt}}",
-          "response": "{items}，按请求顺序；版本过期409、缺失404",
+          "response": "{items}，仅版面、版本与卡片ID/短码/建议数量，按请求顺序；版本过期409、缺失404",
           "permission": "login",
           "protection": "read"
         }

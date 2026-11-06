@@ -17,7 +17,7 @@ from server_app.domains.reception.certificate_routes import handle as reception_
 from server_app.domains.reception.routes import prepare as prepare_reception
 from server_app.domains.reception.routes import read as read_reception
 from server_app.domains.system_features.session import session_payload
-from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler
+from server_app.web.iacuc import iacuc_expiry_handler, iacuc_index_handler, iacuc_lookup_handler
 from server_app.web.intake_ai import (
     intake_ai_parse_handler,
     intake_recognition_image_handler,
@@ -93,6 +93,7 @@ API_ROUTER.add(
 API_ROUTER.add("GET", r"/api/system/info", lambda handler, params: JsonResponse(system_info()))
 API_ROUTER.add("GET", r"/api/iacuc-index", iacuc_index_handler)
 API_ROUTER.add("GET", r"/api/iacuc-index/expiry", iacuc_expiry_handler)
+API_ROUTER.add("POST", r"/api/iacuc-index/lookup", iacuc_lookup_handler)
 API_ROUTER.add("POST", r"/api/intake/ai-parse", intake_ai_parse_handler)
 API_ROUTER.add("POST", r"/api/intake/recognition-uploads", intake_recognition_upload_handler)
 API_ROUTER.add("POST", r"/api/intake-batches/print-data", intake_print_data_handler)

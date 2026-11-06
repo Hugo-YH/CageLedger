@@ -31,6 +31,7 @@ type IntakeBatchListProps = {
   bulkNotice: string;
   bulkNoticeKind: "success" | "error" | "info";
   markingPrinted: boolean;
+  preparingPrint?: boolean;
   markingReceived: boolean;
   printDisabledReason: string;
   page: number;
@@ -88,6 +89,7 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
   bulkNotice,
   bulkNoticeKind,
   markingPrinted,
+  preparingPrint = false,
   markingReceived,
   printDisabledReason,
   page,
@@ -221,14 +223,14 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
         selection={{
           count: selectedItems.length,
           onClear: onClearSelection,
-          pending: selectingAll || markingPrinted || markingReceived,
+          pending: selectingAll || preparingPrint || markingPrinted || markingReceived,
         }}
         actions={
           <>
             <IntakeSummaryExport />
             <IntakeStatistics
               selectedItems={selectedItems}
-              disabled={loading || selectingAll || markingPrinted || markingReceived}
+              disabled={loading || selectingAll || preparingPrint || markingPrinted || markingReceived}
             />
             {selectedItems.length ? (
               <>
@@ -236,6 +238,7 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
                   icon={<ActionIcon name="print" />}
                   disabled={
                     loading ||
+                    preparingPrint ||
                     markingPrinted ||
                     markingReceived ||
                     !selectedItems.some(
@@ -250,7 +253,11 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
                 <Button
                   icon={<ActionIcon name="reserve" />}
                   disabled={
-                    loading || markingPrinted || markingReceived || !selectedItems.some(canConfirmIntakeReceipt)
+                    loading ||
+                    preparingPrint ||
+                    markingPrinted ||
+                    markingReceived ||
+                    !selectedItems.some(canConfirmIntakeReceipt)
                   }
                   loading={markingReceived}
                   onClick={() => onReceive(selectedItems)}
@@ -266,11 +273,19 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
             <Button
               icon={<ActionIcon name="print" />}
               aria-describedby={printDisabledReason ? "intake-print-disabled-reason" : undefined}
-              disabled={loading || Boolean(printDisabledReason)}
+              disabled={
+                loading ||
+                selectingAll ||
+                preparingPrint ||
+                markingPrinted ||
+                markingReceived ||
+                Boolean(printDisabledReason)
+              }
+              loading={preparingPrint || markingPrinted}
               type="primary"
               onClick={() => onPrint(selectedItems)}
             >
-              打印笼卡
+              {preparingPrint ? "正在准备笼卡…" : "打印笼卡"}
             </Button>
           ) : null
         }

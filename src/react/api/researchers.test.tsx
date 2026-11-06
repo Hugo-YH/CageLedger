@@ -36,6 +36,15 @@ it("resolves exact contacts through the authenticated read-only endpoint", async
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ names: ["张三"] });
 });
 
+it("forwards the print preparation cancellation signal without changing contact lookup data", async () => {
+  const controller = new AbortController();
+  const fetch = vi.fn().mockResolvedValue(Response.json({ items: [] }));
+  vi.stubGlobal("fetch", fetch);
+  await resolveResearcherContacts(["张三"], controller.signal);
+  expect(fetch.mock.calls[0][1].signal).toBe(controller.signal);
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ names: ["张三"] });
+});
+
 it("sends server filters and pagination with an abort signal", async () => {
   const fetch = vi
     .fn()

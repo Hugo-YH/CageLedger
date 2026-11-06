@@ -43,7 +43,7 @@ class IntakeSummaryReadTests(unittest.TestCase):
                 notes="source notes",
                 rawMessage="x" * 20000,
                 recognition={"extractedText": "y" * 10000},
-                cards=[{"id": "card", "qrId": "ABCD"}],
+                cards=[{"id": "card", "qrId": "ABCD", "suggestedQuantity": "5", "notes": "unused card metadata"}],
                 receipts=[],
             )
             self.items.append(item)
@@ -107,10 +107,20 @@ class IntakeSummaryReadTests(unittest.TestCase):
         before = self.conn.total_changes
         self.assertEqual(read_batch(self.conn, ACTOR, "1"), self.items[1])
         for actor in (ACTOR, {"id": "room-admin", "role": "room_admin", "roomIds": []}):
-            self.assertEqual(
-                print_data(self.conn, actor, {"ids": ["2", "0"], "expectedVersions": {"2": "v1", "0": "v1"}})["items"],
-                [self.items[2], self.items[0]],
-            )
+            items = print_data(self.conn, actor, {"ids": ["2", "0"], "expectedVersions": {"2": "v1", "0": "v1"}})[
+                "items"
+            ]
+            self.assertEqual([item["id"] for item in items], ["2", "0"])
+            for item, original in zip(items, [self.items[2], self.items[0]], strict=True):
+                self.assertEqual(item["updatedAt"], original["updatedAt"])
+                self.assertEqual(item["finalCardCount"], original["finalCardCount"])
+                self.assertEqual(item["cards"], [{"id": "card", "qrId": "ABCD", "suggestedQuantity": "5"}])
+                self.assertFalse(set(item) & {"recognition", "rawMessage", "receipts", "notes"})
+                self.assertEqual(
+                    {key: original[key] for key in item if key != "cards"},
+                    {key: value for key, value in item.items() if key != "cards"},
+                )
+            self.assertLess(len(json.dumps(items)), len(json.dumps([self.items[2], self.items[0]])) // 10)
         self.assertEqual(self.conn.total_changes, before)
         with self.assertRaises(StaleWriteError):
             print_data(self.conn, ACTOR, {"ids": ["0"], "expectedVersions": {"0": "old"}})

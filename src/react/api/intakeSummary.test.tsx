@@ -73,6 +73,21 @@ it("propagates stale-version conflicts instead of returning a printable batch", 
   );
 });
 
+it("cancels a print preparation before starting another batch and forwards its signal", async () => {
+  const controller = new AbortController();
+  const items = Array.from(
+    { length: 201 },
+    (_, index) => ({ id: String(index), updatedAt: "v1" }) as IntakeBatchListItem,
+  );
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((_url, options) => {
+    expect(options?.signal).toBe(controller.signal);
+    controller.abort();
+    return Promise.resolve(Response.json({ items: [] }));
+  });
+  await expect(fetchIntakeBatchesForPrint(items, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+  expect(fetchSpy).toHaveBeenCalledOnce();
+});
+
 it("passes structured number filters to server pages instead of candidate search", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ items: [], page: {} }));
   const columnFilters = {

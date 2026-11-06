@@ -65,3 +65,19 @@ it("chunks large cross-page selections within the endpoint's bound", async () =>
   expect(Object.keys(result.contactPhones)).toHaveLength(201);
   expect(result.warning).toBe("");
 });
+
+it("forwards the owned print signal and stops queued contact reads after cancellation", async () => {
+  const controller = new AbortController();
+  vi.mocked(resolveResearcherContacts).mockImplementation((_names, signal) => {
+    expect(signal).toBe(controller.signal);
+    controller.abort();
+    return Promise.resolve({ items: [] });
+  });
+  await expect(
+    prepareIntakePrintContacts(
+      Array.from({ length: 201 }, (_, index) => batch(String(index), `人员${index}`)),
+      controller.signal,
+    ),
+  ).rejects.toMatchObject({ name: "AbortError" });
+  expect(resolveResearcherContacts).toHaveBeenCalledOnce();
+});

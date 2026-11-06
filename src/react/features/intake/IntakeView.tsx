@@ -141,7 +141,7 @@ export function IntakeView({
     draft: editor.draft,
     roomNames,
     notice: editor.notice,
-    saving: saves.mutation.isPending || editor.recognition.reading,
+    saving: saves.mutation.isPending || editor.recognition.reading || printer.preparing,
     aiPending: editor.recognition.pending || editor.recognition.reading,
     recognitionImages: editor.recognition.images,
     recognitionError: editor.recognition.error,
@@ -220,6 +220,7 @@ export function IntakeView({
               bulkNotice={selection.error || actions.bulkNotice}
               bulkNoticeKind={selection.error ? "error" : actions.bulkNoticeKind}
               markingPrinted={actions.markingPrinted}
+              preparingPrint={printer.preparing}
               markingReceived={actions.markingReceived}
               printDisabledReason={roomsReady ? selectedPrintPlan.disabledReason : "房间信息尚未就绪，请等待或重试。"}
               page={page.page}

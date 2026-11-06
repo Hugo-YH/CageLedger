@@ -24,7 +24,9 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 `GET /api/intake-batches` 未指定 `sortKey` 时，接收日期待定（空字符串或 null）的批次优先置顶，已确定日期继续倒序；同组按更新时间、行号倒序稳定排列。排序在筛选后、分页前完成；显式 `sortKey`/`sortDir` 保留所选列原有升降序语义。
 
-`GET /api/intake-batches?view=summary` 返回 `IntakeBatchListItem` 列表，保留列表、统计、批量操作和版本校验所需字段，不返回笼卡、预约原文或识别依据。省略 `view` 的列表保留完整旧响应。编辑时通过 `GET /api/intake-batches/{id}` 读取单个完整批次，读取范围与原有到货记录一致。`POST /api/intake-batches/print-data` 接收 1 至 200 个不重复的 `ids`，可选 `expectedVersions`；指定时须覆盖全部 ID，版本不匹配返回409，批次缺失返回404。响应按请求顺序返回完整 `{items}`，只读、不产生审计；前端冻结所选版本并按每批不超过200条请求，全部成功后打印。
+`GET /api/intake-batches?view=summary` 返回 `IntakeBatchListItem` 列表，保留列表、统计、批量操作和版本校验所需字段，不返回笼卡、预约原文或识别依据。省略 `view` 的列表保留完整旧响应。编辑时通过 `GET /api/intake-batches/{id}` 读取单个完整批次，读取范围与原有到货记录一致。`POST /api/intake-batches/print-data` 接收 1 至 200 个不重复的 `ids`，可选 `expectedVersions`；指定时须覆盖全部 ID，版本不匹配返回409，批次缺失返回404。响应按请求顺序返回只读打印投影 `{items}`，保留版本、版面字段和卡片的原ID、短码及建议数量，不返回预约原文、识别依据或接收历史，不产生审计；前端冻结所选版本并按每批不超过200条请求，全部成功后打印。普通详情与写入响应继续完整。
+
+`POST /api/iacuc-index/lookup` 与伦理目录读取使用相同登录权限，只读、不推进业务状态或产生审计。请求 `{codes}` 包含1至200个非空伦理号，按去首尾空白、转大写精确匹配，重复号去重。响应 `{items,counts,updatedAt}` 中 items 仅含伦理号与负责人，每号最多80项；counts 保留各号的完整匹配总数（未找到为0），以便前端维持缺失、空负责人及歧义提示。统计每批不超过200号、最多3路请求，关闭时取消只读查询；不将负责人结果长期缓存为业务快照。
 
 `GET /api/animal-inspections` 与 `GET /api/animal-inspection-findings` 可选 `view=summary`，分别返回巡检和异常列表所需状态、定位、操作字段及版本；前者保留异常计数，后者包含关联房间和创建人。摘要不返回巡检快照、答案、异常附件或事件，未指定 `view` 继续返回原完整列表。完整巡检详情继续通过 `GET /api/animal-inspections/{id}` 按需读取；所有视图使用原授权筛选。巡检计数批量读取，零异常巡检不再逐条回退；异常摘要以关联查询获取房间信息。
 

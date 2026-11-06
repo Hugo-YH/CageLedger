@@ -20,6 +20,7 @@ import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { Modal, ModalPresence } from "../../../components/ui";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { copyTextToClipboard } from "../../../utils/clipboard";
+import { intakeBatchSummary } from "../intakeBatchSummary";
 
 export function IntakeStatistics({
   selectedItems,
@@ -34,7 +35,7 @@ export function IntakeStatistics({
       <Button
         icon={<BarChartOutlined aria-hidden />}
         disabled={disabled || !selectedItems.length}
-        onClick={() => setSnapshot(selectedItems.map((item) => ({ ...item })))}
+        onClick={() => setSnapshot(selectedItems.map(intakeBatchSummary))}
       >
         统计
       </Button>

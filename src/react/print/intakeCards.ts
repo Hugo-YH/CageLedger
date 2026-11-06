@@ -1,5 +1,5 @@
 import { formatPersonNames, splitPersonNames } from "../../domain/personNames";
-import type { IntakeBatch } from "../api/contracts";
+import type { IntakeBatch, IntakePrintBatch } from "../../contracts/intake";
 import { abbreviateSupplier, isDirectSampling } from "../../domain/intake";
 import { qrCodeSvg } from "./qrCode";
 
@@ -30,8 +30,8 @@ export interface IntakeCardPrintOptions {
 }
 
 interface IntakeCardPrintItem {
-  batch: IntakeBatch;
-  card: IntakeBatch["cards"][number] | null;
+  batch: IntakePrintBatch;
+  card: IntakePrintBatch["cards"][number] | null;
   blank?: boolean;
 }
 
@@ -72,7 +72,7 @@ export function planIntakeCardPrint(
   return { kind, cardCount, pageSize, missing, disabledReason: "" };
 }
 
-export function intakeCardsPrintHtml(batches: IntakeBatch[], options: IntakeCardPrintOptions = {}) {
+export function intakeCardsPrintHtml(batches: IntakePrintBatch[], options: IntakeCardPrintOptions = {}) {
   const kind = options.kind || "standard";
   const pageSize = kind === "temporary" ? TEMPORARY_INTAKE_CARD_PRINT_PAGE_SIZE : INTAKE_CARD_PRINT_PAGE_SIZE;
   const items = printItems(batches);
@@ -93,7 +93,7 @@ export function intakeCardsPrintHtml(batches: IntakeBatch[], options: IntakeCard
   return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${title}</title><style>${printStyles()}</style></head><body>${pages.map((page) => `<div class="${sheetClass}">${page.map(render).join("")}</div>`).join("")}<script>window.addEventListener("load",()=>{window.focus();window.print()},{once:true})</script></body></html>`;
 }
 
-export function openIntakeCardPrint(batches: IntakeBatch[], options: IntakeCardPrintOptions = {}) {
+export function openIntakeCardPrint(batches: IntakePrintBatch[], options: IntakeCardPrintOptions = {}) {
   const html = intakeCardsPrintHtml(batches, options);
   if (!html) return false;
   const popup = options.targetWindow ?? window.open("", "_blank");
@@ -114,14 +114,14 @@ function intakeCardPrintKind(
   return String(matches[0].facility || "").trim() === "zhujiang" ? "temporary" : "standard";
 }
 
-function printItems(batches: IntakeBatch[]): IntakeCardPrintItem[] {
+function printItems(batches: IntakePrintBatch[]): IntakeCardPrintItem[] {
   return batches
     .filter((batch) => !isDirectSampling(batch))
     .flatMap((batch) => batch.cards.slice(0, batch.finalCardCount).map((card) => ({ batch, card })));
 }
 
 function blankPrintItem(): IntakeCardPrintItem {
-  return { batch: {} as IntakeBatch, card: null, blank: true };
+  return { batch: {} as IntakePrintBatch, card: null, blank: true };
 }
 
 function renderStandardCard(
@@ -171,7 +171,7 @@ function renderTemporaryCard({ batch, card, blank }: IntakeCardPrintItem) {
 </table></section>`;
 }
 
-function cardQuantityRatio(batch: IntakeBatch, card: IntakeBatch["cards"][number] | null) {
+function cardQuantityRatio(batch: IntakePrintBatch, card: IntakePrintBatch["cards"][number] | null) {
   const total = Math.max(Number(batch.quantity) || 0, 0);
   if (!total) return "";
   const cageQuantity = String(card?.suggestedQuantity || "").trim();

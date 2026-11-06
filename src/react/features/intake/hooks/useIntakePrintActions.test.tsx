@@ -1,6 +1,11 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { IntakeBatch, IntakeSaveRequest, IntakeWriteResponse } from "../../../../contracts/intake";
+import type {
+  IntakeBatch,
+  IntakePrintBatch,
+  IntakeSaveRequest,
+  IntakeWriteResponse,
+} from "../../../../contracts/intake";
 import type * as IntakeApi from "../../../api/intake";
 import type * as IntakeCards from "../../../print/intakeCards";
 import { createIntakeDraft } from "../../../../domain/intake";
@@ -106,8 +111,12 @@ beforeEach(() => {
   mutate.mockReset();
   vi.mocked(fetchIntakeBatchesForPrint).mockReset();
   vi.mocked(openIntakeCardPrint).mockReset().mockReturnValue(true);
+  vi.mocked(openIntakePrintWindow).mockReset();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 it("opens immediately, then saves before adopting the returned draft, printing and marking", async () => {
   const pending = deferred<IntakeWriteResponse>();
@@ -141,7 +150,7 @@ it("uses print-only phone context without changing the saved batch, including wa
   vi.mocked(fetchIntakeBatchesForPrint).mockResolvedValue([draft]);
   const { result, popup, job, markPrinted } = setup();
   await act(() => result.current.executePrint({ ...job, saveCurrent: false }, false));
-  expect(prepareIntakePrintContacts).toHaveBeenCalledExactlyOnceWith([draft]);
+  expect(prepareIntakePrintContacts).toHaveBeenCalledExactlyOnceWith([draft], expect.any(AbortSignal));
   expect(openIntakeCardPrint).toHaveBeenCalledExactlyOnceWith([draft], {
     kind: "standard",
     fillBlanks: false,
@@ -181,7 +190,7 @@ it("does not look up phone numbers for selected direct-sampling batches that hav
   vi.mocked(fetchIntakeBatchesForPrint).mockResolvedValue([draft, direct]);
   const { result, job } = setup();
   await act(() => result.current.executePrint({ ...job, saveCurrent: false }, false));
-  expect(prepareIntakePrintContacts).toHaveBeenCalledExactlyOnceWith([draft]);
+  expect(prepareIntakePrintContacts).toHaveBeenCalledExactlyOnceWith([draft], expect.any(AbortSignal));
 });
 
 it("closes a retired draft's popup without clearing the new editor or marking it printed", async () => {
@@ -207,9 +216,197 @@ it("fetches selected saved batches by their captured versions and keeps a failed
   vi.mocked(fetchIntakeBatchesForPrint).mockRejectedValue(new Error("所选批次已更新"));
   const { result, close, job, bulkNotice, markPrinted } = setup();
   await act(() => result.current.executePrint({ ...job, draft: undefined, saveCurrent: false }, false));
-  expect(fetchIntakeBatchesForPrint).toHaveBeenCalledExactlyOnceWith(job.batches);
+  expect(fetchIntakeBatchesForPrint).toHaveBeenCalledExactlyOnceWith(job.batches, expect.any(AbortSignal));
   expect(mutate).not.toHaveBeenCalled();
   expect(markPrinted).not.toHaveBeenCalled();
   expect(close).toHaveBeenCalledTimes(1);
   expect(bulkNotice).toHaveBeenCalledExactlyOnceWith("所选批次已更新", "error");
+});
+
+it("owns one list print from the click through data, contacts and the completed print-record write", async () => {
+  const data = deferred<IntakePrintBatch[]>();
+  const contacts = deferred<Awaited<ReturnType<typeof prepareIntakePrintContacts>>>();
+  const write = deferred<void>();
+  vi.mocked(fetchIntakeBatchesForPrint).mockReturnValueOnce(data.promise);
+  vi.mocked(prepareIntakePrintContacts).mockReturnValueOnce(contacts.promise);
+  const { result, job, markPrinted } = setup();
+  markPrinted.mockReturnValueOnce(write.promise);
+  let printing!: Promise<void>;
+  act(() => {
+    printing = result.current.executePrint({ ...job, saveCurrent: false }, false);
+    void result.current.executePrint({ ...job, saveCurrent: false }, false);
+    result.current.requestPrint(job.batches);
+  });
+  expect(result.current.preparing).toBe(true);
+  expect(openIntakePrintWindow).toHaveBeenCalledOnce();
+  expect(fetchIntakeBatchesForPrint).toHaveBeenCalledOnce();
+  const signal = vi.mocked(fetchIntakeBatchesForPrint).mock.calls[0][1];
+  await act(async () => {
+    data.resolve([draft]);
+    await data.promise;
+  });
+  expect(prepareIntakePrintContacts).toHaveBeenCalledExactlyOnceWith([draft], signal);
+  expect(result.current.preparing).toBe(true);
+  await act(async () => {
+    contacts.resolve({ contactPhones: {}, warning: "" });
+    await contacts.promise;
+  });
+  expect(openIntakeCardPrint).toHaveBeenCalledOnce();
+  expect(markPrinted).toHaveBeenCalledOnce();
+  expect(result.current.preparing).toBe(false);
+  await act(() => result.current.executePrint({ ...job, saveCurrent: false }, false));
+  expect(openIntakePrintWindow).toHaveBeenCalledOnce();
+  await act(async () => {
+    write.resolve();
+    await printing;
+  });
+});
+
+it("cancels a closed preparation window and an old completion cannot retire the next print", async () => {
+  vi.useFakeTimers();
+  const old = deferred<IntakePrintBatch[]>();
+  const next = deferred<IntakePrintBatch[]>();
+  vi.mocked(fetchIntakeBatchesForPrint).mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise);
+  const { result, job, popup, markPrinted, bulkNotice } = setup();
+  let printing!: Promise<void>;
+  act(() => {
+    printing = result.current.executePrint({ ...job, saveCurrent: false }, false);
+  });
+  const oldSignal = vi.mocked(fetchIntakeBatchesForPrint).mock.calls[0][1];
+  Object.defineProperty(popup, "closed", { configurable: true, value: true });
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  expect(oldSignal?.aborted).toBe(true);
+  expect(result.current.preparing).toBe(false);
+  const nextPopup = { close: vi.fn(), closed: false } as unknown as Window;
+  vi.mocked(openIntakePrintWindow).mockReturnValueOnce(nextPopup);
+  let nextPrinting!: Promise<void>;
+  act(() => {
+    nextPrinting = result.current.executePrint({ ...job, saveCurrent: false }, false);
+  });
+  await act(async () => {
+    old.resolve([draft]);
+    await printing;
+  });
+  expect(result.current.preparing).toBe(true);
+  expect(openIntakeCardPrint).not.toHaveBeenCalled();
+  expect(bulkNotice).not.toHaveBeenCalled();
+  await act(async () => {
+    next.resolve([draft]);
+    await nextPrinting;
+  });
+  expect(openIntakeCardPrint).toHaveBeenCalledOnce();
+  expect(markPrinted).toHaveBeenCalledOnce();
+});
+
+it("aborts contact preparation on unmount without warning, rendering or recording a print", async () => {
+  const contacts = deferred<Awaited<ReturnType<typeof prepareIntakePrintContacts>>>();
+  vi.mocked(fetchIntakeBatchesForPrint).mockResolvedValueOnce([draft]);
+  vi.mocked(prepareIntakePrintContacts).mockReturnValueOnce(contacts.promise);
+  const { result, unmount, job, close, markPrinted, bulkNotice } = setup();
+  let printing!: Promise<void>;
+  await act(() => {
+    printing = result.current.executePrint({ ...job, saveCurrent: false }, false);
+    return Promise.resolve();
+  });
+  const signal = vi.mocked(prepareIntakePrintContacts).mock.calls[0][1];
+  unmount();
+  expect(signal?.aborted).toBe(true);
+  expect(close).toHaveBeenCalled();
+  await act(async () => {
+    contacts.resolve({ contactPhones: {}, warning: "late warning" });
+    await printing;
+  });
+  expect(warning).not.toHaveBeenCalled();
+  expect(openIntakeCardPrint).not.toHaveBeenCalled();
+  expect(markPrinted).not.toHaveBeenCalled();
+  expect(bulkNotice).not.toHaveBeenCalled();
+});
+
+it("lets a started save finish after unmount without printing its retired draft", async () => {
+  const write = deferred<IntakeWriteResponse>();
+  mutate.mockReturnValueOnce(write.promise);
+  const { result, unmount, job, adopt, markPrinted } = setup();
+  let printing!: Promise<void>;
+  act(() => {
+    printing = result.current.executePrint(job, false);
+  });
+  expect(mutate).toHaveBeenCalledOnce();
+  unmount();
+  await act(async () => {
+    write.resolve({ item: draft });
+    await printing;
+  });
+  expect(mutate).toHaveBeenCalledOnce();
+  expect(adopt).not.toHaveBeenCalled();
+  expect(openIntakeCardPrint).not.toHaveBeenCalled();
+  expect(markPrinted).not.toHaveBeenCalled();
+});
+
+it("keeps a rendered window and lets a started print-record write finish after unmount", async () => {
+  const write = deferred<void>();
+  vi.mocked(fetchIntakeBatchesForPrint).mockResolvedValueOnce([draft]);
+  const { result, unmount, job, close, markPrinted } = setup();
+  markPrinted.mockReturnValueOnce(write.promise);
+  let printing!: Promise<void>;
+  await act(() => {
+    printing = result.current.executePrint({ ...job, saveCurrent: false }, false);
+    return Promise.resolve();
+  });
+  expect(markPrinted).toHaveBeenCalledOnce();
+  expect(openIntakeCardPrint).toHaveBeenCalledOnce();
+  unmount();
+  expect(close).not.toHaveBeenCalled();
+  await act(async () => {
+    write.resolve();
+    await printing;
+  });
+  expect(markPrinted).toHaveBeenCalledOnce();
+});
+
+it("holds the write lock after a rendered window closes without continuing its polling", async () => {
+  vi.useFakeTimers();
+  const write = deferred<void>();
+  vi.mocked(fetchIntakeBatchesForPrint).mockResolvedValueOnce([draft]);
+  const { result, job, popup, markPrinted } = setup();
+  markPrinted.mockReturnValueOnce(write.promise);
+  let printing!: Promise<void>;
+  await act(() => {
+    printing = result.current.executePrint({ ...job, saveCurrent: false }, false);
+    return Promise.resolve();
+  });
+  expect(markPrinted).toHaveBeenCalledOnce();
+  Object.defineProperty(popup, "closed", { configurable: true, value: true });
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  expect(vi.getTimerCount()).toBe(0);
+  await act(() => result.current.executePrint({ ...job, saveCurrent: false }, false));
+  expect(openIntakePrintWindow).toHaveBeenCalledOnce();
+  await act(async () => {
+    write.resolve();
+    await printing;
+  });
+  expect(markPrinted).toHaveBeenCalledOnce();
+});
+
+it("owns the resumed popup after a duplicate-confirmation save completes outside the initial print call", async () => {
+  const { result, job, popup, adopt, markPrinted } = setup();
+  const saved = { ...draft, updatedAt: "confirmed-write" };
+  const intent: IntakeSaveIntent = {
+    item: draft,
+    exists: false,
+    mode: "entry",
+    draftRevision: 1,
+    recognitionImages: [],
+    print: { job, fillBlanks: true },
+  };
+  await act(() => result.current.completeSavedPrint(intent, saved, popup));
+  expect(adopt).toHaveBeenCalledExactlyOnceWith(saved);
+  expect(openIntakePrintWindow).not.toHaveBeenCalled();
+  expect(openIntakeCardPrint).toHaveBeenCalledExactlyOnceWith([saved], {
+    kind: "standard",
+    fillBlanks: true,
+    targetWindow: popup,
+    contactPhones: {},
+  });
+  expect(markPrinted).toHaveBeenCalledExactlyOnceWith([saved]);
+  expect(result.current.preparing).toBe(false);
 });

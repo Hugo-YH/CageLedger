@@ -14,10 +14,11 @@ import type {
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
-export function resolveResearcherContacts(names: string[]) {
+export function resolveResearcherContacts(names: string[], signal?: AbortSignal) {
   return requestJson<{ items: ResearcherContact[] }>("/api/researchers/contacts/resolve", {
     method: "POST",
     body: JSON.stringify({ names }),
+    ...(signal ? { signal } : {}),
   });
 }
 

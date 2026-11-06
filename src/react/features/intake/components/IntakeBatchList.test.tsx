@@ -9,7 +9,7 @@ import { IntakeBatchList } from "./IntakeBatchList";
 
 const counts = vi.hoisted(() => ({ tables: 0, cells: 0 }));
 vi.mock("../../../components/ui", () => ({
-  CommandBar: () => null,
+  CommandBar: ({ primaryAction }: { primaryAction?: React.ReactNode }) => <>{primaryAction}</>,
   DataTable: ({ columns, dataSource }: TableProps<IntakeBatchListItem>) => {
     counts.tables += 1;
     return (
@@ -116,5 +116,20 @@ describe("IntakeBatchList render isolation", () => {
     );
     expect(screen.getByRole("checkbox", { name: "选择 更新批次" })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: /编\s*辑/ })[0]).toBeDisabled();
+  });
+
+  it("shows and blocks print preparation until the owned job finishes", () => {
+    const onPrint = vi.fn();
+    const targets = [items[0]];
+    const view = render(
+      <IntakeBatchList {...props} {...callbacks()} selectedItems={targets} onPrint={onPrint} preparingPrint />,
+    );
+    const pending = screen.getByRole("button", { name: /正在准备笼卡/ });
+    expect(pending).toBeDisabled();
+    fireEvent.click(pending);
+    expect(onPrint).not.toHaveBeenCalled();
+    view.rerender(<IntakeBatchList {...props} {...callbacks()} selectedItems={targets} onPrint={onPrint} />);
+    fireEvent.click(screen.getByRole("button", { name: "打印笼卡" }));
+    expect(onPrint).toHaveBeenCalledExactlyOnceWith(targets);
   });
 });

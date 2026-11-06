@@ -113,7 +113,7 @@ test("statistics preserves unknown records and supports retry after a project lo
   rows[0] = { ...rows[0], intakeDate: "", roomName: "", finalCardCount: 0, iacuc: "" };
   await prepare(page, rows);
   let fail = true;
-  await page.route("**/api/iacuc-index?**", async (route) => {
+  await page.route("**/api/iacuc-index/lookup", async (route) => {
     if (fail) await route.fulfill({ status: 503, json: { error: "项目汇总表暂时不可用" } });
     else await route.continue();
   });

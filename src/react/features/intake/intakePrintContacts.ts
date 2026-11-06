@@ -1,14 +1,20 @@
-import type { IntakeBatch } from "../../../contracts/intake";
+import type { IntakePrintBatch } from "../../../contracts/intake";
 import type { ResearcherContact } from "../../../contracts/researchers";
 import { splitPersonNames } from "../../../domain/personNames";
 import { resolveResearcherContacts } from "../../api/researchers";
 
 /** Resolve once per print, never store derived phones in a batch or use the receiver's phone. */
-export async function prepareIntakePrintContacts(batches: IntakeBatch[]) {
+export async function prepareIntakePrintContacts(
+  batches: Pick<IntakePrintBatch, "id" | "owner">[],
+  signal?: AbortSignal,
+) {
   const names = [...new Set(batches.flatMap((batch) => splitPersonNames(batch.owner)))];
   const resolved = new Map<string, ResearcherContact>();
   for (let offset = 0; offset < names.length; offset += 200) {
-    const response = await resolveResearcherContacts(names.slice(offset, offset + 200));
+    signal?.throwIfAborted();
+    const part = names.slice(offset, offset + 200);
+    const response = await (signal ? resolveResearcherContacts(part, signal) : resolveResearcherContacts(part));
+    signal?.throwIfAborted();
     for (const contact of response.items) resolved.set(contact.name, contact);
   }
   const contactPhones: Record<string, string> = {};

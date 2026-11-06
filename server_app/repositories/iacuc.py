@@ -82,6 +82,26 @@ def filter_iacuc_index(payload, q, limit=80):
     return {**payload, "items": matched[:limit], "count": len(matched)}
 
 
+def lookup_iacuc_principals(payload, codes):
+    """Exact, bounded statistics reads, retaining missing and ambiguous projects."""
+    if (
+        not isinstance(codes, list)
+        or not 1 <= len(codes) <= 200
+        or any(not isinstance(code, str) or not code.strip() or len(code) > 200 for code in codes)
+    ):
+        raise ValueError("请提供1至200个有效的 IACUC 编号")
+    counts = dict.fromkeys((code.strip().upper() for code in codes), 0)
+    items = []
+    for item in payload.get("items", []):
+        code = str(item.get("iacuc") or "").strip().upper()
+        if code not in counts:
+            continue
+        counts[code] += 1
+        if counts[code] <= 80:
+            items.append({"iacuc": item.get("iacuc"), "pi": item.get("pi")})
+    return {"items": items, "counts": counts, "updatedAt": payload.get("updatedAt")}
+
+
 def replace_experiment_applications(conn, items, imported_at, application_payload):
     conn.execute("DELETE FROM experiment_applications")
     for index, item in enumerate(items, start=1):

@@ -3,7 +3,7 @@ from urllib.parse import parse_qs, urlparse
 
 from server_app.config import IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH
 from server_app.db import connect_db
-from server_app.repositories.iacuc import filter_iacuc_index, read_iacuc_index
+from server_app.repositories.iacuc import filter_iacuc_index, lookup_iacuc_principals, read_iacuc_index
 from server_app.web import JsonResponse
 
 IACUC_INDEX_CLIENT_KEYS = ("iacuc", "project", "pi", "owner", "funding", "projectStartDate", "projectEndDate")
@@ -36,6 +36,21 @@ def iacuc_expiry_handler(handler, _params):
         if item.get("iacuc")
     ]
     return JsonResponse({"items": items, "count": len(items)})
+
+
+def iacuc_lookup_handler(handler, _params):
+    """Read current principal names for a bounded set of exact ethics codes."""
+    if not handler.current_user():
+        return JsonResponse({"error": "请先登录"}, HTTPStatus.UNAUTHORIZED)
+    try:
+        body = handler.read_json_body()
+        codes = body.get("codes") if isinstance(body, dict) else None
+        with connect_db() as conn:
+            conn.execute("PRAGMA query_only=ON")
+            payload = read_iacuc_index(conn, IACUC_INDEX_PATH, LEGACY_IACUC_INDEX_PATH)
+        return JsonResponse(lookup_iacuc_principals(payload, codes))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
 
 def _bounded_int(value, default, min_value, max_value):

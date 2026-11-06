@@ -228,6 +228,30 @@ export type IntakeBatchListItem = Pick<
   | "updatedAt"
 > & { batchNumberInfo?: IntakeBatchNumberInfo };
 
+/** Version-checked read-only print data, never a complete editable batch. */
+export type IntakePrintBatch = Readonly<
+  Pick<
+    IntakeBatch,
+    | "id"
+    | "updatedAt"
+    | "intakePurpose"
+    | "status"
+    | "finalCardCount"
+    | "pi"
+    | "owner"
+    | "batchNo"
+    | "iacuc"
+    | "supplier"
+    | "strainStandard"
+    | "strainRaw"
+    | "specification"
+    | "intakeDate"
+    | "endDate"
+    | "roomName"
+    | "quantity"
+  >
+> & { readonly cards: ReadonlyArray<Readonly<Pick<IntakeCard, "id" | "qrId" | "suggestedQuantity">>> };
+
 export interface IntakeSummaryExportParams {
   startDate: string;
   endDate: string;
