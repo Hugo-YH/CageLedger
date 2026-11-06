@@ -9,7 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 ORIGIN = "https://git.cellnucle.us"
 REPOSITORY = "hugo/cageledger"
@@ -106,6 +106,7 @@ class ReleaseAssets:
         # Default ProxyHandler/verified HTTPSHandler retain the session proxy and CA trust.
         self.opener = opener or urllib.request.build_opener(NoRedirect())
         self.anonymous_opener = anonymous_opener or urllib.request.build_opener(NoRedirect())
+        self._release_tags = {}
 
     def open(self, method, url, *, body=None, headers=None, authenticated=True):
         url = checked_url(url)
@@ -205,6 +206,20 @@ class ReleaseAssets:
             result[value["name"]] = value
         return result
 
+    def _release_tag(self, release_id):
+        if release_id not in self._release_tags:
+            value = self.release(release_id)
+            require(
+                isinstance(value, dict)
+                and type(value.get("id")) is int
+                and value["id"] == release_id
+                and isinstance(value.get("tag_name"), str)
+                and bool(value["tag_name"]),
+                "Invalid release metadata for attachment association.",
+            )
+            self._release_tags[release_id] = value["tag_name"]
+        return self._release_tags[release_id]
+
     def upload(self, release_id, artifact):
         query = urllib.parse.urlencode({"name": artifact.path.name})
         with MultipartFile(artifact.path) as body:
@@ -218,9 +233,28 @@ class ReleaseAssets:
                 content = response.read(MAX_METADATA + 1)
                 require(len(content) <= MAX_METADATA, "Attachment response exceeds the metadata limit.")
         try:
-            return self.attachment(json.loads(content))
+            uploaded = self.attachment(json.loads(content))
         except (ValueError, TypeError):
             raise AssetError("Invalid uploaded attachment metadata.") from None
+        require(
+            uploaded["name"] == artifact.path.name and uploaded["size"] == artifact.path.stat().st_size,
+            "Uploaded attachment size/name differs from the original file.",
+        )
+        identity = uploaded.get("uuid")
+        require(isinstance(identity, str), "Uploaded attachment UUID is missing.")
+        try:
+            require(str(UUID(identity)) == identity, "Uploaded attachment UUID is invalid.")
+        except ValueError:
+            raise AssetError("Uploaded attachment UUID is invalid.") from None
+        tag = urllib.parse.quote(self._release_tag(release_id), safe="")
+        name = urllib.parse.quote(uploaded["name"], safe="")
+        canonical = f"{ORIGIN}/{REPOSITORY}/releases/download/{tag}/{name}"
+        require(
+            uploaded["browser_download_url"] in {f"{ORIGIN}/attachments/{identity}", canonical},
+            "Unsupported uploaded attachment URL; immutable identity was not normalized.",
+        )
+        # Preserve every other field; the first SHA read now uses the final URL.
+        return {**uploaded, "browser_download_url": canonical}
 
     def digest(self, attachment):
         attachment = self.attachment(attachment)

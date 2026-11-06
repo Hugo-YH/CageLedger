@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -52,32 +53,100 @@ class ReleaseTransportTests(unittest.TestCase):
                 self.assertEqual(len(combined), stream.size)
                 self.assertIn(b'filename="archive.part0001.gz"', combined)
                 self.assertIn(b"\r\n\r\n" + content + b"\r\n--fixed-boundary--\r\n", combined)
-            observed = {}
+            observed = {"lookups": 0, "posts": 0, "downloads": []}
             owner = self
+            prefix = assets.ORIGIN + "/hugo/cageledger/releases/download/v1.2.3/"
 
             class Opener:
                 def open(self, request, timeout):
+                    if request.get_method() == "GET":
+                        if request.full_url == assets.ORIGIN + assets.API + "/releases/19":
+                            observed["lookups"] += 1
+                            return Response(b'{"id":19,"tag_name":"v1.2.3"}')
+                        owner.assertTrue(request.full_url.startswith(prefix))
+                        observed["downloads"].append(request.full_url)
+                        return Response(content)
+                    observed["posts"] += 1
                     owner.assertIsInstance(request.data, assets.MultipartFile)
                     observed["length"] = int(request.get_header("Content-length"))
                     observed["auth"] = request.get_header("Authorization")
-                    observed["method"] = request.get_method()
                     observed["body"] = 0
                     while chunk := request.data.read(8192):
                         owner.assertLessEqual(len(chunk), 8192)
                         observed["body"] += len(chunk)
+                    name = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)["name"][0]
+                    identity = "9a3f4fa1-c1d2-4e33-8e44-" + f"{observed['posts']:012x}"
                     value = {
-                        "id": 5,
-                        "name": path.name,
+                        "id": observed["posts"] + 4,
+                        "uuid": identity,
+                        "name": name,
                         "size": len(content),
-                        "browser_download_url": assets.ORIGIN + "/attachments/uuid",
+                        "created_at": "2026-11-06T01:02:03Z",
+                        "browser_download_url": assets.ORIGIN + "/attachments/" + identity,
                     }
+                    if observed["posts"] == 2:
+                        value["browser_download_url"] = prefix + urllib.parse.quote(name, safe="")
                     return Response(json.dumps(value).encode())
 
             client = assets.ReleaseAssets("test-binding", opener=Opener())
-            client.upload(19, SimpleNamespace(path=path))
+            second = path.with_name("second piece.part0001.gz")
+            second.write_bytes(content)
+            results = []
+            for source in (path, second):
+                artifact = SimpleNamespace(path=source, size=len(content), sha256=hashlib.sha256(content).hexdigest())
+                result = client.upload(19, artifact)
+                client.verify(result, artifact)
+                results.append(result)
+            expected = [prefix + path.name, prefix + "second%20piece.part0001.gz"]
+            self.assertEqual([item["browser_download_url"] for item in results], expected)
+            self.assertEqual(observed["downloads"], expected)
+            self.assertEqual((observed["lookups"], observed["posts"]), (1, 2))
+            self.assertEqual(results[1]["id"], 6)
+            self.assertEqual(results[1]["uuid"], "9a3f4fa1-c1d2-4e33-8e44-000000000002")
+            self.assertEqual(results[1]["created_at"], "2026-11-06T01:02:03Z")
             self.assertEqual(observed["length"], observed["body"])
             self.assertEqual(observed["auth"], "token test-binding")
-            self.assertEqual(observed["method"], "POST")
+
+    def test_uploaded_alias_rejects_unknown_url_wrong_uuid_and_changed_size(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "image.part0001.gz"
+            path.write_bytes(b"original image piece")
+            metadata = {
+                "id": 5,
+                "uuid": "9a3f4fa1-c1d2-4e33-8e44-123456789abc",
+                "name": path.name,
+                "size": path.stat().st_size,
+                "created_at": "2026-11-06T01:02:03Z",
+                "browser_download_url": assets.ORIGIN + "/attachments/9a3f4fa1-c1d2-4e33-8e44-123456789abc",
+            }
+            cases = {
+                "unknown URL": {"browser_download_url": assets.ORIGIN + "/attachments/unexpected"},
+                "other origin": {"browser_download_url": "https://other.example/private-image"},
+                "wrong UUID": {"uuid": "11111111-2222-4333-8444-555555555555"},
+                "changed size": {"size": path.stat().st_size + 1},
+            }
+            for label, change in cases.items():
+                events = []
+
+                class Opener:
+                    def __init__(self, updated, requests):
+                        self.updated, self.requests = updated, requests
+
+                    def open(self, request, timeout):
+                        self.requests.append((request.get_method(), request.full_url))
+                        value = self.updated if request.get_method() == "POST" else {"id": 19, "tag_name": "v1.2.3"}
+                        return Response(json.dumps(value).encode())
+
+                with self.subTest(case=label), self.assertRaises(assets.AssetError):
+                    assets.ReleaseAssets("test-binding", opener=Opener({**metadata, **change}, events)).upload(
+                        19, SimpleNamespace(path=path)
+                    )
+                self.assertEqual(events[0][0], "POST")
+                self.assertTrue(
+                    all(
+                        method == "POST" or url == assets.ORIGIN + assets.API + "/releases/19" for method, url in events
+                    )
+                )
 
     def test_anonymous_probe_checks_raw_url_without_authorization_and_rejects_200(self):
         requests = []
