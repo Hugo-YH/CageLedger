@@ -116,6 +116,7 @@ function startUploads(missing: IntakeRecognitionImageInput[], started: number, s
         { signal: controller.signal },
       );
       requireCurrent(started, signal);
+      // The server verifies original bytes; File.type may only reflect a misleading filename.
       if (
         !Array.isArray(response.items) ||
         response.items.length !== missing.length ||
@@ -124,7 +125,7 @@ function startUploads(missing: IntakeRecognitionImageInput[], started: number, s
             !item ||
             !/^[a-f0-9]{32}$/.test(item.uploadId) ||
             typeof item.name !== "string" ||
-            item.mime !== bodies[index].type ||
+            !["image/png", "image/jpeg", "image/webp"].includes(item.mime) ||
             item.size !== bodies[index].size ||
             !/^[a-f0-9]{64}$/.test(item.sha256) ||
             !Number.isFinite(Date.parse(item.expiresAt)),

@@ -31,7 +31,7 @@ function receipt(
   };
 }
 
-function response(items: IntakeRecognitionUpload[]) {
+function response(items: unknown[]) {
   return new Response(JSON.stringify({ items }));
 }
 
@@ -74,6 +74,45 @@ it("sends registered original File bytes in one ordered multipart request withou
   expect(await bytes(files[0])).toEqual([0, 255, 1, 2]);
   expect(await bytes(files[1])).toEqual([0, 255, 1, 2]);
 });
+
+it("accepts server-verified image formats when browser types follow misleading filenames", async () => {
+  const images = [source("JPEG原图.png"), source("PNG原图.jpg"), source("WebP原图.png")];
+  const declaredTypes = ["image/png", "image/jpeg", "image/png"];
+  const actualTypes = ["image/jpeg", "image/png", "image/webp"] as const;
+  images.forEach((image, index) => {
+    registerIntakeImageFile(
+      image,
+      new File([new Uint8Array([0, 255, 1, 2])], image.name, { type: declaredTypes[index] }),
+    );
+  });
+  const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    response(
+      images.map((image, index) => ({
+        ...receipt(String(index + 1), image.name),
+        mime: actualTypes[index],
+      })),
+    ),
+  );
+  const operation = vi.fn((refs) => Promise.resolve(refs));
+  await expect(withIntakeImageRefs(images, operation)).resolves.toEqual([
+    { uploadId: "1".repeat(32) },
+    { uploadId: "2".repeat(32) },
+    { uploadId: "3".repeat(32) },
+  ]);
+  expect(operation).toHaveBeenCalledOnce();
+  const files = (fetch.mock.calls[0][1]?.body as FormData).getAll("file") as File[];
+  expect(files.map((file) => file.type)).toEqual(declaredTypes);
+});
+
+it.each([{ mime: "image/gif" }, { mime: "text/html" }, { size: 5 }])(
+  "rejects unsupported server formats or changed original sizes: %j",
+  async (invalid) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response([{ ...receipt("1"), ...invalid }]));
+    const operation = vi.fn();
+    await expect(withIntakeImageRefs([source()], operation)).rejects.toThrow("预约图片上传结果无效");
+    expect(operation).not.toHaveBeenCalled();
+  },
+);
 
 it("shares concurrent uploads by local object and only uploads additions while keeping input order", async () => {
   const first = source("one.png");

@@ -2,8 +2,11 @@ import base64
 import hashlib
 import sqlite3
 import unittest
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+from PIL import Image
 
 from server_app.domains.intake import recognition_uploads as uploads
 from server_app.domains.intake.recognition_uploads import RecognitionBusy, RecognitionUploads, UploadExpired
@@ -87,7 +90,9 @@ class RecognitionUploadTests(unittest.TestCase):
         self.assertEqual(intake_ai.intake_recognition_upload_handler(handler, {}).status, 401)
         handler.read_raw_body.assert_not_called()
         handler.current_user.return_value = ACTOR
-        files = [original("one.png"), original("two.png", "blue")]
+        jpeg = BytesIO()
+        Image.new("RGB", (12, 12), "red").save(jpeg, format="JPEG")
+        files = [("one.png", jpeg.getvalue()), original("two.png", "blue")]
         handler.read_raw_body.return_value = (
             b"".join(
                 b'--synthetic\r\nContent-Disposition: form-data; name="file"; filename="'
@@ -102,7 +107,15 @@ class RecognitionUploadTests(unittest.TestCase):
         with patch.object(intake_ai, "UPLOADS", self.store), patch.object(uploads, "UPLOADS", self.store):
             response = intake_ai.intake_recognition_upload_handler(handler, {})
             self.assertEqual(response.status, 201)
-            refs = [reference(item) for item in response.payload["items"]]
+            receipts = response.payload["items"]
+            self.assertEqual(
+                [(item["name"], item["mime"], item["size"], item["sha256"]) for item in receipts],
+                [
+                    (name, mime, len(content), hashlib.sha256(content).hexdigest())
+                    for (name, content), mime in zip(files, ["image/jpeg", "image/png"], strict=True)
+                ],
+            )
+            refs = [reference(item) for item in receipts]
             handler.read_json_body.return_value = {"imageRefs": refs}
             with patch(
                 "server_app.domains.intake.ai_parse.deepseek_chat_json", return_value=(sample_result(), {})
@@ -111,10 +124,14 @@ class RecognitionUploadTests(unittest.TestCase):
             self.assertEqual(parsed.status, 200)
             image_urls = ai.call_args.kwargs["image_urls"]
             self.assertEqual(
+                [url.split(",", 1)[0] for url in image_urls], ["data:image/jpeg;base64", "data:image/png;base64"]
+            )
+            self.assertEqual(
                 [base64.b64decode(url.split(",", 1)[1]) for url in image_urls], [body for _, body in files]
             )
             self.assertEqual(
-                parsed.payload["recognition"]["inputImages"][0]["sha256"], response.payload["items"][0]["sha256"]
+                [item["sha256"] for item in parsed.payload["recognition"]["inputImages"]],
+                [item["sha256"] for item in receipts],
             )
             self.now += 31
             with patch("server_app.domains.intake.ai_parse.deepseek_chat_json") as ai:

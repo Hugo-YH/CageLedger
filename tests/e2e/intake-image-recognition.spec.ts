@@ -124,8 +124,11 @@ test("recognizes synthetic images and persists evidence and original bytes in th
       },
     }),
   );
-  await page.getByLabel("预约图片文件", { exact: true }).setInputFiles([image, { ...image, name: "采购信息.png" }]);
-  await expect(page.getByRole("button", { name: "移除图片 采购信息.png" })).toBeVisible();
+  // The browser infers JPEG from this name, while the uploaded original is a valid PNG.
+  await page
+    .getByLabel("预约图片文件", { exact: true })
+    .setInputFiles([image, { ...image, name: "采购信息.jpg", mimeType: "image/jpeg" }]);
+  await expect(page.getByRole("button", { name: "移除图片 采购信息.jpg" })).toBeVisible();
   await expect(page.getByRole("button", { name: "本地识别" })).toBeDisabled();
   await page.getByRole("button", { name: "AI识别" }).click();
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("24");
@@ -167,7 +170,7 @@ test("recognizes synthetic images and persists evidence and original bytes in th
     item: {
       id: string;
       specification: string;
-      recognition: { extractedText: string; images: Array<{ url: string; name: string }> };
+      recognition: { extractedText: string; images: Array<{ url: string; name: string; mime: string }> };
     };
   };
   try {
@@ -182,6 +185,11 @@ test("recognizes synthetic images and persists evidence and original bytes in th
     const original = await page.request.get(persisted.item.recognition.images[0].url);
     expect(original.ok()).toBe(true);
     expect(await original.body()).toEqual(png);
+    expect(persisted.item.recognition.images[1]).toMatchObject({ name: "采购信息.jpg", mime: "image/png" });
+    const mismatchedOriginal = await page.request.get(persisted.item.recognition.images[1].url);
+    expect(mismatchedOriginal.ok()).toBe(true);
+    expect(mismatchedOriginal.headers()["content-type"]).toBe("image/png");
+    expect(await mismatchedOriginal.body()).toEqual(png);
     await info.attach("recognition-performance", {
       body: JSON.stringify({
         scope: "isolated-browser-fixture",
