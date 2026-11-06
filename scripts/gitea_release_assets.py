@@ -261,7 +261,7 @@ class ReleaseAssets:
             raise AssetError("Anonymous raw attachment access was not safely denied; source upload refused.") from None
 
 
-def download_script(tag, revision, manifest_name, manifest_sha256):
+def download_script(tag, revision, manifest_name, manifest_sha256, *, official=False):
     """Self-contained Python 3 downloader; only public identifiers are substituted."""
     template = r'''#!/usr/bin/env python3
 """Run: python3 CageLedger-download.py.txt --directory ./CageLedger-download
@@ -286,6 +286,7 @@ TAG = @TAG@
 REVISION = @REVISION@
 MANIFEST = @MANIFEST@
 MANIFEST_SHA256 = @MANIFEST_SHA256@
+OFFICIAL = @OFFICIAL@
 BLOCK = 65536
 
 
@@ -429,8 +430,9 @@ def main():
     opener = urllib.request.build_opener(NoRedirect())
     release = get_json(API + "/releases/tags/" + urllib.parse.quote(TAG, safe=""), opener, token)
     require(release.get("tag_name") == TAG and release.get("target_commitish") == REVISION
-            and release.get("draft") is True and release.get("prerelease") is True,
-            "Release identity differs from this development build.")
+            and ((OFFICIAL and type(release.get("draft")) is bool and release.get("prerelease") is False)
+                 or (not OFFICIAL and release.get("draft") is True and release.get("prerelease") is True)),
+            "Release identity differs from this build.")
     values = get_json(API + "/releases/" + str(release["id"]) + "/assets", opener, token)
     assets = {}
     for asset in values:
@@ -451,7 +453,8 @@ def main():
             require(piece["name"] in assets, "Required attachment is missing: " + piece["name"])
             download(assets[piece["name"]], piece, directory, opener, token)
         restore(record, directory)
-    print("All source and ARM64 archives were restored and SHA256 verified. No deployment was performed.")
+    print("All selected ARM64 delivery archives were restored and SHA256 verified. No deployment was performed."
+          if OFFICIAL else "All source and ARM64 archives were restored and SHA256 verified. No deployment was performed.")
 
 
 if __name__ == "__main__":
@@ -465,6 +468,7 @@ if __name__ == "__main__":
         "@REVISION@": revision,
         "@MANIFEST@": manifest_name,
         "@MANIFEST_SHA256@": manifest_sha256,
+        "@OFFICIAL@": official,
     }.items():
-        template = template.replace(key, json.dumps(value))
+        template = template.replace(key, repr(value) if key == "@OFFICIAL@" else json.dumps(value))
     return template.encode()

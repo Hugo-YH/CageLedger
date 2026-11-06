@@ -1,8 +1,8 @@
 {
   "name": "cageledger",
   "private": true,
-  "version": "1.30.0",
-  "build": 261,
+  "version": "1.30.1",
+  "build": 262,
   "type": "module",
   "license": "Apache-2.0",
   "author": "Hugo <info@cellnucle.us>",
@@ -58,6 +58,8 @@
     "test:python:target": "node scripts/run_python.mjs scripts/verify_local.py python",
     "package:managed": "node scripts/run_python.mjs scripts/verify_local.py package",
     "publish:cloud": "node scripts/run_python.mjs scripts/cloud_package_delivery.py",
+    "release:cloud": "node scripts/run_python.mjs scripts/cloud_release.py",
+    "publish:registry": "node scripts/run_python.mjs scripts/cloud_registry.py",
     "check:quality": "npm run format:check && npm run lint && npm run typecheck && npm run check:architecture -- --enforce && npm run check:api && npm run check:ui-contract && npm run check:style-ownership && npm run check:antd-design",
     "verify:quality": "node scripts/run_python.mjs scripts/verify_local.py quality",
     "build:shared": "node scripts/run_python.mjs scripts/frontend_build.py build"

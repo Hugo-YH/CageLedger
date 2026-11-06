@@ -103,6 +103,7 @@ class Plan:
     manifest: bytes
     restore: bytes
     payloads: tuple
+    official: bool = False
 
     @property
     def tag(self):
@@ -118,7 +119,11 @@ class Plan:
             self.directory / RESTORE_NAME: self.restore,
             self.directory / PROBE_NAME: PROBE_BODY,
             self.directory / DOWNLOAD_NAME: download_script(
-                self.tag, self.identity["revision"], self.manifest_path.name, hashlib.sha256(self.manifest).hexdigest()
+                self.tag,
+                self.identity["revision"],
+                self.manifest_path.name,
+                hashlib.sha256(self.manifest).hexdigest(),
+                official=self.official,
             ),
         }
 
@@ -279,13 +284,27 @@ def split_artifact(artifact, chunk_bytes, directory, *, write):
     return tuple(result)
 
 
-def prepare(repo, output, version=None, *, check_remote=True, chunk_bytes=8 * 1024 * 1024, write_parts=False):
+def prepare(
+    repo,
+    output,
+    version=None,
+    *,
+    check_remote=True,
+    chunk_bytes=8 * 1024 * 1024,
+    write_parts=False,
+    official=False,
+    include_source=True,
+):
     identity = source_identity(repo, check_remote=check_remote)
-    expected_version = f"{identity['app_version']}-dev.{identity['revision'][:12]}"
+    expected_version = (
+        identity["app_version"] if official else f"{identity['app_version']}-dev.{identity['revision'][:12]}"
+    )
     version = version or expected_version
     require(
         version == expected_version,
-        "Development draft version must identify the current application and source revision.",
+        "Official version must match package.json."
+        if official
+        else "Development draft version must identify the current application and source revision.",
     )
     require(0 < chunk_bytes <= 8 * 1024 * 1024, "Attachment chunk size must be greater than zero and at most 8 MiB.")
     app = identity["app_version"]
@@ -298,7 +317,7 @@ def prepare(repo, output, version=None, *, check_remote=True, chunk_bytes=8 * 10
     validate_checksums(checksums, notes, image)
     directory = output / "cloud-delivery" / version
     records, payloads, commands = [], [], []
-    for artifact in (source, notes, checksums, image):
+    for artifact in (source, notes, checksums, image) if include_source else (notes, checksums, image):
         pieces = split_artifact(artifact, chunk_bytes, directory / "parts", write=write_parts)
         records.append({**artifact.metadata(), "attachments": [part.metadata() for part in pieces]})
         payloads.extend(pieces)
@@ -314,13 +333,17 @@ def prepare(repo, output, version=None, *, check_remote=True, chunk_bytes=8 * 10
         )
     require(source_identity(repo, check_remote=False) == identity, "Source changed during artifact verification.")
     restore = (
-        "CageLedger ARM64 development build archive restoration\n\n"
-        "Alternatively run python3 CageLedger-download.py.txt to fetch and restore private attachments using an environment token or hidden prompt.\n\nDownload all attachments into one directory. Files ending in .partNNNN.gz are consecutive binary pieces, NOT independently decompressible gzip files. Concatenate only in the explicit order below, then verify the full archive SHA256 before extracting or docker load. Original archives are unchanged.\n\n"
+        (
+            "CageLedger ARM64 release archive restoration\n\n"
+            if official
+            else "CageLedger ARM64 development build archive restoration\n\n"
+        )
+        + "Alternatively run python3 CageLedger-download.py.txt to fetch and restore private attachments using an environment token or hidden prompt.\n\nDownload all attachments into one directory. Files ending in .partNNNN.gz are consecutive binary pieces, NOT independently decompressible gzip files. Concatenate only in the explicit order below, then verify the full archive SHA256 before extracting or docker load. Original archives are unchanged.\n\n"
         "set -eu\n" + "\n".join(commands) + "\n"
     ).encode()
     manifest = {
         "schema_version": 2,
-        "delivery": "private-development-draft-release",
+        "delivery": "private-official-release" if official else "private-development-draft-release",
         "version": version,
         "source": {"repository": f"{ORIGIN}/hugo/cageledger", **identity},
         "platforms": [PLATFORM],
@@ -331,8 +354,10 @@ def prepare(repo, output, version=None, *, check_remote=True, chunk_bytes=8 * 10
         "downloader": DOWNLOAD_NAME,
         "recovery": {"name": RESTORE_NAME, "size": len(restore), "sha256": hashlib.sha256(restore).hexdigest()},
     }
+    if official:
+        manifest["source_archive_included"] = include_source
     encoded = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
-    return Plan(repo, identity, version, directory, encoded, restore, tuple(payloads))
+    return Plan(repo, identity, version, directory, encoded, restore, tuple(payloads), official)
 
 
 def save_receipt(path, value):
@@ -388,6 +413,7 @@ def verify_release(value, payload, receipt, actor):
 
 
 def ensure_release(plan, client, receipt, path):
+    require(not plan.official, "Official plans require the release:cloud entry point.")
     repository_id, actor = client.repository(), client.actor()
     require(receipt.get("repository_id", repository_id) == repository_id, "Private source repository identity changed.")
     require(receipt.get("actor", actor) == actor, "Delivery actor changed; inspect ownership before resuming.")
@@ -440,11 +466,12 @@ def probe_privacy(plan, client, release_id, assets):
     return proof, assets
 
 
-def deliver(plan, client, state, *, audit_remote=False):
+def deliver(plan, client, state, *, audit_remote=False, ensure=None, verify=None):
+    ensure, verify = ensure or ensure_release, verify or verify_release
     require(not state.resolve().is_relative_to(plan.repo.resolve()), "Delivery state must be outside the repository.")
     path = state / "receipt.json"
     identity = {
-        "transport": "private-draft-release-v1",
+        "transport": "private-official-release-v1" if plan.official else "private-draft-release-v1",
         "source": plan.identity,
         "tag": plan.tag,
         "manifest_sha256": hashlib.sha256(plan.manifest).hexdigest(),
@@ -465,7 +492,7 @@ def deliver(plan, client, state, *, audit_remote=False):
     try:
         for artifact_path, content in plan.generated().items():
             write_immutable(artifact_path, content)
-        release_id, payload, actor = ensure_release(plan, client, receipt, path)
+        release_id, payload, actor = ensure(plan, client, receipt, path)
         assets = client.assets(release_id)
         allowed = {artifact.path.name for artifact in plan.files()} | {PROBE_NAME}
         require(set(assets) <= allowed, "Owned draft contains unknown attachments; inspect before resuming.")
@@ -513,7 +540,7 @@ def deliver(plan, client, state, *, audit_remote=False):
             }
             save_receipt(path, receipt)
             print(f"{status} ({scope}): {active}", flush=True)
-        verify_release(client.release(release_id), payload, receipt, actor)
+        verify(client.release(release_id), payload, receipt, actor)
         require(client.repository() == receipt["repository_id"], "Private repository identity changed.")
         require(source_identity(plan.repo, check_remote=False) == plan.identity, "Source changed during upload.")
         final_assets = client.assets(release_id)
@@ -540,6 +567,12 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
     parser.add_argument("--state-dir", type=Path, help="Receipt directory outside the source checkout")
     parser.add_argument(
+        "--image-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Upload images only (default); source upload requires a new explicit request",
+    )
+    parser.add_argument(
         "--chunk-mib",
         type=int,
         default=8,
@@ -562,6 +595,7 @@ def main():
         check_remote=not options.dry_run,
         chunk_bytes=options.chunk_mib * 1024 * 1024,
         write_parts=not options.dry_run,
+        include_source=not options.image_only,
     )
     if options.dry_run:
         print(
