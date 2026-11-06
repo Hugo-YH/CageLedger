@@ -112,6 +112,15 @@ class DirectContainerPackageTests(unittest.TestCase):
             "CAGELEDGER_BUILD_PRUNE": "0",
             "MOCK_DOCKER_LOG": str(self.log),
         }
+        (self.root / "scripts/runtime_image.py").write_text(
+            "import os,sys\n"
+            "if os.environ.get('MOCK_RUNTIME_ERROR'): raise SystemExit('runtime dependency drift')\n"
+            "assert sys.argv[1] == 'context'\n"
+            "if '--docker-registry' in sys.argv:\n"
+            " assert sys.argv[2] == '--docker-registry'\n"
+            " print('docker-image://' + sys.argv[3] + '/hugo/cageledger@sha256:' + 'b'*64)\n"
+            "else: print('oci-layout:///verified/runtime@sha256:' + 'b'*64)\n"
+        )
         for variable in (
             "CAGELEDGER_REGISTRY",
             "CAGELEDGER_IMAGE_NAMESPACE",
@@ -197,10 +206,30 @@ class DirectContainerPackageTests(unittest.TestCase):
         self.assertEqual(len(builds), 1)
         self.assertIn("FRONTEND_OUTPUT=frontend-artifact", builds[0])
         self.assertIn(f"frontend-assets={self.root}/web-dist", builds[0])
+        self.assertIn("RUNTIME_IMAGE=runtime-base", builds[0])
+        self.assertIn("runtime-base=oci-layout:///verified/runtime@sha256:" + "b" * 64, builds[0])
         receipt.write_text("stale")
         result = self.run_package()
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(len([args for args in self.commands() if args[:2] == ["buildx", "build"]]), 1)
+
+    def test_changed_runtime_is_refused_before_build_or_replacing_previous_artifacts(self):
+        previous = self.previous_packages()
+        self.env["MOCK_RUNTIME_ERROR"] = "1"
+        result = self.run_package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any(args[:2] == ["buildx", "build"] for args in self.commands()))
+        for path, content in previous.items():
+            self.assertEqual(path.read_bytes(), content)
+
+    def test_external_output_keeps_existing_release_archives_intact(self):
+        previous = self.previous_packages()
+        output = self.root / "verification-only"
+        result = self.run_package("--output-dir", str(output))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((output / "CageLedger-image-1.2.3-arm64.tar.gz").is_file())
+        for path, content in previous.items():
+            self.assertEqual(path.read_bytes(), content)
 
     def previous_packages(self):
         output = self.root / "dist"
@@ -237,6 +266,7 @@ class DirectContainerPackageTests(unittest.TestCase):
         builds = [args for args in commands if args[:2] == ["buildx", "build"]]
         self.assertEqual([args[args.index("--platform") + 1] for args in builds], ["linux/arm64"])
         self.assertEqual([args[args.index("--builder") + 1] for args in builds], ["colima"])
+        self.assertIn("runtime-base=docker-image://" + self.repository + "@sha256:" + "b" * 64, builds[0])
         self.assertIn(["context", "show"], commands)
         inspected_contexts = [args[2] for args in commands if args[:2] == ["context", "inspect"]]
         self.assertTrue(inspected_contexts)

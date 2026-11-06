@@ -334,6 +334,29 @@ class Client:
                 return 404, {}, b""
             raise error from None
 
+    def open_blob(self, value, *, offset=0):
+        """Stream an immutable repository blob without the small-metadata buffer."""
+        require(bool(re.fullmatch(r"sha256:[0-9a-f]{64}", value)), "Invalid registry blob digest.")
+        require(type(offset) is int and offset >= 0, "Invalid registry blob offset.")
+        url = checked_url(BASE + "/blobs/" + value)
+        for attempt in range(2):
+            if self.bearer is None:
+                self.authenticate()
+            headers = {"Authorization": "Bearer " + self.bearer}
+            if offset:
+                headers["Range"] = f"bytes={offset}-"
+            try:
+                return self.opener.open(urllib.request.Request(url, headers=headers, method="GET"), timeout=120)
+            except urllib.error.HTTPError as error:
+                status = error.code
+                error.close()
+                if status == 401 and attempt == 0:
+                    self.authenticate()
+                    continue
+                raise HTTPFailure("GET", url, status) from None
+            except (OSError, urllib.error.URLError):
+                raise RegistryError("Registry blob stream failed; preserve the runtime download state.") from None
+
     def manifest(self, reference):
         require(
             bool(re.fullmatch(r"(?:sha256:[0-9a-f]{64}|[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})", reference)),

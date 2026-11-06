@@ -209,6 +209,27 @@ class RegistryPublicationTests(unittest.TestCase):
 
 
 class RegistryTransportTests(unittest.TestCase):
+    def test_blob_stream_is_scoped_and_does_not_buffer_large_metadata(self):
+        calls = []
+
+        class Opener:
+            def open(self, request, timeout):
+                calls.append(request)
+                return io.BytesIO(b"large immutable blob contents")
+
+        client = registry.Client("BASIC-BINDING", opener=Opener())
+        client.bearer = "MEMORY-ONLY-JWT"
+        value = "sha256:" + "a" * 64
+        with patch.object(registry, "LIMIT", 8), client.open_blob(value, offset=5) as response:
+            self.assertEqual(response.read(4), b"larg")
+        self.assertEqual(calls[0].full_url, registry.ORIGIN + registry.BASE + "/blobs/" + value)
+        self.assertEqual(calls[0].get_header("Authorization"), "Bearer MEMORY-ONLY-JWT")
+        self.assertEqual(calls[0].get_header("Range"), "bytes=5-")
+        for bad_value, offset in (("../token", 0), (value, -1)):
+            with self.subTest(value=bad_value), self.assertRaises(registry.RegistryError):
+                client.open_blob(bad_value, offset=offset)
+        self.assertEqual(len(calls), 1)
+
     def test_basic_is_used_verbatim_only_for_token_and_bearer_only_for_registry(self):
         calls = []
 

@@ -7,14 +7,18 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import cloud_package_delivery as delivery
+import cloud_registry as registry
 import cloud_release as release
+import cloud_release_registry as release_registry
 import gitea_release_assets as assets
 
 from tests import test_cloud_package_delivery as fixtures
+from tests import test_cloud_registry as registry_fixtures
 
 NOTES = "## 1.2.3（Build 42）\n\n### 预约识别\n\n- 保留原件，减少重复上传。"
 TAG_OBJECT = "b" * 40
@@ -38,7 +42,11 @@ class OfficialMemory(fixtures.MemoryRelease):
 
 
 class OfficialLifecycleTests(unittest.TestCase):
-    setUp = fixtures.LocalArtifacts.setUp
+    def setUp(self):
+        fixtures.LocalArtifacts.setUp(self)
+        self.registry_verification = patch.object(
+            release, "verify_registry", side_effect=lambda plan: json.loads(plan.manifest)["registry"]
+        ).start()
 
     def git_result(self, repo, *arguments):
         if arguments[0] == "cat-file":
@@ -50,13 +58,54 @@ class OfficialLifecycleTests(unittest.TestCase):
         return fixtures.LocalArtifacts.git_result(self, repo, *arguments)
 
     def plan(self, **options):
+        proof = {
+            "status": "verified",
+            "repository": release_registry.IMAGE_REPOSITORY,
+            "version": "1.2.3",
+            "revision": fixtures.REVISION,
+            "archive_sha256": "sha256:" + delivery.sha256_file(self.image),
+            **{
+                key: {"digest": "sha256:" + marker * 64, "size": 100, "mediaType": kind}
+                for key, marker, kind in (
+                    ("manifest", "1", registry.IMAGE),
+                    ("index", "2", registry.INDEX),
+                    ("config", "3", registry.CONFIG),
+                )
+            },
+        }
+        options.setdefault("registry_proof", proof)
         return delivery.prepare(self.repo, self.output, official=True, write_parts=True, **options)
 
+    def test_default_has_only_small_metadata_and_exact_package_pull_instructions(self):
+        with patch.object(delivery, "split_artifact", side_effect=AssertionError("default must not split images")):
+            plan = self.plan()
+        manifest = json.loads(plan.manifest)
+        self.assertFalse(plan.offline_image)
+        self.assertFalse(manifest["source_archive_included"])
+        self.assertFalse(manifest["offline_image_included"])
+        self.assertEqual(manifest["artifacts"], [])
+        self.assertEqual(plan.payloads, ())
+        self.assertEqual({item.path.name for item in plan.files()}, {plan.manifest_path.name, delivery.PULL_NAME})
+        self.assertEqual(
+            set(plan.generated()),
+            {plan.manifest_path, plan.directory / delivery.PULL_NAME, plan.directory / delivery.PROBE_NAME},
+        )
+        self.assertIn(manifest["registry"]["index"]["digest"], plan.restore.decode())
+        body = release.release_payload(plan, "owner", NOTES)["body"]
+        self.assertIn("docker pull git.cellnucle.us/hugo/cageledger:1.2.3", body)
+        self.assertNotIn("CageLedger-download.py.txt", body)
+        # The old source-upload compatibility flag cannot make a formal metadata plan upload source.
+        self.assertEqual(self.plan(include_source=True).manifest, plan.manifest)
+
     def test_image_only_filters_manifest_payloads_restore_and_official_body(self):
-        plan = self.plan(include_source=False, chunk_bytes=128)
+        plan = self.plan(include_source=True, offline_image=True, chunk_bytes=128)
         manifest = json.loads(plan.manifest)
         self.assertEqual(plan.tag, "v1.2.3")
         self.assertFalse(manifest["source_archive_included"])
+        self.assertTrue(manifest["offline_image_included"])
+        self.assertTrue(plan.offline_image)
+        self.assertTrue(any(".part" in item.path.name for item in plan.payloads))
+        self.assertIn(plan.directory / delivery.DOWNLOAD_NAME, plan.generated())
         self.assertNotIn(self.source_archive.name, plan.restore.decode())
         self.assertFalse(any("CageLedger-offline-" in item.path.name for item in plan.files()))
         self.assertEqual(
@@ -72,7 +121,7 @@ class OfficialLifecycleTests(unittest.TestCase):
         self.assertTrue(any(item.path.name == self.source_archive.name for item in default.files()))
         self.assertTrue(default.version.startswith("1.2.3-dev."))
 
-    def test_complete_draft_publishes_once_and_resumes_without_reading_large_artifacts(self):
+    def test_complete_draft_publishes_once_and_resumes_with_trusted_attachment_proof(self):
         plan, client, state = self.plan(include_source=False), OfficialMemory(), self.directory / "official"
         path = release.release(plan, client, state, notes=NOTES, publish=True)
         receipt = json.loads(path.read_text())
@@ -91,6 +140,44 @@ class OfficialLifecycleTests(unittest.TestCase):
         self.assertEqual(client.patches, 1)
         self.assertEqual(client.uploaded, uploaded)
         self.assertEqual(client.body_reads, [delivery.PROBE_NAME, delivery.PROBE_NAME])
+
+    def test_unverified_package_or_live_registry_conflict_cannot_create_or_publish_release(self):
+        with self.assertRaisesRegex(delivery.DeliveryError, "verified Container Package"):
+            self.plan(registry_proof={"status": "incomplete"})
+        plan, client, state = self.plan(), OfficialMemory(), self.directory / "registry-conflict"
+        self.registry_verification.side_effect = registry.RegistryError("Container Package registry digest changed.")
+        with self.assertRaises(registry.RegistryError):
+            release.release(plan, client, state, notes=NOTES, publish=True)
+        self.assertIsNone(client.value)
+        self.assertFalse((state / "receipt.json").exists())
+        self.registry_verification.side_effect = lambda plan: json.loads(plan.manifest)["registry"]
+        release.release(plan, client, state, notes=NOTES)
+        self.registry_verification.side_effect = registry.RegistryError("Container Package registry digest changed.")
+        with self.assertRaises(registry.RegistryError):
+            release.publish_verified(plan, client, state, notes=NOTES)
+        self.assertTrue(client.value["draft"])
+        self.assertEqual(client.patches, 0)
+
+    def test_legacy_or_other_delivery_mode_receipt_is_preserved_and_never_adopted(self):
+        plan, client, state = self.plan(), OfficialMemory(), self.directory / "legacy"
+        state.mkdir()
+        original = json.dumps(
+            {
+                "identity": {**release.expected_identity(plan), "transport": "private-official-release-v1"},
+                "ownership": "old-owner",
+                "files": {},
+            }
+        )
+        path = state / "receipt.json"
+        path.write_text(original)
+        with self.assertRaisesRegex(delivery.DeliveryError, "different artifacts or transport"):
+            release.release(plan, client, state, notes=NOTES)
+        self.assertEqual(path.read_text(), original)
+        self.assertIsNone(client.value)
+        self.assertNotEqual(
+            release.expected_identity(plan)["transport"],
+            release.expected_identity(self.plan(offline_image=True))["transport"],
+        )
 
     def test_lost_publish_response_reconciles_owned_published_state_without_second_patch(self):
         plan, client, state = self.plan(), OfficialMemory(), self.directory / "unknown-response"
@@ -139,6 +226,59 @@ class OfficialLifecycleTests(unittest.TestCase):
                 release.publish_verified(plan, client, state, notes=NOTES)
         self.assertEqual(client.patches, 0)
         self.assertTrue(client.value["draft"])
+
+
+class RegistryBindingTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.directory = Path(self.temporary.name)
+        self.output = self.directory / "dist"
+        self.output.mkdir()
+        self.source = {"app_version": registry_fixtures.VERSION, "revision": registry_fixtures.REVISION}
+        self.archive = self.output / f"CageLedger-image-{registry_fixtures.VERSION}-arm64.tar.gz"
+        registry_fixtures.make_archive(self.archive)
+        self.state = self.directory / "registry"
+        self.prepared = registry.prepare_archive(
+            self.archive, self.state, **{"version": self.source["app_version"], "revision": self.source["revision"]}
+        )
+        self.client = registry_fixtures.MemoryRegistry()
+        self.receipt = registry.Publisher(self.prepared, self.state, self.client).publish()
+
+    def evidence(self):
+        return release_registry.registry_evidence(self.output, self.state, source=self.source)
+
+    def test_matching_published_package_is_bound_without_uploading_or_reading_layers(self):
+        evidence = self.evidence()
+        plan = SimpleNamespace(identity=self.source, manifest=json.dumps({"registry": evidence}))
+        writes = list(self.client.manifest_puts)
+        calls = []
+        original = self.client.request
+
+        def track(method, path, **options):
+            calls.append((method, path))
+            return original(method, path, **options)
+
+        with patch.object(self.client, "request", side_effect=track):
+            self.assertEqual(release_registry.verify_registry(plan, client=self.client), evidence)
+        self.assertEqual(self.client.manifest_puts, writes)
+        config = self.prepared["config"]["digest"]
+        self.assertEqual([path for method, path in calls if method == "GET"], [registry.BASE + "/blobs/" + config])
+        self.assertNotIn("layout_directory", evidence)
+        self.assertNotIn("tags", evidence)
+
+    def test_missing_local_publication_proof_or_changed_remote_package_is_rejected(self):
+        evidence = self.evidence()
+        plan = SimpleNamespace(identity=self.source, manifest=json.dumps({"registry": evidence}))
+        value = json.loads(self.receipt.read_text())
+        value["status"] = "running"
+        self.receipt.write_text(json.dumps(value))
+        with self.assertRaisesRegex(registry.RegistryError, "matching verified"):
+            self.evidence()
+        tag = self.source["app_version"]
+        self.client.tags[tag] = ("sha256:" + "0" * 64, self.client.tags[tag][1])
+        with self.assertRaisesRegex(registry.RegistryError, "digest changed"):
+            release_registry.verify_registry(plan, client=self.client)
 
 
 class RealAnnotatedTagTests(unittest.TestCase):

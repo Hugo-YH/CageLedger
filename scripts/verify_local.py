@@ -87,6 +87,16 @@ def verification_guard(output):
     return (LinuxTestGuard if sys.platform == "linux" else HostGuard)(output)
 
 
+def job_environment(mode, job, environment):
+    result = dict(environment)
+    # Only the container packager may fetch a missing pinned runtime. Keep this
+    # network binding out of application tests and frontend/source packaging.
+    key = "CAGELEDGER_GITEA_REGISTRY_BASIC"
+    if mode == "package" and job == ["npm", "run", "package:container"] and key in os.environ:
+        result[key] = os.environ[key]
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=MODES)
@@ -156,7 +166,7 @@ def main():
                     continue
                 try:
                     log = directory / f"step-{index + 1}" / "command.log"
-                    runner.run(job, log, env=environment)
+                    runner.run(job, log, env=job_environment(args.mode, job, environment))
                     verification_cache.test_evidence(job, log)
                     entry["status"] = "passed"
                     if verification_cache.cache_key(ROOT, job, environment) == keys[index]:

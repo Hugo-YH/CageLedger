@@ -83,6 +83,21 @@ class LocalArtifacts(unittest.TestCase):
     def plan(self):
         return delivery.prepare(self.repo, self.output)
 
+    def test_cli_requires_explicit_offline_image_before_preparing_or_splitting(self):
+        with patch.object(sys, "argv", ["publish:cloud"]), patch.object(delivery, "prepare") as prepare:
+            with self.assertRaisesRegex(delivery.DeliveryError, "publish:registry"):
+                delivery.main()
+        prepare.assert_not_called()
+
+    def test_legacy_source_flag_cannot_add_source_to_explicit_offline_cli(self):
+        with (
+            patch.object(sys, "argv", ["publish:cloud", "--offline-image", "--no-image-only", "--dry-run"]),
+            patch.object(delivery, "prepare", return_value=self.plan()) as prepare,
+            patch("builtins.print"),
+        ):
+            delivery.main()
+        self.assertFalse(prepare.call_args.kwargs["include_source"])
+
     def test_clean_source_and_remote_revision_are_required(self):
         result = self.plan()
         self.assertEqual(result.version, f"1.2.3-dev.{REVISION[:12]}")

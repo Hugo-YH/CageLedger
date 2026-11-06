@@ -1,20 +1,22 @@
 # 发布工程
 
-Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。云端交付 `linux/arm64` Packages镜像及离线镜像包；离线源码包后续由Gitea本地构建，Codex不上传，历史AMD64版本保持不变。备用 Runner 见 [macos-gitea-runner.md](macos-gitea-runner.md)，只接受手动任务。云端本地打包、授权上传和生产部署分开处理，操作见 [cloud-development.md](cloud-development.md)。本文的 `release:local` 保留原 Mac mini 受管发布流程及其平台专用校验。发布不会操作生产服务、原始数据库或附件；生产部署需要单独授权。测试范围与资源预算以 [测试策略](testing-strategy.md) 为准。
+Codex 云端负责日常开发、验收、按影响范围的测试和交付任务的软件包构建；代码及产物推送到 Gitea，由 Gitea 托管代码和软件包。Mac mini Runner 仅作可选手动备用。云端默认交付 `linux/arm64` Packages 镜像和轻量 Release，离线镜像包仅在显式要求时上传；离线源码包后续由Gitea本地构建，Codex不上传，历史AMD64版本保持不变。备用 Runner 见 [macos-gitea-runner.md](macos-gitea-runner.md)，只接受手动任务。云端本地打包、授权上传和生产部署分开处理，操作见 [cloud-development.md](cloud-development.md)。本文的 `release:local` 保留原 Mac mini 受管发布流程及其平台专用校验。发布不会操作生产服务、原始数据库或附件；生产部署需要单独授权。测试范围与资源预算以 [测试策略](testing-strategy.md) 为准。
 
 ## 普通构建交付与正式发布
 
-普通修改按影响范围验证；只有明确交付任务才在云端构建并向 Gitea 上传软件包。测试证据、构建源码与产物必须对应同一最终状态和来源 revision。普通开发产物可使用 Gitea 私有仓库的开发构建草稿附件，附来源清单、ARM64 镜像包及 SHA256，不上传源码包；同名远端文件仅在哈希一致时复用，冲突停止，不覆盖历史制品，不自动部署 NAS。
+普通修改按影响范围验证；只有明确交付任务才在云端构建并向 Gitea 上传软件包。测试证据、构建源码与产物必须对应同一最终状态和来源 revision。普通开发产物可使用 Gitea 私有仓库的开发构建草稿附件，仅在显式 `--offline-image` 时附 ARM64 镜像包及 SHA256，不上传源码包；同名远端文件仅在哈希一致时复用，冲突停止，不覆盖历史制品，不自动部署 NAS。
 
 下文的完整 `release:local` 管线保留 Mac 平台转换器信任校验；当前云端 WebKit 系统库受限，Linux 完整正式发布管线尚不能宣称已全部适配。开发包上传不能替代正式 Release 所需门禁、版本与标签核对。
 
+运行环境由 `runtime-image.lock.json` 固定到不可变 ARM64 摘要，应用构建跳过依赖安装。修改基础摘要、冻结 Python 依赖或运行时构建输入后，显式执行 `npm run runtime:refresh` 并提交新锁；只有需要系统依赖安全刷新时使用 `--rebuild`。内容寻址运行环境标签与应用版本互不覆盖。日常保留缓存并复用相同父层；完整离线 tar.gz 每版仍是整包，因此默认不上传。具体操作及凭据路径见 [云端交付](cloud-development.md)。
+
 ## 先诊断，再发布
 
-云端本次正式交付使用 `npm run release:cloud -- --image-only --publish`：先同步版本和更新记录、完成相关验收、构建并冒烟同一提交的ARM64镜像，再创建附注标签并推送对应分支及标签。入口要求远端标签对象和剥离提交均匹配，先在有所有权凭据的正式版本草稿上传、完整校验新附件，最后才转为 `draft=false`、`prerelease=false`。保留完整版本更新说明、来源提交和镜像恢复方法；失败按同一外部状态凭据恢复，不认领或覆盖其他Release。
+云端本次正式交付使用 `npm run release:cloud -- --publish`：先同步版本和更新记录、完成相关验收、构建并冒烟同一提交的ARM64镜像，再创建附注标签并推送对应分支及标签。入口要求远端标签对象和剥离提交均匹配，先核验同版本 Packages 成功凭据和远端镜像摘要，在所有权明确的正式草稿上传小型来源/摘要及拉取指引，最后才转为 `draft=false`、`prerelease=false`。保留完整版本更新说明、来源提交和镜像恢复方法；失败按同一外部状态凭据恢复，不认领或覆盖其他Release。
 
 云端Packages仍必需推送：使用 `publish:registry` 上传同一ARM64归档并验证版本镜像/索引；该版本正式Release完成后才显式更新 `latest`。软件包推送、Release附件与离线源码包是不同交付项；后者后续改由Gitea本地构建，不能因省略源码包而省略Packages。代理网络密钥的Basic/Bearer认证与分块续传细节见 [云端交付](cloud-development.md)。
 
-以后也不由Codex上传额外离线源码包，后续Gitea本地构建另行配置；Gitea自动生成的源码归档入口保持原样。本地源码包仍可生成并用于构建来源核验。正式附件包含ARM64离线镜像、加载说明、SHA256、来源清单和分片下载重组脚本；镜像附件上传不等同于Registry推送，该入口不移动Registry的 `latest`，也不部署NAS。下方 `release:local` 是独立Mac完整正式发布配置。
+以后也不由Codex上传额外离线源码包，后续Gitea本地构建另行配置；Gitea自动生成的源码归档入口保持原样。本地源码包仍可生成并用于构建来源核验。正式附件默认只有来源/Registry 摘要、拉取指引与权限探针；显式 `--offline-image` 时才额外包含 ARM64 离线镜像、加载说明、SHA256 和分片下载重组脚本；镜像附件上传不等同于Registry推送，该入口不移动Registry的 `latest`，也不部署NAS。下方 `release:local` 是独立Mac完整正式发布配置。
 
 ```bash
 npm run release:doctor
@@ -27,7 +29,7 @@ npm run release:local -- --version X.Y.Z --push
 
 `doctor` 汇总 Node、Python、Git 身份、隔离检出、内存压力、锁定版本浏览器、Docker 和转换器的就绪状态。`--online` 额外只读检查 Git 远端与 Gitea API 仓库权限，不上传制品。它不是测试通过证明，也不能提前保证 Registry 写权限或未来网络可用。正式入口仍校验分支、版本占用、完整门禁和发布后的制品。
 
-云端默认顺序：冻结源码与版本 → 复用有效检查并补受影响范围 → 应用/文档共享构建一次 → 源码包与ARM64镜像 → 新产物一次冒烟 → 推代码及标签 → Packages 版本镜像 → 正式草稿附件上传及每个新附件一次完整回读 → 发布 Release → 更新 latest。兼容引擎、Writer/PDF和完整回归由改动风险或显式要求触发。上传权限/草稿身份只在首尾复核，可信续传不重复下载已验证字节；显式 `--audit-remote` 保留全面存储审计。
+云端默认顺序：冻结源码与版本 → 复用有效检查并补受影响范围 → 应用/文档共享构建一次 → 源码包与ARM64镜像 → 新产物一次冒烟 → 推代码及标签 → Packages 版本镜像 → 正式草稿轻量附件上传（显式离线模式才传整包）及每个新附件一次完整回读 → 发布 Release → 更新 latest。兼容引擎、Writer/PDF和完整回归由改动风险或显式要求触发。上传权限/草稿身份只在首尾复核，可信续传不重复下载已验证字节；显式 `--audit-remote` 保留全面存储审计。
 
 下方 Mac 完整正式发布配置仍使用：环境预检 → 版本和更新记录 → 转换器 → 基础检查 → 一次应用/文档构建 → 完整浏览器门禁 → 源码包 → 提交/标签及交付。基础check不再单独构建文档，打包继续复用有效build凭据；浏览器目录与成功结果复用不受调度上限改变影响。它不是云端默认测试范围。
 

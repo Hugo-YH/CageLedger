@@ -105,6 +105,17 @@ class VerificationScopeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             verify.commands("package", ["unrequested-target"])
 
+    def test_runtime_network_binding_is_scoped_to_container_packaging(self):
+        key = "CAGELEDGER_GITEA_REGISTRY_BASIC"
+        isolated = {"DEEPSEEK_API_KEY": "", "CAGELEDGER_EPHEMERAL_DB": "1"}
+        with patch.dict(verify.os.environ, {key: "opaque-network-binding", "DEEPSEEK_API_KEY": "unrelated-secret"}):
+            for job in verify.commands("package", []):
+                result = verify.job_environment("package", job, isolated)
+                self.assertEqual(key in result, job[-1] == "package:container")
+                self.assertEqual(result["DEEPSEEK_API_KEY"], "")
+            self.assertNotIn(key, verify.job_environment("python", ["python", "test.py"], isolated))
+        self.assertNotIn(key, isolated)
+
     def test_full_and_browser_scope_preserve_serial_stages_single_worker(self):
         jobs = verify.commands("full", [])
         self.assertEqual(len(jobs), 4)

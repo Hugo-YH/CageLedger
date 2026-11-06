@@ -23,6 +23,7 @@ PROBE_NAME = "access-probe.txt"
 PROBE_BODY = b"CageLedger draft-release raw download permission probe. No source or build identity.\n"
 RESTORE_NAME = "RESTORE.txt"
 DOWNLOAD_NAME = "CageLedger-download.py.txt"
+PULL_NAME = "PULL.txt"
 
 
 class DeliveryError(AssetError):
@@ -104,6 +105,7 @@ class Plan:
     restore: bytes
     payloads: tuple
     official: bool = False
+    offline_image: bool = True
 
     @property
     def tag(self):
@@ -114,18 +116,20 @@ class Plan:
         return self.directory / f"CageLedger-build-{self.version}.json"
 
     def generated(self):
-        return {
+        generated = {
             self.manifest_path: self.manifest,
-            self.directory / RESTORE_NAME: self.restore,
+            self.directory / (RESTORE_NAME if self.offline_image else PULL_NAME): self.restore,
             self.directory / PROBE_NAME: PROBE_BODY,
-            self.directory / DOWNLOAD_NAME: download_script(
+        }
+        if self.offline_image:
+            generated[self.directory / DOWNLOAD_NAME] = download_script(
                 self.tag,
                 self.identity["revision"],
                 self.manifest_path.name,
                 hashlib.sha256(self.manifest).hexdigest(),
                 official=self.official,
-            ),
-        }
+            )
+        return generated
 
     def files(self):
         generated = tuple(
@@ -294,6 +298,8 @@ def prepare(
     write_parts=False,
     official=False,
     include_source=True,
+    offline_image=None,
+    registry_proof=None,
 ):
     identity = source_identity(repo, check_remote=check_remote)
     expected_version = (
@@ -315,6 +321,42 @@ def prepare(
     count = validate_source_archive(source.path, identity, repo)
     validate_archive(image.path, "arm64", app, identity["revision"], f"{IMAGE}:{app}-arm64")
     validate_checksums(checksums, notes, image)
+    require(source_identity(repo, check_remote=False) == identity, "Source changed during artifact verification.")
+    offline_image = not official if offline_image is None else offline_image
+    include_source = include_source and not official
+    if official:
+        require(
+            isinstance(registry_proof, dict)
+            and registry_proof.get("status") == "verified"
+            and registry_proof.get("repository") == "git.cellnucle.us/hugo/cageledger"
+            and registry_proof.get("version") == app
+            and registry_proof.get("revision") == identity["revision"]
+            and registry_proof.get("archive_sha256") == "sha256:" + image.sha256,
+            "Official Release requires matching verified Container Package evidence.",
+        )
+    if not offline_image:
+        require(official, "Development attachments require explicit --offline-image.")
+        pull = (
+            f"CageLedger {app} / linux/arm64\n\n"
+            f"docker pull git.cellnucle.us/hugo/cageledger:{app}\n"
+            f"docker pull git.cellnucle.us/hugo/cageledger@{registry_proof['index']['digest']}\n\n"
+            "Docker reuses existing layers. This Release does not attach offline image/source archives.\n"
+        ).encode()
+        manifest = {
+            "schema_version": 3,
+            "delivery": "private-official-release-metadata",
+            "version": version,
+            "source": {"repository": f"{ORIGIN}/hugo/cageledger", **identity},
+            "platforms": [PLATFORM],
+            "source_archive_included": False,
+            "source_archive_tracked_files_verified": count,
+            "offline_image_included": False,
+            "registry": registry_proof,
+            "artifacts": [],
+            "pull": {"name": PULL_NAME, "size": len(pull), "sha256": hashlib.sha256(pull).hexdigest()},
+        }
+        encoded = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+        return Plan(repo, identity, version, output / "cloud-delivery" / version, encoded, pull, (), True, False)
     directory = output / "cloud-delivery" / version
     records, payloads, commands = [], [], []
     for artifact in (source, notes, checksums, image) if include_source else (notes, checksums, image):
@@ -356,8 +398,10 @@ def prepare(
     }
     if official:
         manifest["source_archive_included"] = include_source
+        manifest["offline_image_included"] = True
+        manifest["registry"] = registry_proof
     encoded = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
-    return Plan(repo, identity, version, directory, encoded, restore, tuple(payloads), official)
+    return Plan(repo, identity, version, directory, encoded, restore, tuple(payloads), official, offline_image)
 
 
 def save_receipt(path, value):
@@ -471,7 +515,11 @@ def deliver(plan, client, state, *, audit_remote=False, ensure=None, verify=None
     require(not state.resolve().is_relative_to(plan.repo.resolve()), "Delivery state must be outside the repository.")
     path = state / "receipt.json"
     identity = {
-        "transport": "private-official-release-v1" if plan.official else "private-draft-release-v1",
+        "transport": (
+            "private-official-release-v2-offline" if plan.offline_image else "private-official-release-v2-metadata"
+        )
+        if plan.official
+        else "private-draft-release-v1",
         "source": plan.identity,
         "tag": plan.tag,
         "manifest_sha256": hashlib.sha256(plan.manifest).hexdigest(),
@@ -570,7 +618,7 @@ def main():
         "--image-only",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Upload images only (default); source upload requires a new explicit request",
+        help="Compatibility option; source archives are never uploaded by this entry point",
     )
     parser.add_argument(
         "--chunk-mib",
@@ -586,7 +634,14 @@ def main():
         action="store_true",
         help="Re-download and SHA256-audit every remote artifact instead of reusing complete hash receipts",
     )
+    parser.add_argument(
+        "--offline-image", action="store_true", help="Explicitly upload development offline image attachments"
+    )
     options = parser.parse_args()
+    require(
+        options.offline_image,
+        "Use publish:registry for normal delivery; add --offline-image only for a development offline attachment draft.",
+    )
     require(1 <= options.chunk_mib <= 8, "--chunk-mib must be between 1 and 8.")
     plan = prepare(
         ROOT,
@@ -595,7 +650,7 @@ def main():
         check_remote=not options.dry_run,
         chunk_bytes=options.chunk_mib * 1024 * 1024,
         write_parts=not options.dry_run,
-        include_source=not options.image_only,
+        include_source=False,
     )
     if options.dry_run:
         print(

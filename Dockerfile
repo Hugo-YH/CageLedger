@@ -1,7 +1,8 @@
 ARG NODE_IMAGE=node:22-bookworm-slim
-ARG PYTHON_IMAGE=python:3.13-slim
+ARG PYTHON_IMAGE=python:3.13-slim@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc
 ARG TARGETARCH
 ARG FRONTEND_OUTPUT=frontend
+ARG RUNTIME_IMAGE=runtime-deps
 
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend-deps
 
@@ -55,7 +56,7 @@ RUN --mount=type=cache,id=cageledger-apt-archives-${TARGETARCH},target=/var/cach
         fonts-noto-cjk \
     && if [ -f /tmp/cageledger-docker-clean ]; then mv /tmp/cageledger-docker-clean /etc/apt/apt.conf.d/docker-clean; fi'
 
-COPY requirements.txt ./
+COPY requirements-runtime.txt ./requirements.txt
 COPY scripts/retry_command.sh ./scripts/retry_command.sh
 RUN --mount=type=cache,id=cageledger-pip-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
     --mount=type=secret,id=proxy_ca \
@@ -64,7 +65,10 @@ RUN --mount=type=cache,id=cageledger-pip-${TARGETARCH},target=/root/.cache/pip,s
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     -r requirements.txt
 
-FROM runtime-deps AS runtime
+ARG CAGELEDGER_RUNTIME_FINGERPRINT=standalone
+LABEL org.cageledger.runtime.inputs=${CAGELEDGER_RUNTIME_FINGERPRINT}
+
+FROM ${RUNTIME_IMAGE} AS runtime
 COPY server.py package.json LICENSE NOTICE ./
 COPY server_app ./server_app
 COPY --from=web-assets /build/web-dist ./web-dist

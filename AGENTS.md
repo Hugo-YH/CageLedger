@@ -72,9 +72,11 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 发布源头是 `package.json`，版本由 `scripts/set_version.mjs` 同步；更新说明写入 `wiki/更新日志.md`，运行 `npm run release:notes:sync` 生成系统记录。云端 Git/API 使用 `https://git.cellnucle.us/hugo/cageledger`，兼容原 HTTP 直连入口，镜像为 `ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
 
-Codex 云端负责日常开发、验收、按影响范围的测试和ARM64软件包构建，继续将镜像推送到Gitea Packages；Gitea托管代码、Packages及Release。离线源码包后续由Gitea本地构建，Codex以后不再上传，Gitea本地构建的具体配置另行处理；本地仍可临时生成用于来源核验。Mac mini Runner仅作可选手动备用。正式云端附件发布使用 `release:cloud -- --image-only --publish`，附ARM64镜像包及恢复/校验清单；Packages推送另行核验，不能把附件上传等同于镜像已推送。按用户授权执行提交、推送和上传；软件发布、环境发布与生产部署是独立操作。云端流程见 [cloud-development.md](docs/contracts/cloud-development.md)。
+Codex 云端负责日常开发、验收、按影响范围的测试和 ARM64 构建，继续推送 Gitea Packages；Gitea 托管代码、Packages 和 Release。生产目标为 DS223（aarch64），只构建 `linux/arm64`，历史 AMD64 制品保留。离线源码包以后由 Gitea 本地构建，Codex 不上传；本地临时源码包仍可用于来源核验。运行环境由 `runtime-image.lock.json` 固定到不可变摘要，受管构建直接复用已验证的依赖层；依赖输入变化时明确失败，只有显式 `npm run runtime:refresh` 才刷新和发布新的内容寻址运行时镜像，不移动业务版本或 `latest`。保留缓存，不能用每次重新安装 apt/pip 代替锁定依赖。
 
-生产目标为群晖 DS223（aarch64），云端后续只构建并推送 `linux/arm64` Packages镜像及离线镜像包，历史AMD64制品不删除；离线源码包以后由Gitea本地构建，Codex不上传。仅在明确交付任务中执行构建和上传，普通修改与代码推送不自动打包。构建、测试证据和上传产物对应同一源码状态及来源 revision；开发产物可用 Gitea 私有仓库的开发构建草稿附件托管，不覆盖旧版本，不自动部署 NAS。可选 Runner 见 [macos-gitea-runner.md](docs/contracts/macos-gitea-runner.md)，只接受手动触发。Mac mini 受管正式发布入口及平台专用校验保留，不能据此宣称 Linux 完整正式发布已适配；其资源配置见 [测试策略](docs/contracts/testing-strategy.md) 的 M4 16GB 配置。云端按 cgroup 配额受管执行，一次只运行一组浏览器，保持每个测试库单worker、独立端口与完整报告核对；同一输入已通过的完整并行结果不再串行重跑。完整正式发布入口为 `npm run release:local -- --version X.Y.Z --push`，保持 `release notes → check → offline package → commit → tag → push` 的顺序，具体结果复用与脚本必需检查按测试策略执行。Gitea 托管代码、Wiki、Release 和镜像。版本出口为 `v*` tag、Gitea Release 和同版本镜像，不复用旧 tag。
+正式云端发布默认 `npm run release:cloud -- --publish`：先完成相关验收与 ARM64 构建/冒烟，推送代码及附注标签，再推送并核验 Packages 的同版本镜像/索引；Release 只附小型来源与摘要清单和拉取指引。需要离线交付时显式加 `--offline-image` 才上传镜像分片并完整回读 SHA256；开发草稿入口 `publish:cloud` 同样必须显式选此开关。默认发布不再上传约 600 MiB 的离线整包，不用 Release 附件替代 Packages。只复用来源、摘要及身份一致的凭据，不覆盖既有版本、标签或其他发布模式的 receipt。发布成功后才能显式更新 `latest`。代码、测试与产物对应同一发布源码，普通修改和推代码不自动打包或发布。生产部署与环境发布分别按用户授权执行。
+
+使用现有 checkout 和独立 Gitea remote；云端流程见 [cloud-development.md](docs/contracts/cloud-development.md)。Mac mini Runner 仅作手动备用，配置见 [macos-gitea-runner.md](docs/contracts/macos-gitea-runner.md)。`release:local` 保留 Mac 平台专用转换器信任及完整正式发布配置，不能据此声称该管线已全部迁移到 Linux。测试范围按风险选择，受管云端保持宿主锁、cgroup 资源保护、单组浏览器/单 worker、隔离数据和退出核对；同一输入已通过的检查不重复运行。发布默认不签名，按需显式启用，不修改个人 Git 签名配置。
 
 ## 测试执行约束
 

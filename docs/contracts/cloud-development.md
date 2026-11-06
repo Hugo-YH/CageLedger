@@ -62,6 +62,18 @@ Linux 的受管检查使用 cgroup v2 有限内存配额、OOM 事件及 swap �
 
 ## 云端受管构建
 
+运行依赖固定在 `runtime-image.lock.json`：包含基础镜像、冻结 Python 依赖和构建片段的指纹，以及 ARM64 运行环境的不可变 OCI 摘要。受管应用构建从这个固定运行环境继续构建，跳过 apt/pip 安装；本地缓存经 SHA256 校验，缺失内容才从 Gitea 以固定小缓冲流式下载；服务支持 Range 时续传，不支持时核对已有前缀并顺序读取完整响应。即使 BuildKit 缓存丢失，也不会静默重新解析一套不同依赖。`requirements-runtime.txt` 固定生产 Python 直接与传递依赖，`requirements.txt` 保留开发约束；修改任一依赖输入都需要显式刷新运行环境。
+
+仅在首次初始化或依赖/安全更新时执行：
+
+```bash
+npm run runtime:refresh
+# 明确需要重新获取系统软件更新时：
+npm run runtime:refresh -- --rebuild
+```
+
+刷新入口使用宿主锁和资源保护，验证 Linux ARM64、依赖指纹、全部 OCI 摘要及远端 blob，再发布 `runtime-<内容摘要前16位>-arm64`，最后更新待提交的锁文件；不移动应用版本和 `latest`。失败保留仓库外的构建与上传状态，按同一意图恢复。运行环境镜像和应用镜像共享 Gitea 已存在的同摘要层，不重复上传这些字节；页面显示的完整镜像大小不等于单次增量流量。首次冷缓存仍需要完整下载运行环境。
+
 只有明确要求构建或交付的任务才执行打包；普通开发修改、提交或代码推送仍只做按影响范围的测试，不自动升级为全量或软件包构建。云端执行：
 
 ```bash
@@ -82,30 +94,34 @@ Docker 网络构建保持代理与 TLS 验证，使用 BuildKit secret 临时挂
 
 ## Gitea 托管与发布边界
 
-以后所有云端交付均不额外上传离线源码包，源码由Git托管，源码包后续由Gitea本地构建；本地仍可临时生成用于来源核验。版本及更新记录同步、相关验收、ARM64构建与产物冒烟完成后，推送分支和对应附注标签，再执行 `npm run release:cloud -- --image-only --publish`。正式入口先上传所有权明确的同版本草稿，完整验证新附件后转为正式Release；保留来源、校验、重组脚本及账号访问保护，不改Gitea自动源码入口、不覆盖旧版本。云端仍需单独完成Gitea Packages的Registry镜像推送并核验摘要，不能以Release附件代替Packages；生产部署另行授权。下面的开发草稿入口保留兼容行为，不作为本次正式发布命令。
+日常交付以 Gitea Packages 的 ARM64 镜像为准，NAS 保留本地 Docker 层并正常增量拉取。离线镜像整包改为按需上传；离线源码包不由 Codex 上传，Gitea 本地源码包构建另行配置。已有 Release、自动源码入口、历史架构与制品保持原样。
 
-明确交付任务将对应代码和 ARM64 产物推送到 Gitea。开发产物使用私有仓库的开发构建草稿附件，保留 ARM64 离线镜像、加载说明、SHA256 及来源清单，不上传离线源码包；这不等同于完整正式发布门禁或 Registry 镜像发布。已有附件有可信的完整下载哈希凭据且身份不变时可复用，否则重新下载核验；冲突停止，不覆盖旧版本。
-
-先完成定向测试、提交当前源码，再构建和核验同一提交的产物。构建成功后推送对应分支，再上传：
+冻结发布源码与版本、完成相关测试及新产物一次冒烟后，推送分支和不可变附注标签，再按下列顺序交付（将 X.Y.Z 替换为实际版本）：
 
 ```bash
-npm run package:managed
-node scripts/run_python.mjs scripts/gitea_git.py push --no-follow-tags gitea HEAD:refs/heads/main
-npm run publish:cloud
+npm run publish:registry -- --archive dist/CageLedger-image-X.Y.Z-arm64.tar.gz --state-dir ../CageLedger-registry-state/X.Y.Z
+npm run release:cloud -- --publish
+npm run publish:registry -- --archive dist/CageLedger-image-X.Y.Z-arm64.tar.gz --state-dir ../CageLedger-registry-state/X.Y.Z --update-latest
 ```
 
-`publish:cloud` 不构建、不提交，也不执行 Git 推送。它要求干净源码及 Gitea 分支与本地 HEAD 一致，验证离线源码中的受跟踪文件、ARM64 镜像来源与校验文件，再创建 `v<应用版本>-dev.<提交前12位>` 的开发草稿，`target_commitish` 固定为完整 HEAD，保持 `draft=true`、`prerelease=true`，不修改旧 Release 或 `latest`。
+`release:cloud` 默认只附小型来源/Registry 摘要 JSON、`PULL.txt` 和下载权限探针。创建和发表前均核验同版本已成功的 Packages 凭据及实时 ARM64 manifest、索引、config 和 blob 身份；不重新下载整层。凭据默认在仓库外 `CageLedger-registry-state/<版本>`，可用 `--registry-state-dir` 显式选择。无匹配凭据或远端摘要冲突时停止，不能凭“准备推送”发布空壳 Release。正式 Release 完成后才能显式更新 `latest`，它只包含 ARM64。
 
-Gitea Generic Packages 关联私有仓库不代表原始文件下载受保护；本环境已实际验证匿名仍可读取该类测试文件。不得用仓库关联字段代替原始下载权限验证，也不将私有源码上传到该软件包区。草稿上传前，先用无源码的小附件验证认证下载内容，再用不携带认证的请求验证原始下载地址确实拒绝访问；仅 API 元数据返回 401 不能证明文件私有。
+明确需要离线交付时使用：
 
-当前云端网络实测 8 MiB 请求可上传，16 MiB 请求认证失败；Gitea 单附件上限为 100 MiB。因此 ARM64 离线镜像自动分成不超过 8 MiB 的附件，新附件逐片流式上传并完整下载回读 SHA256 一次；首尾复核仓库/草稿和真实匿名访问权限，不每片重复查询同一权限。可信续传凭据与远端附件身份不变时复用旧字节校验，`--audit-remote` 才强制重新下载全部附件。分片以 `.partNNNN.gz` 命名，不能逐片解压；来源清单记录顺序、分片哈希及完整文件哈希，并提供标准库下载重组脚本 `CageLedger-download.py.txt`。使用脚本恢复后，仍得到完整的原始 `.tar.gz`，再按加载说明操作。
+```bash
+npm run release:cloud -- --offline-image --publish
+```
 
-上传状态和随机草稿所有权凭据仅保存在仓库外的 `CageLedger-delivery-state/`，不纳入代码或软件包。失败保留可核对状态，不盲目创建第二份同名草稿。Registry 认证未就绪时不能把离线镜像归档托管描述为可直接 `docker pull` 的镜像发布。
+此时额外附 ARM64 离线镜像分片、加载说明、SHA256、来源清单和下载重组脚本；不附离线源码包。默认轻量模式和离线模式使用不同的 v2 receipt 身份，不接管旧模式或未知 Release，不给已发布版本追加附件。遗留 `--image-only` 只作兼容，不能代替显式 `--offline-image`，也不能重新启用源码上传。
 
-正式 Release 上传、Registry 镜像发布和 `latest` 更新分别使用相应受管入口，并验证 API 与 registry 的认证、地址和结果；网络密钥绑定 HTTPS API 主机不等于 Docker registry 已认证。Gitea 托管不触发生产 NAS 的自动部署。
+仅需开发构建的离线附件时，可显式运行 `npm run publish:cloud -- --offline-image`。它要求干净源码、Gitea 分支与 HEAD 一致、归档及来源校验通过，创建所有权明确的 `v<应用版本>-dev.<提交前12位>` 私有草稿，不发布、不移动 `latest`。未指定开关时直接拒绝并指向 Packages 入口，避免日常无意上传大整包。
 
-云端Packages推送入口为 `npm run publish:registry -- --archive dist/CageLedger-image-<version>-arm64.tar.gz`。它复用同一镜像归档的OCI内容，校验ARM64、版本、来源提交及配置摘要，以有界分块上传和外部状态续传；同名未知版本不覆盖。版本镜像及只含ARM64的版本索引验证后，正式Release发布完成才能显式 `--update-latest`。已有AMD64版本和其他镜像保持原样。
+离线大文件沿用实测可用的不超过 8 MiB 分片（16 MiB 请求曾认证失败，Gitea 单附件上限 100 MiB），每个新附件完整回读 SHA256 一次；身份与完整哈希凭据不变时续传复用，`--audit-remote` 才重读全部附件。分片不能单独解压，附件中的标准库脚本按来源清单重组并校验原始 tar.gz。上传响应的 UUID 地址规范化为同一 Release 的下载地址后才做首次字节校验，避免同一文件的两个地址形式触发重复传输。
 
-当前网络密钥是代理注入形式，Git/API的 `CAGELEDGER_GITEA_TOKEN` 无法在进程中直接转换为Basic密码。云端Registry使用绑定 `git.cellnucle.us` 的 `CAGELEDGER_GITEA_REGISTRY_BASIC`，值为用户在本地生成的Base64(`hugo:具有写软件包权限的Token`)，不带 `Basic` 前缀及其后的空格；只向HTTPS `/v2/token` 发送Basic，换得的Registry Bearer仅驻留内存，不打印、不写入报告或命令参数。不要编码或解码代理占位符、把凭据写进仓库/镜像，或使用匿名推送。Mac备用入口仍使用其本机Docker认证。
+私有 Release 在首尾用小探针验证真实匿名下载权限；匿名 API 元数据返回 401 不能代替原始文件权限。Gitea Generic Packages 与私有仓库关联不保证原始下载私有，本环境已实际验证，不使用它承载私有源码。上传状态、所有权随机值及临时 Registry 会话保留在仓库外，不进代码和镜像；失败核对状态后续跑，不重复创建或覆盖。
+
+Git/API 的 `CAGELEDGER_GITEA_TOKEN` 是代理注入绑定，不能在进程里编码成 Basic 密码。Registry 使用绑定 `git.cellnucle.us` 的 `CAGELEDGER_GITEA_REGISTRY_BASIC`，值为用户本地生成的 Base64(`hugo:具有写软件包权限的Token`)，不带 `Basic` 前缀及空格；仅向 HTTPS `/v2/token` 发送 Basic，得到的 Bearer 只驻留内存。不要打印、落盘或重新编码占位符。可选 Mac 构建通过锁定摘要和原有 Docker 凭据取同一运行环境，保持 Docker context、TLS 与认证配置。
+
+软件版本发布、环境配置发布和生产 NAS 部署分别授权；本流程不自动部署 NAS。生产使用的 `ddns.cellnucle.us:3333` 与云端 API 的 HTTPS 地址是独立入口，内网下载是否经过 FRP 需按实际 DNS、认证 realm 和 blob 地址核对，不能仅凭 Packages 页面域名判断。
 
 `release:local` 作为 Mac mini 受管正式发布入口保留，仍有平台专用转换器信任和完整交付核验。当前云端 WebKit 系统库未齐，默认启动校验受限；只有补齐依赖并实际通过后才能报告完整三浏览器门禁。它不是云端普通构建前置步骤；未经完整适配和验证，不能宣称该正式发布管线已迁移到 Linux。已有版本、标签和制品保持不可覆盖；生产部署另行授权。恢复及证据规则见 [发布工程](release-engineering.md)。

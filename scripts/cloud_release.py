@@ -1,4 +1,4 @@
-"""Publish a verified ARM64 attachment release from an immutable annotated version tag."""
+"""Publish small ARM64 Package release metadata; offline attachments require explicit opt-in."""
 
 import argparse
 import hashlib
@@ -11,6 +11,8 @@ from functools import partial
 from pathlib import Path
 
 import cloud_package_delivery as delivery
+from cloud_registry import RegistryError
+from cloud_release_registry import registry_evidence, verify_registry
 from gitea_release_assets import API, ORIGIN, AssetError, ReleaseAssets
 
 ROOT = delivery.ROOT
@@ -63,10 +65,19 @@ def release_payload(plan, ownership, notes):
     require(isinstance(notes, str) and notes.strip(), "Official release notes required.")
     revision = plan.identity["revision"]
     manifest_sha = hashlib.sha256(plan.manifest).hexdigest()
-    archives = (
-        "离线源码包和 ARM64 镜像包"
-        if json.loads(plan.manifest).get("source_archive_included", True)
-        else "ARM64 镜像包"
+    package = json.loads(plan.manifest)["registry"]
+    instructions = (
+        f"ARM64 镜像已在 Gitea Packages 核验。\n\n"
+        f"```sh\ndocker pull {package['repository']}:{plan.version}\n"
+        f"docker pull {package['repository']}@{package['index']['digest']}\n```\n\n"
+        f"ARM64 manifest: `{package['manifest']['digest']}`. "
+        f"Image config: `{package['config']['digest']}`.\n\n"
+    )
+    instructions += (
+        "下载附件中的 `CageLedger-download.py.txt`，运行 `python3 CageLedger-download.py.txt` "
+        "恢复 ARM64 镜像包；或按 `RESTORE.txt` 顺序合并分片并核对完整 SHA256。分片不能单独解压。\n\n"
+        if plan.offline_image
+        else "附件仅含来源与摘要清单及 `PULL.txt`；Docker 可复用已有镜像层。没有附加离线镜像包或源码包。\n\n"
     )
     return {
         "tag_name": plan.tag,
@@ -77,9 +88,8 @@ def release_payload(plan, ownership, notes):
         "body": notes.strip()
         + "\n\n---\n\n"
         + f"Source revision: `{revision}`. Target: `linux/arm64`.\n\n"
-        + "下载附件中的 `CageLedger-download.py.txt`，运行 `python3 CageLedger-download.py.txt` "
-        + f"恢复{archives}；或按 `RESTORE.txt` 顺序合并分片并核对完整 SHA256。"
-        + "分片不能单独解压。此 Release 托管离线镜像，不代表 Registry 镜像已推送，不部署 NAS。\n\n"
+        + instructions
+        + "此流程不移动 Registry 的 latest 标签，不部署 NAS。\n\n"
         + f"<!-- cageledger-delivery-owner:{ownership}; manifest-sha256:{manifest_sha} -->",
     }
 
@@ -112,7 +122,9 @@ def ensure_release(plan, client, receipt, path, *, notes):
 
 def expected_identity(plan):
     return {
-        "transport": "private-official-release-v1",
+        "transport": "private-official-release-v2-offline"
+        if plan.offline_image
+        else "private-official-release-v2-metadata",
         "source": plan.identity,
         "tag": plan.tag,
         "manifest_sha256": hashlib.sha256(plan.manifest).hexdigest(),
@@ -165,6 +177,7 @@ def publish_verified(plan, client, state, *, notes):
         receipt.get("privacy", {}).get("after", {}).get("raw_attachment_access") in {"denied", "same_origin_login"},
         "Publication requires a successful raw attachment privacy check.",
     )
+    registry = verify_registry(plan)
     require(receipt.get("tag_identity") == validate_tag(plan.repo), "Annotated release tag changed.")
     require(client.repository() == receipt.get("repository_id"), "Private repository identity changed.")
     actor = client.actor()
@@ -197,7 +210,8 @@ def publish_verified(plan, client, state, *, notes):
             "revision": plan.identity["revision"],
             "published_at": value["published_at"],
             "url": f"{ORIGIN}/hugo/cageledger/releases/tag/{plan.tag}",
-            "registry_published": False,
+            "registry_verified": True,
+            "registry_index": registry["index"]["digest"],
             "nas_deployed": False,
         },
     )
@@ -213,6 +227,7 @@ def release(plan, client, state, *, notes, publish=False, audit_remote=False):
     if prior.get("publish_intent"):
         require(publish, "This release has a publication intent; resume with --publish.")
         return publish_verified(plan, client, state, notes=notes)
+    verify_registry(plan)
     validate_tag(plan.repo)
     path = delivery.deliver(
         plan,
@@ -229,24 +244,37 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
     parser.add_argument("--state-dir", type=Path)
-    parser.add_argument("--publish", action="store_true", help="Publish only after full draft attachment verification")
+    parser.add_argument("--registry-state-dir", type=Path, help="Matching verified publish:registry state directory")
+    parser.add_argument(
+        "--offline-image", action="store_true", help="Also upload the full offline ARM64 image attachments"
+    )
+    parser.add_argument(
+        "--publish", action="store_true", help="Publish after Package and small attachment verification"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Validate local tag/artifacts/notes only; no upload")
     parser.add_argument("--audit-remote", action="store_true")
     parser.add_argument(
         "--image-only",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Upload images only (default); source upload requires a new explicit request",
+        help="Compatibility option; source archives are never uploaded by this entry point",
     )
     options = parser.parse_args()
     validate_tag(ROOT, check_remote=not options.dry_run)
+    source = delivery.source_identity(ROOT, check_remote=False)
+    registry_state = options.registry_state_dir or ROOT.parent / f"{ROOT.name}-registry-state" / source["app_version"]
+    proof = registry_evidence(
+        options.output_dir.expanduser().resolve(), registry_state.expanduser().resolve(), source=source
+    )
     plan = delivery.prepare(
         ROOT,
         options.output_dir.expanduser().resolve(),
         official=True,
         check_remote=not options.dry_run,
-        write_parts=not options.dry_run,
-        include_source=not options.image_only,
+        write_parts=options.offline_image and not options.dry_run,
+        include_source=False,
+        offline_image=options.offline_image,
+        registry_proof=proof,
     )
     notes = release_notes(ROOT, plan.version)
     if options.dry_run:
@@ -280,9 +308,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (AssetError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+    except (AssetError, RegistryError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         raise SystemExit(
             str(error)
-            if isinstance(error, AssetError)
+            if isinstance(error, AssetError | RegistryError)
             else "Official cloud release failed; preserve the receipt and inspect the current remote state."
         ) from None
