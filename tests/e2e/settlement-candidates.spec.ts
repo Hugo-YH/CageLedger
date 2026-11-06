@@ -682,7 +682,16 @@ test("发起结算流程 generates the notification email template", async ({ pa
   await expect(page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" })).toBeVisible({
     timeout: 20_000,
   });
+  const noticeResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/billing-statements/generate-by-pi") &&
+      response.request().method() === "POST" &&
+      (response.request().postDataJSON() as { view?: string }).view === "notice",
+  );
   await page.locator(".settlement-preview-modal").getByRole("button", { name: "发起结算流程" }).click();
+  const noticePayload = (await (await noticeResponse).json()) as Record<string, unknown>;
+  expect(Object.keys(noticePayload).sort()).toEqual(["sourceVersions", "statement"]);
+  expect(noticePayload).not.toHaveProperty("lines");
 
   const noticeModal = page.locator(".settlement-notice-modal");
   const noticeBody = noticeModal.locator(".settlement-notice-body");

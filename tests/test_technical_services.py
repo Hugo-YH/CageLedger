@@ -171,6 +171,115 @@ class TechnicalServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             list_candidates(self.conn, ADMIN, {**filters, "sortKey": "bad"}, calculate)
 
+    def test_service_only_candidates_skip_feeding_calculation_but_facets_and_mixed_amounts_keep_it(self):
+        from server_app.domains.billing.unified_candidates import filter_options, list_candidates
+        from tests.test_billing_candidates import seed_quantity_sheet
+
+        self.save()
+        for number in range(6):
+            seed_quantity_sheet(self.conn, f"feeding-{number}", "2026-10", f"Feeding PI {number}", f"F{number}")
+        self.conn.commit()
+        selected = {"limit": 2, "offset": 0, "sortDir": "desc", "columnFilters": {"feeType": ["technical_service"]}}
+        for sort in ("month", "amount"):
+            with self.subTest(sort=sort):
+
+                def unrelated(*_):
+                    self.fail("Service-only results must not calculate feeding amounts")
+
+                result = list_candidates(self.conn, ADMIN, {**selected, "sortKey": sort}, unrelated)
+                self.assertEqual(result["page"]["total"], 1)
+                self.assertEqual(result["items"][0]["feeType"], "technical_service")
+                self.assertEqual(
+                    filter_options(self.conn, ADMIN, selected, "amount", unrelated)["items"][0]["value"], "300.00"
+                )
+        calls = []
+
+        def calculate(month, pi):
+            calls.append((month, pi))
+            return {"totalAmount": 55 + int(pi.rsplit(" ", 1)[1])}
+
+        facets = filter_options(self.conn, ADMIN, {**selected, "sortKey": "amount"}, "feeType", calculate)
+        self.assertEqual({item["value"] for item in facets["items"]}, {"feeding", "technical_service"})
+        self.assertEqual(len(calls), 6)
+        self.conn.execute("UPDATE billing_candidate_snapshots SET is_stale=1")
+        calls.clear()
+        result = list_candidates(self.conn, ADMIN, {**selected, "sortKey": "amount", "columnFilters": {}}, calculate)
+        self.assertEqual(len(calls), 6)
+        self.assertEqual(result["page"]["total"], 7)
+        self.assertEqual([item["totalAmount"] for item in result["items"]], [300, 60])
+
+    def test_protected_ids_project_sources_and_keep_historical_shapes_and_missing_version_guard(self):
+        self.save()
+        self.start()
+        row = self.conn.execute("SELECT id,payload FROM billing_statement_versions LIMIT 1").fetchone()
+        version_id = row["id"]
+        with patch.object(repo.json, "loads", wraps=json.loads) as decode:
+            self.assertEqual(repo.protected_ids(self.conn), {"service-1"})
+            self.assertEqual(json.loads(decode.call_args.args[0]), ["service-1"])
+        for payload, expected, error in (
+            ({}, set(), None),
+            ({"statement": {}}, set(), None),
+            ({"statement": {"sourceIds": ["one", "two", "one"]}}, {"one", "two"}, None),
+            ({"statement": {"sourceIds": "ab"}}, {"a", "b"}, None),
+            ({"statement": None}, None, AttributeError),
+            ({"statement": {"sourceIds": None}}, None, TypeError),
+            ({"statement": {"sourceIds": [{}]}}, None, TypeError),
+            ([], None, AttributeError),
+        ):
+            with self.subTest(payload=payload):
+                self.conn.execute(
+                    "UPDATE billing_statement_versions SET payload=? WHERE id=?", (json.dumps(payload), version_id)
+                )
+                if error:
+                    with self.assertRaises(error):
+                        repo.protected_ids(self.conn)
+                else:
+                    self.assertEqual(repo.protected_ids(self.conn), expected)
+        self.conn.execute("UPDATE billing_statement_versions SET payload='not json' WHERE id=?", (version_id,))
+        with self.assertRaises(json.JSONDecodeError):
+            repo.protected_ids(self.conn)
+        self.conn.execute("UPDATE billing_statement_versions SET version_status='voided' WHERE id=?", (version_id,))
+        with self.assertRaisesRegex(ValueError, "版本缺失"):
+            repo.protected_ids(self.conn)
+        self.conn.execute("UPDATE billing_workflows SET current_version_id='missing'")
+        with self.assertRaisesRegex(ValueError, "版本缺失"):
+            repo.protected_ids(self.conn)
+
+    def test_service_notice_preview_is_current_small_and_write_response_stays_complete(self):
+        from unittest.mock import Mock
+
+        from server_app.web import technical_services as http
+
+        self.save()
+        target = {"month": "2026-10", "pi": "纪老师", "view": "notice"}
+        handler = Mock(path="/api/technical-services/settlements/preview")
+        handler.require_user.return_value = ADMIN
+        handler.read_json_body.return_value = target
+        with patch.object(http, "connect_db", return_value=self.conn):
+            http.handle(handler, "POST", handler.path)
+        first = handler.send_json.call_args.args[0]
+        self.assertEqual(set(first), {"statement", "sourceVersions"})
+        self.assertEqual(first["statement"], {"pi": "纪老师", "month": "2026-10", "totalAmount": 300})
+        with patch.object(service, "now_iso", return_value="2026-11-06T16:00:00+08:00"):
+            self.save(
+                self.sheet(rows=[{"date": "2026-10-01", "quantity": 20}]),
+                identity="service-1",
+                expected=first["sourceVersions"]["service-1"],
+            )
+        with patch.object(http, "connect_db", return_value=self.conn):
+            http.handle(handler, "POST", handler.path)
+        current = handler.send_json.call_args.args[0]
+        self.assertEqual(current["statement"]["totalAmount"], 600)
+        self.assertNotEqual(current["sourceVersions"], first["sourceVersions"])
+        with self.assertRaises(StaleWriteError):
+            settlement.initiate(self.conn, ADMIN, {**target, "sourceVersions": first["sourceVersions"]})
+        self.conn.rollback()
+        handler.path = "/api/technical-services/settlements"
+        handler.read_json_body.return_value = {**target, "sourceVersions": current["sourceVersions"]}
+        with patch.object(http, "connect_db", return_value=self.conn):
+            http.handle(handler, "POST", handler.path)
+        self.assertIn("lines", handler.send_json.call_args.args[0])
+
     def test_service_statement_excel_uses_confirmed_snapshot_and_units(self):
         from server_app.domains.billing.settlement_export import build_settlement_workbook
 

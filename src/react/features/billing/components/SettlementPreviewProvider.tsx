@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { settlementCandidateScope } from "../../../../domain/settlementCandidateScope";
 import { buildSettlementNoticeEmail, type SettlementNoticeEmail } from "../../../../domain/settlementNotice";
 import type { BillingStatementResponse, SessionUser, SettlementCandidate } from "../../../api/contracts";
-import { useSettlementActions } from "../../../api/settlements";
+import { usePreviewSettlementNotice, useSettlementActions } from "../../../api/settlements";
 import { useAdvanceWorkflow } from "../../../api/workflows";
 import { ModalPresence } from "../../../components/ui";
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
@@ -30,17 +30,20 @@ export function SettlementPreviewProvider({
   const [noticeEmail, setNoticeEmail] = useState<{
     candidate: SettlementCandidate;
     email: SettlementNoticeEmail;
+    sourceVersions: Record<string, string>;
   } | null>(null);
   const [notice, setNotice] = useState("");
   const feedback = useOperationFeedback();
   const [previewError, setPreviewError] = useState("");
   const [activeId, setActiveId] = useState("");
   const { preview, initiate } = useSettlementActions();
+  const noticePreview = usePreviewSettlementNotice();
   const [previewPending, setPreviewPending] = useState(false);
   const isPending = previewPending || initiate.isPending;
   const advance = useAdvanceWorkflow();
   const request = useLatestRequest();
   const generating = useRef<{ controller?: AbortController } | null>(null);
+  const returnToPreview = useRef<SettlementCandidate | null>(null);
   const mounted = useRef(true);
   const returnFocus = useRef<HTMLElement | null>(null);
   const restoreFocusAfterClose = useRef(false);
@@ -56,7 +59,11 @@ export function SettlementPreviewProvider({
   const initiateStatement = initiate.mutateAsync;
 
   const generateFor = useCallback(
-    async (candidate: SettlementCandidate, persist: boolean): Promise<boolean> => {
+    async (
+      candidate: SettlementCandidate,
+      persist: boolean,
+      sourceVersions?: Record<string, string>,
+    ): Promise<boolean> => {
       if (generating.current) return false;
       const operation = { controller: persist ? undefined : new AbortController() };
       generating.current = operation;
@@ -74,7 +81,7 @@ export function SettlementPreviewProvider({
         const response = persist
           ? await initiateStatement({
               ...target,
-              sourceVersions: selected?.id === candidate.id ? result?.sourceVersions : undefined,
+              sourceVersions,
             })
           : await previewStatement({ ...target, signal: operation.controller?.signal });
         if (!isCurrent()) return false;
@@ -100,27 +107,26 @@ export function SettlementPreviewProvider({
         }
       }
     },
-    [initiateStatement, previewStatement, request, result, selected, feedback, source],
+    [initiateStatement, previewStatement, request, feedback, source],
   );
 
   async function prepareNoticeEmail(candidate: SettlementCandidate) {
     if (generating.current) return;
+    returnToPreview.current = null;
     const operation = { controller: new AbortController() };
     generating.current = operation;
     setPreviewPending(true);
     setActiveId(candidate.id);
     const isCurrent = request.begin();
     try {
-      const response = await preview.mutateAsync({
+      const response = await noticePreview.mutateAsync({
         ...settlementCandidateScope(candidate, source),
         signal: operation.controller.signal,
       });
       if (!isCurrent()) return;
-      setSelected(candidate);
-      setResult(response);
-      if (!response.statement) return;
       setNoticeEmail({
         candidate,
+        sourceVersions: { ...response.sourceVersions },
         email: buildSettlementNoticeEmail({
           feeType: candidate.feeType,
           pi: response.statement.pi,
@@ -146,7 +152,14 @@ export function SettlementPreviewProvider({
 
   async function confirmNoticeEmail() {
     if (!noticeEmail) return;
-    const ok = await generateFor(noticeEmail.candidate, true);
+    const reviewed = noticeEmail;
+    const ok = await generateFor(reviewed.candidate, true, reviewed.sourceVersions);
+    const returning = returnToPreview.current;
+    if (returning) {
+      returnToPreview.current = null;
+      if (mounted.current) await generateFor(returning, false);
+      return;
+    }
     if (ok) {
       setNoticeEmail(null);
       setSelected((current) =>
@@ -173,6 +186,7 @@ export function SettlementPreviewProvider({
   }
 
   function close() {
+    returnToPreview.current = null;
     restoreFocusAfterClose.current = true;
     request.invalidate();
     if (generating.current?.controller) {
@@ -185,6 +199,20 @@ export function SettlementPreviewProvider({
     setResult(null);
     setNoticeEmail(null);
     setPreviewError("");
+  }
+
+  function cancelNoticeEmail() {
+    if (!noticeEmail) return;
+    const candidate = noticeEmail.candidate;
+    request.invalidate();
+    setNoticeEmail(null);
+    if (generating.current) {
+      // A submitted write keeps its ownership; refresh only when it has settled.
+      returnToPreview.current = candidate;
+      setResult(null);
+      return;
+    }
+    void generateFor(candidate, false);
   }
 
   function restoreFocus() {
@@ -217,10 +245,7 @@ export function SettlementPreviewProvider({
             email={noticeEmail.email}
             error={notice}
             pending={isPending}
-            onCancel={() => {
-              request.invalidate();
-              setNoticeEmail(null);
-            }}
+            onCancel={cancelNoticeEmail}
             onConfirm={() => void confirmNoticeEmail()}
           />
         ) : selected ? (

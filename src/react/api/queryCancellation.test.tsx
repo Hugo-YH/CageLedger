@@ -114,6 +114,51 @@ afterEach(() => {
 });
 
 describe("read query cancellation", () => {
+  it("loads funding options only while enabled, refreshes on re-enable, and isolates workflow switches", async () => {
+    const requests = mockPendingFetch();
+    const { wrapper } = setup();
+    const hook = renderHook(({ id, enabled }) => useWorkflowFundingBookOptions(id, enabled), {
+      initialProps: { id: "workflow-one", enabled: false },
+      wrapper,
+    });
+    expect(requests).toHaveLength(0);
+    hook.rerender({ id: "workflow-one", enabled: true });
+    expect(requests).toHaveLength(1);
+    await act(async () => {
+      requests[0].resolve(Response.json({ items: [{ value: "FUND-1" }] }));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+    hook.rerender({ id: "workflow-one", enabled: false });
+    expect(requests).toHaveLength(1);
+    hook.rerender({ id: "workflow-one", enabled: true });
+    expect(requests).toHaveLength(2);
+    hook.rerender({ id: "workflow-two", enabled: true });
+    expect(requests[1].signal.aborted).toBe(true);
+    expect(requests).toHaveLength(3);
+    expect(hook.result.current.data).toBeUndefined();
+    hook.rerender({ id: "workflow-two", enabled: false });
+    expect(requests[2].signal.aborted).toBe(true);
+  });
+
+  it("keeps a shared funding request until its last active consumer is disabled", () => {
+    const requests = mockPendingFetch();
+    const { wrapper } = setup();
+    const first = renderHook(({ enabled }) => useWorkflowFundingBookOptions("shared-workflow", enabled), {
+      initialProps: { enabled: true },
+      wrapper,
+    });
+    const second = renderHook(({ enabled }) => useWorkflowFundingBookOptions("shared-workflow", enabled), {
+      initialProps: { enabled: true },
+      wrapper,
+    });
+    expect(requests).toHaveLength(1);
+    first.rerender({ enabled: false });
+    expect(requests[0].signal.aborted).toBe(false);
+    second.rerender({ enabled: false });
+    expect(requests[0].signal.aborted).toBe(true);
+  });
+
   it.each(queries)("aborts $name when its last observer leaves", ({ useReadQuery }) => {
     const requests = mockPendingFetch();
     const { wrapper } = setup();

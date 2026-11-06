@@ -82,6 +82,10 @@ IACUC 状态在数据库有索引记录时只查询数量和最近导入时间�
 
 ## 共用结算调用与路由登记
 
+通知邮件准备可向原饲养费预览或技术服务预览显式传`view:"notice"`，响应仅含`statement:{pi,month,totalAmount}`与`sourceVersions`。仍按最新来源完成原计算、冻结账单及权限校验，不复用旧列表金额；原候选更新和缓存失效时机不变。饲养费只有`persist`和`initiate`均未启用时采用摘要；正式写入、默认预览及PDF/Excel继续完整。通知确认使用本次摘要的技术服务来源版本，409不补查或重试；取消邮件返回账单时重新读取完整预览，摘要不覆盖完整账单状态。
+
+共用候选明确筛选为技术服务时不准备或重算无关饲养费候选；费用类型筛选项去掉自身条件，仍包括全部适用来源。混合费用的金额排序和金额过滤仍先刷新全部匹配过期候选，再计数与分页。技术服务保护集合投影必要来源ID，保留缺失/非活动版本及异常历史JSON的原校验路径，不跳过冻结账单完整核验。Excel只生成最终交付所需的单工作簿或ZIP内各工作簿，公式、格式与文件名不变。经费本目录仅在实际填写报销字段时启用，启用仍读取最新资料，手填与其他项目经费确认保留。
+
 `src/react/api/settlements.ts` 集中结算候选查询、筛选、预览、发起和导出；请求类型在 `src/contracts/settlements.ts`。页面使用 `usePreviewSettlement`、`useInitiateSettlement`，批量发起复用 `initiateSettlement`，沿用现有查询失效范围与零自动重试。`billing.ts`、`quantitySheets.ts` 和 `technicalServices.ts` 中原有结算导出函数继续兼容。
 
 饲养费仍调用 `/api/billing-statements/generate-by-pi`，保留 `status=draft`、`persist` 和 `initiate` 参数；技术服务仍使用 `/api/technical-services/settlements/preview` 与 `/api/technical-services/settlements`。共用发起动作优先提交已预览的 `sourceVersions`；仅调用方未提供版本时先获取预览，409后不重新预览、不自动重试。原技术服务mutation仍要求调用方提供版本，缺失时交由旧接口校验，不新增预览补齐。同月同负责人两种费用继续生成独立账单与业务键。Excel、PDF及异步导出任务的原URL、参数和账单快照读取规则不变。

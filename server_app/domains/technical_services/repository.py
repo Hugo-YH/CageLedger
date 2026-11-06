@@ -58,15 +58,34 @@ def get(conn, identity, *, include_deleted=False):
 
 def protected_ids(conn):
     placeholders = ",".join("?" for _ in FROZEN_WORKFLOW_STATUSES)
+    # Project the common shape without transferring full issued bill snapshots.
+    # Unusual historical shapes retain the original Python decoding/error path.
+    projectable = """CASE WHEN json_valid(v.payload) THEN
+        json_type(v.payload)='object'
+        AND (json_type(v.payload,'$.statement') IS NULL OR json_type(v.payload,'$.statement')='object')
+        AND (json_type(v.payload,'$.statement.sourceIds') IS NULL
+             OR json_type(v.payload,'$.statement.sourceIds')='array')
+        ELSE 0 END"""
     rows = conn.execute(
-        f"""SELECT v.payload, v.version_status FROM billing_workflows w
+        f"""SELECT length(v.payload)>0 AS present, v.version_status,
+            CASE WHEN {projectable} THEN coalesce(json_extract(v.payload,'$.statement.sourceIds'),'[]') END source_ids,
+            CASE WHEN {projectable} THEN NULL ELSE v.payload END legacy_payload
+        FROM billing_workflows w
         LEFT JOIN billing_statement_versions v ON v.id=w.current_version_id
         WHERE w.source_type=? AND w.workflow_status IN ({placeholders})""",
         [SOURCE_TYPE, *FROZEN_WORKFLOW_STATUSES],
     ).fetchall()
-    if any(not row[0] or row["version_status"] != "active" for row in rows):
+    if any(not row["present"] or row["version_status"] != "active" for row in rows):
         raise ValueError("已发起技术服务结算版本缺失，请核查历史记录")
-    return {identity for row in rows for identity in json.loads(row[0]).get("statement", {}).get("sourceIds", [])}
+    result = set()
+    for row in rows:
+        identities = (
+            json.loads(row["source_ids"])
+            if row["source_ids"] is not None
+            else json.loads(row["legacy_payload"]).get("statement", {}).get("sourceIds", [])
+        )
+        result.update(identities)
+    return result
 
 
 def list_sheets(conn, filters, *, all_rows=False):

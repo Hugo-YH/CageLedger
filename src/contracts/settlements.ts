@@ -10,6 +10,11 @@ export interface InitiateSettlementPayload extends SettlementTarget {
   sourceVersions?: Record<string, string>;
 }
 
+export interface SettlementNoticePreview {
+  statement: { pi: string; month: string; totalAmount: number };
+  sourceVersions: Record<string, string>;
+}
+
 export interface ReviewedServiceSettlement {
   pi: string;
   month: string;

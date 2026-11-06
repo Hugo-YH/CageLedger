@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BillingStatementResponse, SettlementCandidate, SessionUser } from "../../../api/contracts";
+import type { SettlementNoticePreview } from "../../../../contracts/settlements";
 import { requestJson } from "../../../api/client";
 import { SettlementCandidateActions } from "./SettlementCandidateActions";
 import { SettlementPreviewProvider } from "./SettlementPreviewProvider";
@@ -151,6 +152,13 @@ function statement(sourceVersions?: Record<string, string>): BillingStatementRes
   };
 }
 
+function noticeSummary(version: string): SettlementNoticePreview {
+  return {
+    statement: { pi: serviceCandidate.pi, month: serviceCandidate.month, totalAmount: 100 },
+    sourceVersions: { "service-1": version },
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: Error) => void;
@@ -263,7 +271,7 @@ describe("SettlementPreviewProvider", () => {
     const write = deferred<BillingStatementResponse>();
     vi.mocked(requestJson)
       .mockResolvedValueOnce(statement({ "service-1": "v1" }))
-      .mockResolvedValueOnce(statement({ "service-1": "v2" }))
+      .mockResolvedValueOnce(noticeSummary("v2"))
       .mockReturnValueOnce(write.promise);
     const view = renderProvider(<SettlementCandidateActions candidate={serviceCandidate} />);
     const invalidate = vi.spyOn(view.client, "invalidateQueries").mockResolvedValue();
@@ -298,13 +306,18 @@ describe("SettlementPreviewProvider", () => {
   it("initiates technical-service settlement with the second reviewed sourceVersions and ignores double confirmation", async () => {
     vi.mocked(requestJson)
       .mockResolvedValueOnce(statement({ "service-1": "v1" }))
-      .mockResolvedValueOnce(statement({ "service-1": "v2" }))
+      .mockResolvedValueOnce(noticeSummary("v2"))
       .mockResolvedValueOnce(statement({ "service-1": "v2" }));
     renderProvider(<SettlementCandidateActions candidate={serviceCandidate} />);
     fireEvent.click(screen.getByRole("button", { name: "预览结算单" }));
     await screen.findByText("审阅版本 v1");
     fireEvent.click(screen.getByRole("button", { name: "生成通知邮件" }));
     await screen.findByLabelText("结算通知");
+    expect(JSON.parse(String(vi.mocked(requestJson).mock.calls[1][1]?.body))).toEqual({
+      pi: serviceCandidate.pi,
+      month: serviceCandidate.month,
+      view: "notice",
+    });
 
     const confirm = screen.getByRole("button", { name: "确认发起" });
     fireEvent.click(confirm);
@@ -320,11 +333,12 @@ describe("SettlementPreviewProvider", () => {
     });
   });
 
-  it("retains the second reviewed technical-service result when initiation fails", async () => {
+  it("keeps notice versions on a write conflict and refreshes the full preview when returning", async () => {
     vi.mocked(requestJson)
       .mockResolvedValueOnce(statement({ "service-1": "v1" }))
-      .mockResolvedValueOnce(statement({ "service-1": "v2" }))
-      .mockRejectedValueOnce(new Error("来源版本已变化"));
+      .mockResolvedValueOnce(noticeSummary("v2"))
+      .mockRejectedValueOnce(new Error("来源版本已变化"))
+      .mockResolvedValueOnce(statement({ "service-1": "v3" }));
     renderProvider(<SettlementCandidateActions candidate={serviceCandidate} />);
     fireEvent.click(screen.getByRole("button", { name: "预览结算单" }));
     await screen.findByText("审阅版本 v1");
@@ -332,10 +346,59 @@ describe("SettlementPreviewProvider", () => {
     await screen.findByLabelText("结算通知");
     fireEvent.click(screen.getByRole("button", { name: "确认发起" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("来源版本已变化"));
+    expect(requestJson).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(String(vi.mocked(requestJson).mock.calls[2][1]?.body)).sourceVersions).toEqual({
+      "service-1": "v2",
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "取消通知" }));
-    expect(screen.getByLabelText("预览 service")).toHaveTextContent("审阅版本 v2");
+    await screen.findByText("审阅版本 v3");
+    expect(requestJson).toHaveBeenCalledTimes(4);
+    expect(JSON.parse(String(vi.mocked(requestJson).mock.calls[3][1]?.body))).not.toHaveProperty("view");
+  });
+
+  it("cancels an unfinished notice summary without accepting its late result", async () => {
+    const summary = deferred<SettlementNoticePreview>();
+    vi.mocked(requestJson).mockResolvedValueOnce(statement()).mockReturnValueOnce(summary.promise);
+    renderProvider(<SettlementCandidateActions candidate={serviceCandidate} />);
+    fireEvent.click(screen.getByRole("button", { name: "预览结算单" }));
+    await screen.findByText("审阅版本 feeding");
+    fireEvent.click(screen.getByRole("button", { name: "生成通知邮件" }));
+    await waitFor(() => expect(requestJson).toHaveBeenCalledTimes(2));
+    const signal = vi.mocked(requestJson).mock.calls[1][1]?.signal;
+    fireEvent.click(screen.getByRole("button", { name: "关闭预览" }));
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      summary.resolve(noticeSummary("late"));
+      await summary.promise;
+    });
+    expect(screen.queryByLabelText("结算通知")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("预览 service")).not.toBeInTheDocument();
+  });
+
+  it("lets a submitted write finish before refreshing a cancelled notice's full preview", async () => {
+    const write = deferred<BillingStatementResponse>();
+    vi.mocked(requestJson)
+      .mockResolvedValueOnce(statement({ "service-1": "v1" }))
+      .mockResolvedValueOnce(noticeSummary("v2"))
+      .mockReturnValueOnce(write.promise)
+      .mockResolvedValueOnce(statement({ "service-1": "v3" }));
+    renderProvider(<SettlementCandidateActions candidate={serviceCandidate} />);
+    fireEvent.click(screen.getByRole("button", { name: "预览结算单" }));
+    await screen.findByText("审阅版本 v1");
+    fireEvent.click(screen.getByRole("button", { name: "生成通知邮件" }));
+    await screen.findByLabelText("结算通知");
+    fireEvent.click(screen.getByRole("button", { name: "确认发起" }));
+    await waitFor(() => expect(requestJson).toHaveBeenCalledTimes(3));
+    fireEvent.click(screen.getByRole("button", { name: "取消通知" }));
     expect(requestJson).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(requestJson).mock.calls[2][1]).not.toHaveProperty("signal");
+    await act(async () => {
+      write.resolve(statement({ "service-1": "v2" }));
+      await write.promise;
+    });
+    await screen.findByText("审阅版本 v3");
+    expect(requestJson).toHaveBeenCalledTimes(4);
   });
 });
 

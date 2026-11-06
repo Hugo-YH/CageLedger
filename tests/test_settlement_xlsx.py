@@ -1,9 +1,13 @@
 import io
 import unittest
+from contextlib import nullcontext
+from unittest.mock import Mock, patch
+from zipfile import ZipFile
 
 from openpyxl import load_workbook
 
 from server_app.domains.billing.settlement_xlsx import build_settlement_workbook
+from server_app.web import settlement_xlsx as http_xlsx
 
 
 def standard_item(iacuc, count, free, tier1, tier2, **overrides):
@@ -106,6 +110,49 @@ def sample_entry(include_custom=False):
 
 
 class SettlementXlsxTests(unittest.TestCase):
+    def test_http_export_only_formats_delivered_workbooks_and_keeps_real_files(self):
+        for count in (1, 3):
+            with self.subTest(count=count):
+                handler = Mock()
+                handler.require_user.return_value = {"id": "admin", "role": "admin"}
+                handler.read_json_body.return_value = {
+                    "items": [{"pi": f"PI-{number}", "month": "2026-07"} for number in range(count)]
+                }
+
+                def generate(_conn, payload, _actor):
+                    statement, lines = sample_entry()
+                    statement["pi"] = payload["pi"]
+                    self.assertIs(payload["persist"], False)
+                    return statement, lines, []
+
+                with patch.object(
+                    http_xlsx, "build_settlement_workbook", wraps=http_xlsx.build_settlement_workbook
+                ) as build:
+                    http_xlsx.download_settlement_xlsx(
+                        handler,
+                        connect_db=lambda: nullcontext(None),
+                        generate_statement=generate,
+                        clean_text=lambda value: str(value).strip(),
+                    )
+                self.assertEqual(build.call_count, count)
+                self.assertTrue(all(len(call.args[0]) == 1 for call in build.call_args_list))
+                content, filename, mime = handler.send_download.call_args.args
+                if count == 1:
+                    self.assertTrue(filename.endswith(".xlsx"))
+                    documents = [content]
+                else:
+                    self.assertEqual(mime, "application/zip")
+                    with ZipFile(io.BytesIO(content)) as archive:
+                        self.assertEqual(len(archive.namelist()), count)
+                        documents = [archive.read(name) for name in archive.namelist()]
+                for document in documents:
+                    with io.BytesIO(document) as source:
+                        book = load_workbook(source)
+                        self.assertEqual(len(book.worksheets), 1)
+                        self.assertTrue(book.calculation.fullCalcOnLoad)
+                        self.assertTrue(any(cell.data_type == "f" for row in book.active for cell in row))
+                        book.close()
+
     def test_workbook_contains_formula_amount_cells_and_totals(self):
         workbook = load_workbook(
             io.BytesIO(build_settlement_workbook([sample_entry()])),

@@ -13,6 +13,7 @@ import {
   generateBillingStatement,
   initiateSettlement,
   previewSettlement,
+  previewSettlementNotice,
   useSettlementActions,
 } from "./settlements";
 import { exportServicesPdf, previewServices, useServiceMutation } from "./technicalServices";
@@ -27,6 +28,31 @@ afterEach(() => {
 });
 
 describe("shared settlement actions", () => {
+  it.each(["quantity_sheet", "pi_merged_technical_service"] as const)(
+    "requests a cancellable %s notice summary without changing the default preview",
+    async (sourceType) => {
+      const controller = new AbortController();
+      const response = {
+        statement: { pi: target.pi, month: target.month, totalAmount: 100 },
+        sourceVersions: { sheet: "notice-version" },
+      };
+      vi.mocked(requestJson).mockResolvedValueOnce(response);
+      expect(await previewSettlementNotice({ ...target, sourceType }, controller.signal)).toEqual(response);
+      const [url, options] = vi.mocked(requestJson).mock.calls[0];
+      expect(url).toBe(
+        sourceType === "quantity_sheet"
+          ? "/api/billing-statements/generate-by-pi"
+          : "/api/technical-services/settlements/preview",
+      );
+      expect(options?.signal).toBe(controller.signal);
+      expect(JSON.parse(String(options?.body))).toMatchObject({ pi: target.pi, month: target.month, view: "notice" });
+      if (sourceType === "quantity_sheet")
+        expect(JSON.parse(String(options?.body))).toMatchObject({ persist: false, initiate: false });
+      await previewSettlement({ ...target, sourceType });
+      expect(JSON.parse(String(vi.mocked(requestJson).mock.calls[1][1]?.body))).not.toHaveProperty("view");
+    },
+  );
+
   it.each(["quantity_sheet", "pi_merged_technical_service"] as const)(
     "forwards cancellation only for an explicit read-only %s preview",
     async (sourceType) => {

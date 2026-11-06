@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 from server_app.cache import invalidate_data_cache_prefixes
 from server_app.db import connect_db
+from server_app.domains.billing.notice_preview import notice_preview
 from server_app.domains.technical_services import repository as repo
 from server_app.domains.technical_services import service, settlement
 from server_app.pdf.documents import billing_statement_filename, render_billing_statement_pdf
@@ -43,7 +44,10 @@ def handle(handler, method, path):
             elif method == "DELETE" and len(parts) == 2 and parts[0] == "sheets":
                 payload = service.delete(conn, actor, parts[1], handler.read_json_body().get("expectedUpdatedAt"))
             elif method == "POST" and parts == ["settlements", "preview"]:
-                payload = settlement.preview(conn, actor, handler.read_json_body())
+                body = handler.read_json_body()
+                payload = settlement.preview(conn, actor, body)
+                if body.get("view") == "notice":
+                    payload = notice_preview(payload["statement"], payload["sourceVersions"])
             elif method == "POST" and parts == ["settlements"]:
                 payload = settlement.initiate(conn, actor, handler.read_json_body())
                 settlement_started = True

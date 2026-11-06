@@ -45,6 +45,7 @@ from server_app.domains.animal_management.catalog_images import (
 from server_app.domains.billing.candidates import (
     update_settlement_candidate_snapshot_from_statement,
 )
+from server_app.domains.billing.notice_preview import notice_preview
 from server_app.domains.iacuc import (
     parse_iacuc_csv,
 )
@@ -352,6 +353,7 @@ class WorkflowActionsMixin:
             return
         try:
             refresh_candidate_cache = clean_text(body.get("sourceType", "cage_map")) == "quantity_sheet"
+            notice_only = body.get("view") == "notice" and not body.get("persist") and not body.get("initiate")
             with connect_db() as conn:
                 statement, lines, audit_logs = app_ports().generate_billing_statement_by_pi(conn, body, user)
                 if refresh_candidate_cache:
@@ -364,11 +366,13 @@ class WorkflowActionsMixin:
                         statement.get("generatedAt", "") or now_iso(),
                     )
                 workflow = (
-                    get_billing_workflow(conn, statement.get("workflowId", "")) if statement.get("workflowId") else None
+                    get_billing_workflow(conn, statement.get("workflowId", ""))
+                    if not notice_only and statement.get("workflowId")
+                    else None
                 )
                 reimbursement = (
                     get_reimbursement_record_by_workflow_id(conn, statement.get("workflowId", ""))
-                    if statement.get("workflowId")
+                    if not notice_only and statement.get("workflowId")
                     else None
                 )
                 conn.commit()
@@ -377,7 +381,9 @@ class WorkflowActionsMixin:
                 invalidate_data_cache_prefixes("quantity_sheets::settlement_candidates::")
                 invalidate_data_cache_prefixes("dashboard_overview::")
             self.send_json(
-                {
+                notice_preview(statement)
+                if notice_only
+                else {
                     "statement": statement,
                     "lines": lines,
                     "workflow": workflow,

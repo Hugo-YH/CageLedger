@@ -1660,8 +1660,8 @@
           "method": "POST",
           "path": "/api/billing-statements/generate-by-pi",
           "purpose": "负责人结算预览或发起",
-          "request": "month,pi,sourceType,persist,initiate等",
-          "response": "{statement,lines,workflow,reimbursementItem,auditLogs}",
+          "request": "month,pi,sourceType,persist,initiate等；只读预览可选view:notice",
+          "response": "{statement,lines,workflow,reimbursementItem,auditLogs}；view=notice且非写入时仅{statement:{pi,month,totalAmount},sourceVersions}，来源校验不变",
           "protection": "billing_generate"
         },
         {
@@ -1812,8 +1812,8 @@
           "method": "POST",
           "path": "/api/technical-services/settlements/preview",
           "purpose": "技术服务结算预览",
-          "request": "{month,pi}",
-          "response": "{statement,lines,sourceVersions}",
+          "request": "{month,pi}；只读预览可选view:notice",
+          "response": "{statement,lines,sourceVersions}；view=notice且非写入时仅{statement:{pi,month,totalAmount},sourceVersions}，来源校验不变",
           "protection": "read"
         },
         {

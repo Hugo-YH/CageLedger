@@ -22,7 +22,9 @@ LABELS = {"feeding": "饲养费", "technical_service": "技术服务费"}
 
 
 def prepare(conn, filters, calculate, *, column="", prepare_calculations=None):
-    services_listing.columns(filters, COLUMNS)
+    selected = services_listing.columns(filters, COLUMNS)
+    if selected.get("feeType") and "feeding" not in selected["feeType"]:
+        return
     # Keep the existing feeding registry and amount-refresh rules. Source sheets
     # remain protected by their own domains; this list never writes statements.
     feeding_filters = {

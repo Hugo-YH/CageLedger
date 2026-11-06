@@ -10,6 +10,7 @@ import type {
   InitiateSettlementPayload,
   ReviewedServiceSettlement,
   SettlementExportTarget,
+  SettlementNoticePreview,
   SettlementTarget,
 } from "../../contracts/settlements";
 import type { TechnicalServicePreview } from "../../contracts/technicalServices";
@@ -32,6 +33,29 @@ export function previewSettlement({ pi, month, sourceType }: SettlementTarget, s
       ...(signal ? { signal } : {}),
     });
   return feedingSettlement({ pi, month, sourceType }, false, signal);
+}
+
+export function previewSettlementNotice({ pi, month, sourceType }: SettlementTarget, signal?: AbortSignal) {
+  const service = sourceType === "pi_merged_technical_service";
+  return requestJson<SettlementNoticePreview>(
+    service ? "/api/technical-services/settlements/preview" : "/api/billing-statements/generate-by-pi",
+    {
+      method: "POST",
+      body: JSON.stringify(
+        service
+          ? { pi, month, view: "notice" }
+          : { pi, month, sourceType, status: "draft", persist: false, initiate: false, view: "notice" },
+      ),
+      ...(signal ? { signal } : {}),
+    },
+  );
+}
+
+export function usePreviewSettlementNotice() {
+  return useMutation({
+    mutationFn: ({ signal, ...target }: SettlementTarget & { signal?: AbortSignal }) =>
+      previewSettlementNotice(target, signal),
+  });
 }
 
 export function initiateSettlement(target: ServiceTarget & InitiateSettlementPayload): Promise<TechnicalServicePreview>;

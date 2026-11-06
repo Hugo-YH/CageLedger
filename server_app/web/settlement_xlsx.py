@@ -37,22 +37,22 @@ def download_settlement_xlsx(handler, *, connect_db, generate_statement, clean_t
                 }
                 statement, lines, _ = generate_statement(conn, payload, user)
                 entries.append((statement, lines))
-        content = build_settlement_workbook(entries)
+        if len(entries) == 1:
+            content = build_settlement_workbook(entries)
+            filename = _xlsx_filename(entries[0][0])
+        else:
+            files = [
+                (_xlsx_filename(statement), build_settlement_workbook([(statement, lines)]))
+                for statement, lines in entries
+            ]
+            content = build_pdf_zip(files)
+            filename = "项目负责人结算汇总表 批量导出.zip"
     except PermissionError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         return
     except ValueError as exc:
         handler.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         return
-    if len(entries) == 1:
-        content = build_settlement_workbook(entries)
-        filename = _xlsx_filename(entries[0][0])
-    else:
-        files = [
-            (_xlsx_filename(statement), build_settlement_workbook([(statement, lines)])) for statement, lines in entries
-        ]
-        content = build_pdf_zip(files)
-        filename = "项目负责人结算汇总表 批量导出.zip"
     handler.send_download(
         content,
         filename,

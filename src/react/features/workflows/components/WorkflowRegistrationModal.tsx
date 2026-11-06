@@ -3,7 +3,7 @@ import { formatPersonNames } from "../../../../domain/personNames";
 import { UploadOutlined } from "@ant-design/icons";
 import { Alert, Button, Flex, Form, Input, Space, Switch, Tag, Typography, Upload } from "antd";
 import { Modal } from "../../../components/ui/Modal";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
 
 import { fundingBookRemark, reviewFundingBookNos, type FundingBookReference } from "../../../../domain/fundingBookNo";
@@ -13,6 +13,7 @@ import { uploadWorkflowAttachment, useAdvanceWorkflow, useWorkflowFundingBookOpt
 import { FundingBookConfirmationModal } from "./FundingBookConfirmationModal";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 import { ReimbursementFormFields } from "./ReimbursementFormFields";
+import { DialogActivityContext } from "../../../state/dialogActivity";
 
 interface RegistrationValues {
   reimbursementForms?: Array<{ formNo: string; amount?: number; fundingBookNo?: string }>;
@@ -120,7 +121,11 @@ function WorkflowRegistrationForm({
   }>({ otherProjectOptions: [], unknownFundingBookNos: [] });
   const settlementLabel = target.sourceType === "pi_merged_technical_service" ? "技术服务费结算单" : "饲养费结算单";
   const hasPayableAmount = Number(target.totalAmount || 0) > 0;
-  const fundingBookOptions = useWorkflowFundingBookOptions(target.id);
+  const active = useContext(DialogActivityContext);
+  const fundingBookOptions = useWorkflowFundingBookOptions(
+    target.id,
+    active && hasPayableAmount && Boolean(reimbursementFormReturned),
+  );
   const fundingOptions = fundingBookOptions.data?.items ?? [];
 
   async function submitRegistration(confirmed = false) {
@@ -271,6 +276,11 @@ function WorkflowRegistrationForm({
                   style={{ marginTop: 8 }}
                   title="无法读取最新版实验申请汇总表；可手动填写经费本编号。"
                   type="warning"
+                  action={
+                    <Button loading={fundingBookOptions.isFetching} onClick={() => void fundingBookOptions.refetch()}>
+                      重试读取
+                    </Button>
+                  }
                 />
               ) : null}
               <ReimbursementFormFields options={fundingOptions} loading={fundingBookOptions.isLoading} />

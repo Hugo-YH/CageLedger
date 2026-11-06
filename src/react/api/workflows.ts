@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import type { PagedResponse, ReimbursementDetailResponse, ReimbursementRecord, ReimbursementStatus } from "./contracts";
 import { requestJson, requestMultipart } from "./client";
@@ -220,18 +221,27 @@ export function useBillingWorkflows(inputParams: WorkflowListParams, enabled = t
   });
 }
 
-export function useWorkflowFundingBookOptions(workflowId: string) {
-  return useQuery({
+export function useWorkflowFundingBookOptions(workflowId: string, enabled = true) {
+  const client = useQueryClient();
+  const result = useQuery({
     queryKey: queryKeys.workflowFundingBookOptions(workflowId),
     queryFn: ({ signal }) =>
       requestJson<WorkflowFundingBookOptionsResponse>(
         `/api/billing-workflows/${encodeURIComponent(workflowId)}/funding-options`,
         { signal },
       ),
-    enabled: Boolean(workflowId),
+    enabled: Boolean(workflowId) && enabled,
     staleTime: 0,
     refetchOnMount: "always",
   });
+  useEffect(() => {
+    if (enabled || !workflowId) return;
+    const queryKey = queryKeys.workflowFundingBookOptions(workflowId);
+    const query = client.getQueryCache().find({ queryKey, exact: true });
+    // Hidden fields no longer own this read, but another active consumer may.
+    if (query && !query.isActive()) void client.cancelQueries({ queryKey, exact: true });
+  }, [client, enabled, workflowId]);
+  return result;
 }
 
 function billingWorkflowSearch(params: WorkflowListParams) {
