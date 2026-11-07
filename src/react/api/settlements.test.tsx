@@ -87,9 +87,13 @@ describe("shared settlement actions", () => {
     },
   );
 
-  it("previews service versions only when absent and keeps reviewed versions on initiation", async () => {
+  it("reads lightweight service versions only when absent and keeps reviewed versions on initiation", async () => {
     vi.mocked(requestJson).mockResolvedValueOnce({ sourceVersions: { sheet: "v1" } });
     await initiateSettlement(target);
+    expect(requestJson).toHaveBeenNthCalledWith(1, "/api/technical-services/settlements/preview", {
+      method: "POST",
+      body: JSON.stringify({ pi: target.pi, month: target.month, view: "notice" }),
+    });
     expect(requestJson).toHaveBeenNthCalledWith(2, "/api/technical-services/settlements", {
       method: "POST",
       body: JSON.stringify({ pi: target.pi, month: target.month, sourceVersions: { sheet: "v1" } }),
@@ -107,6 +111,19 @@ describe("shared settlement actions", () => {
     vi.mocked(requestJson).mockRejectedValue(conflict);
     await expect(initiateSettlement({ ...target, sourceVersions: { sheet: "reviewed" } })).rejects.toBe(conflict);
     expect(requestJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload fallback versions after a service initiation conflict", async () => {
+    const conflict = Object.assign(new Error("来源版本已变化"), { status: 409 });
+    vi.mocked(requestJson)
+      .mockResolvedValueOnce({ sourceVersions: { sheet: "notice-version" } })
+      .mockRejectedValueOnce(conflict);
+    await expect(initiateSettlement(target)).rejects.toBe(conflict);
+    expect(requestJson).toHaveBeenCalledTimes(2);
+    expect(requestJson).toHaveBeenLastCalledWith("/api/technical-services/settlements", {
+      method: "POST",
+      body: JSON.stringify({ pi: target.pi, month: target.month, sourceVersions: { sheet: "notice-version" } }),
+    });
   });
 
   it("retains old exports and service preview/PDF entry points", async () => {

@@ -410,6 +410,111 @@ class WorkflowWithdrawalPermissionTests(unittest.TestCase):
         self.assertTrue(withdrawal_capabilities(self.conn, OTHER, [self.workflow_id])[self.workflow_id])
         self.assertEqual(self.state(), before)
 
+    def test_historical_technical_sources_use_bounded_audit_batches_and_account_ids(self):
+        from server_app.domains.workflow.repository import list_workflow_handlers
+
+        historic = {
+            "statement": {
+                "sourceType": "pi_merged_technical_service",
+                "sourceIds": [f"technical-{number}" for number in range(450)],
+            },
+            "lines": [{"notes": "large-legacy-line" * 1000}],
+        }
+        self.conn.execute(
+            """INSERT INTO billing_statement_versions
+            (id,workflow_id,version_no,version_status,workflow_status,generated_at,payload)
+            VALUES(?,?,0,'superseded','statement_generated','2026-06-01',?)""",
+            ("historical", self.workflow_id, json.dumps(historic)),
+        )
+        write_audit_events(
+            self.conn,
+            [
+                audit_event(
+                    OTHER,
+                    "technical_service.updated",
+                    "technical_service_sheet",
+                    "technical-449",
+                    "修改技术服务",
+                    [],
+                    "2026-07-01T00:00:00+00:00",
+                    None,
+                    {"id": "technical-449"},
+                )
+            ],
+        )
+        self.conn.commit()
+        before, queries, decoded = self.state(), [], []
+        decode = json.loads
+
+        def capture(payload):
+            decoded.append(payload)
+            return decode(payload)
+
+        self.conn.set_trace_callback(queries.append)
+        try:
+            with patch("server_app.domains.workflow.repository.json.loads", side_effect=capture):
+                statuses, handled = list_workflow_handlers(self.conn, [self.workflow_id], OTHER["id"])
+        finally:
+            self.conn.set_trace_callback(None)
+        self.assertEqual(statuses[self.workflow_id], "statement_generated")
+        self.assertEqual(handled, {self.workflow_id})
+        self.assertEqual(len([sql for sql in queries if "entity_type='technical_service_sheet'" in sql]), 2)
+        self.assertFalse(any("large-legacy-line" in payload for payload in decoded))
+        self.assertFalse(
+            withdrawal_capabilities(self.conn, {**OTHER, "id": "same-name"}, [self.workflow_id])[self.workflow_id]
+        )
+        self.assertEqual(self.state(), before)
+
+    def test_permission_projection_preserves_old_source_shapes_and_decoder_errors(self):
+        from server_app.domains.workflow.repository import list_workflow_handlers
+
+        self.source_audit("legacy-id", OTHER)
+        for statement in (
+            {"sourceType": "quantity_sheet", "sourceId": "legacy-id"},
+            {"sourceType": "pi_merged_quantity_sheet", "sourceIds": "old", "sourceId": "legacy-id"},
+        ):
+            with self.subTest(statement=statement):
+                self.conn.execute(
+                    "UPDATE billing_statement_versions SET payload=?", (json.dumps({"statement": statement}),)
+                )
+                self.assertIn(self.workflow_id, list_workflow_handlers(self.conn, [self.workflow_id], OTHER["id"])[1])
+        self.conn.execute(
+            "UPDATE billing_statement_versions SET payload=?",
+            (json.dumps({"statement": {"sourceType": "pi_merged_technical_service"}}),),
+        )
+        self.assertNotIn(self.workflow_id, list_workflow_handlers(self.conn, [self.workflow_id], OTHER["id"])[1])
+        for payload, error in (
+            ("{broken", json.JSONDecodeError),
+            ('{"statement":[1]}', AttributeError),
+            ('{"statement":{"sourceType":"pi_merged_technical_service","sourceIds":null}}', TypeError),
+        ):
+            with self.subTest(payload=payload):
+                self.conn.execute("UPDATE billing_statement_versions SET payload=?", (payload,))
+                with self.assertRaises(error):
+                    list_workflow_handlers(self.conn, [self.workflow_id], OTHER["id"])
+        with patch("server_app.domains.workflow.repository.json.loads") as decode:
+            statuses, handled = list_workflow_handlers(self.conn, [self.workflow_id], None)
+        self.assertEqual(statuses[self.workflow_id], "statement_generated")
+        self.assertFalse(handled)
+        decode.assert_not_called()
+
+    def test_permission_projection_keeps_python_last_key_semantics_for_legacy_duplicate_fields(self):
+        from server_app.domains.workflow.repository import list_workflow_handlers
+
+        self.conn.execute(
+            "UPDATE billing_workflows SET payload=?", ('{"sentBy":{"id":"unrelated"},"sentBy":{"id":"room-b"}}',)
+        )
+        self.assertIn(self.workflow_id, list_workflow_handlers(self.conn, [self.workflow_id], OTHER["id"])[1])
+        self.conn.execute("UPDATE billing_workflows SET payload='{}'")
+        self.source_audit("last-source", OTHER)
+        for payload in (
+            '{"statement":{"sourceType":"quantity_sheet","sourceIds":["wrong"],"sourceIds":["last-source"]}}',
+            '{"statement":{"sourceType":"unknown"},"statement":{"sourceType":"quantity_sheet","sourceIds":["last-source"]}}',
+        ):
+            with self.subTest(payload=payload):
+                self.conn.execute("UPDATE billing_statement_versions SET payload=?", (payload,))
+                self.assertIn(self.workflow_id, list_workflow_handlers(self.conn, [self.workflow_id], OTHER["id"])[1])
+
     def test_registration_handler_can_revoke_and_original_initiator_is_preserved(self):
         self.advance("statement_sent")
         self.advance("statement_archived", OTHER, registration={"signedStatementReturned": True})

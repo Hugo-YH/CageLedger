@@ -15,7 +15,7 @@ from server_app.repositories.billing_candidates import (
 from server_app.repositories.person_names import column_predicate, person_options, prepare_person_filters
 from server_app.shared import now_iso
 
-from .candidates import list_settlement_candidates, refresh_settlement_candidate_snapshot
+from .candidates import prepare_settlement_candidate_registry, refresh_settlement_candidate_snapshots
 
 COLUMNS = {key: key for key in ("month", "pi", "iacuc", "manager", "amount", "workflow", "feeType")}
 LABELS = {"feeding": "饲养费", "technical_service": "技术服务费"}
@@ -25,24 +25,12 @@ def prepare(conn, filters, calculate, *, column="", prepare_calculations=None):
     selected = services_listing.columns(filters, COLUMNS)
     if selected.get("feeType") and "feeding" not in selected["feeType"]:
         return
-    # Keep the existing feeding registry and amount-refresh rules. Source sheets
-    # remain protected by their own domains; this list never writes statements.
-    feeding_filters = {
-        **filters,
-        "limit": 1,
-        "offset": 0,
-        "columnFilters": {k: v for k, v in filters.get("columnFilters", {}).items() if k != "feeType"},
-    }
-    if column == "amount":
-        feeding_filters["sortKey"] = "amount"
-    elif feeding_filters.get("sortKey") == "feeType":
-        feeding_filters["sortKey"] = "month"
-    list_settlement_candidates(
-        conn, feeding_filters, calculate, "quantity_sheet", now_iso(), prepare_calculations=prepare_calculations
-    )
+    # Registry preparation must not calculate an unrelated first page or acquire
+    # a snapshot write lock before the actual page's amounts are prepared.
+    prepare_settlement_candidate_registry(conn, now=now_iso())
 
 
-def base(conn, actor):
+def base(conn, actor, *, fields=None, validate=True):
     feeding_where, _ = billing_candidate_snapshot_where(source_type="quantity_sheet")
     manager = """(SELECT GROUP_CONCAT(manager, '、') FROM
         (SELECT DISTINCT manager FROM quantity_sheets qs WHERE qs.month=b.month AND qs.pi=b.pi
@@ -63,8 +51,10 @@ def base(conn, actor):
     params = ["quantity_sheet"]
     if actor.get("role") not in ("admin", "room_admin"):
         return feeding, params
-    services_repo.protected_ids(conn)
-    technical, technical_params = services_listing.candidate_base(services_repo.SOURCE_TYPE)
+    if validate:
+        services_repo.validate_candidate_workflows(conn)
+        services_repo.protected_ids(conn)
+    technical, technical_params = services_listing.candidate_base(services_repo.SOURCE_TYPE, fields=fields)
     service = f"""SELECT 'technical_service' AS feeType, '{services_repo.SOURCE_TYPE}' AS sourceType,
         month, pi, iacuc, iacuc_json, manager, manager_json, amount, '' AS error,
         CASE WHEN workflow_id IS NULL THEN '未发起' WHEN workflow_status='statement_generated' THEN '已生成'
@@ -102,19 +92,27 @@ def list_candidates(conn, actor, filters, calculate, *, prepare_calculations=Non
         "(SELECT pi FROM billing_candidate_snapshots UNION SELECT pi FROM technical_service_sheets)",
         {"pi": "pi"},
     )
-    condition, params = where(filters)
-    params = [*source_params, *params]
+    condition, filter_values = where(filters)
+    params = [*source_params, *filter_values]
     order = services_listing.order(filters, COLUMNS, "month DESC")
     order = ("amount IS NULL ASC, " if filters.get("sortKey") == "amount" else "") + order
     sql = f"SELECT * FROM ({source}) WHERE {condition} ORDER BY {order}, month DESC, pi COLLATE NOCASE, feeType"
     limit, offset = services_listing.pagination(filters)
-    total = conn.execute(f"SELECT COUNT(*) FROM ({source}) WHERE {condition}", params).fetchone()[0]
+    _refresh_amounts(conn, actor, filters, calculate, prepare_calculations=prepare_calculations)
+    count_source, count_values = base(conn, actor, fields=_filter_fields(filters), validate=False)
+    total = conn.execute(
+        f"SELECT COUNT(*) FROM ({count_source}) WHERE {condition}", [*count_values, *filter_values]
+    ).fetchone()[0]
     rows = conn.execute(sql + " LIMIT ? OFFSET ?", [*params, limit, offset]).fetchall()
     stale = [row for row in rows if row["feeType"] == "feeding" and row["stale"]]
-    if stale and prepare_calculations is not None:
-        prepare_calculations([(row["month"], row["pi"]) for row in stale])
-    for row in stale:
-        refresh_settlement_candidate_snapshot(conn, row["month"], row["pi"], calculate, now=now_iso())
+    if stale:
+        refresh_settlement_candidate_snapshots(
+            conn,
+            [(row["month"], row["pi"]) for row in stale],
+            calculate,
+            now=now_iso(),
+            prepare_calculations=prepare_calculations,
+        )
     if stale:
         rows = conn.execute(sql + " LIMIT ? OFFSET ?", [*params, limit, offset]).fetchall()
     items = [
@@ -146,7 +144,7 @@ def filter_options(conn, actor, filters, column, calculate, *, prepare_calculati
         raise ValueError("筛选字段无效")
     scoped = {**filters, "columnFilters": {k: v for k, v in filters.get("columnFilters", {}).items() if k != column}}
     prepare(conn, scoped, calculate, column=column, prepare_calculations=prepare_calculations)
-    source, values = base(conn, actor)
+    source, values = base(conn, actor, fields=_filter_fields(scoped) | {column})
     filters = prepare_person_filters(
         conn,
         filters,
@@ -155,6 +153,14 @@ def filter_options(conn, actor, filters, column, calculate, *, prepare_calculati
         exclude=column,
     )
     condition, params = where(filters, exclude=column)
+    _refresh_amounts(
+        conn,
+        actor,
+        {**filters, "columnFilters": scoped["columnFilters"]},
+        calculate,
+        column=column,
+        prepare_calculations=prepare_calculations,
+    )
     if column in ("iacuc", "manager"):
         sql = f"SELECT value, COUNT(*) FROM ({source}) q, json_each(q.{column}_json) WHERE {condition} GROUP BY value ORDER BY value"
     else:
@@ -174,3 +180,30 @@ def filter_options(conn, actor, filters, column, calculate, *, prepare_calculati
 
     result["items"] = person_options(filters, column, result["items"])
     return result
+
+
+def _filter_fields(filters):
+    return {key for key, values in services_listing.columns(filters, COLUMNS).items() if values}
+
+
+def _refresh_amounts(conn, actor, filters, calculate, *, column="", prepare_calculations=None):
+    selected = services_listing.columns(filters, COLUMNS)
+    if selected.get("feeType") and "feeding" not in selected["feeType"]:
+        return
+    if column != "amount" and filters.get("sortKey") != "amount" and "amount" not in _filter_fields(filters):
+        return
+    # Amount predicates must see all matching fresh amounts, before pagination.
+    # Other filters use the unified list's own semantics, including PI aliases.
+    source, source_values = base(conn, actor, fields=_filter_fields(filters) - {"amount"}, validate=False)
+    condition, values = where(filters, exclude="amount")
+    rows = conn.execute(
+        f"SELECT month, pi FROM ({source}) WHERE feeType='feeding' AND stale=1 AND {condition}",
+        [*source_values, *values],
+    ).fetchall()
+    refresh_settlement_candidate_snapshots(
+        conn,
+        [(row["month"], row["pi"]) for row in rows],
+        calculate,
+        now=now_iso(),
+        prepare_calculations=prepare_calculations,
+    )

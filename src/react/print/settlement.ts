@@ -53,7 +53,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
     .map((page, pageIndex) => {
       const resolvedSlots = page.slots.map((slot) => ({
         column: slot.column,
-        summary: slot.column ? totals.find((item) => item.key === slot.column?.key) || emptySummary() : emptySummary(),
+        summary: slot.column ? totalsByKey.get(slot.column.key) || emptySummary() : emptySummary(),
       }));
       const mouseSlots = page.showLeadingTotals
         ? allMouseSlots
@@ -204,10 +204,14 @@ export function settlementStatementHtml(result: BillingStatementResponse, autoPr
   return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title><style>${settlementPrintStyles()}.summary-table .summary-total-money{font-weight:800}.note-line .note-entry{line-height:1.35}.note-line .note-entry strong{font-weight:700}.note-line .note-detail{margin-left:0}</style></head><body>${settlementStatementMarkup(result)}${autoPrint ? "<script>window.onload=()=>window.print()</script>" : ""}</body></html>`;
 }
 
-export function openSettlementPrint(result: BillingStatementResponse) {
+/** Reuse only the caller's current result document; no preview survives its owner. */
+export function openSettlementPrint(result: BillingStatementResponse, previewHtml?: string) {
   const popup = window.open("", "_blank");
   if (!popup) return false;
-  popup.document.write(settlementStatementHtml(result));
+  const html = previewHtml?.endsWith("</body></html>")
+    ? previewHtml.replace(/<\/body><\/html>$/, "<script>window.onload=()=>window.print()</script></body></html>")
+    : settlementStatementHtml(result);
+  popup.document.write(html);
   popup.document.close();
   return true;
 }

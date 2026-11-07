@@ -142,6 +142,34 @@ class CandidateRefreshConcurrencyTests(unittest.TestCase):
             "sheet-a-updated",
         )
 
+    def test_unified_page_rechecks_a_concurrent_source_update_before_publishing(self):
+        from server_app.domains.billing.unified_candidates import list_candidates
+
+        changed = False
+
+        def calculate(month, pi):
+            nonlocal changed
+            if pi == "B" and not changed:
+                self.assertFalse(self.reader.in_transaction)
+                changed = True
+                self.writer.execute("UPDATE quantity_sheets SET updated_at='source-new' WHERE id='sheet-a'")
+                invalidate_settlement_candidate_snapshots(self.writer, [(month, "A")], now="source-new")
+                self.writer.commit()
+            version = self.reader.execute("SELECT updated_at FROM quantity_sheets WHERE pi=?", (pi,)).fetchone()[0]
+            return {"totalAmount": 99 if version == "source-new" else 1}
+
+        result = list_candidates(
+            self.reader,
+            {"id": "admin", "role": "admin"},
+            {"limit": 10, "offset": 0, "sortKey": "month", "sortDir": "desc", "columnFilters": {}},
+            calculate,
+        )
+        self.assertEqual({item["pi"]: item["totalAmount"] for item in result["items"]}, {"A": 99, "B": 1})
+        self.reader.commit()
+        self.assertEqual(
+            get_billing_candidate_snapshot(self.writer, "2026-09", "A", "quantity_sheet")["totalAmount"], 99
+        )
+
     def test_prepare_callback_may_start_a_caller_owned_transaction(self):
         def prepare(_keys):
             self.reader.execute("UPDATE quantity_sheets SET manager='prepared' WHERE id='sheet-a'")

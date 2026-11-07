@@ -63,7 +63,7 @@ export function initiateSettlement(target: InitiateSettlementPayload): Promise<B
 export async function initiateSettlement({ pi, month, sourceType, sourceVersions }: InitiateSettlementPayload) {
   if (sourceType !== "pi_merged_technical_service") return feedingSettlement({ pi, month, sourceType }, true);
   // Obtain versions only when the caller has not already reviewed a preview.
-  const versions = sourceVersions ?? (await previewSettlement({ pi, month, sourceType })).sourceVersions;
+  const versions = sourceVersions ?? (await previewSettlementNotice({ pi, month, sourceType })).sourceVersions;
   return initiateReviewedServiceSettlement({ pi, month, sourceVersions: versions });
 }
 

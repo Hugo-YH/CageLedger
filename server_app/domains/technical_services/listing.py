@@ -101,21 +101,28 @@ def sheet_where(params, *, exclude=""):
     return " AND ".join(clauses) or "1", values
 
 
-def candidate_base(source_type):
+def candidate_base(source_type, *, fields=None):
     statuses = sorted(FROZEN_WORKFLOW_STATUSES)
     marks = ",".join("?" for _ in statuses)
+    # COUNT and facets need only their filter/target dimensions. SQLite cannot
+    # prune unused DISTINCT aggregates inside this grouped UNION branch itself.
+    fields = {"iacuc", "manager"} if fields is None else fields
+    iacuc = "GROUP_CONCAT(DISTINCT s.iacuc)" if "iacuc" in fields else "''"
+    iacuc_json = "json_group_array(DISTINCT s.iacuc)" if "iacuc" in fields else "'[]'"
+    manager = "GROUP_CONCAT(DISTINCT json_extract(s.payload,'$.manager'))" if "manager" in fields else "''"
+    manager_json = "json_group_array(DISTINCT json_extract(s.payload,'$.manager'))" if "manager" in fields else "'[]'"
     return (
-        f"""SELECT s.month, s.pi, GROUP_CONCAT(DISTINCT s.iacuc) AS iacuc,
-        json_group_array(DISTINCT s.iacuc) AS iacuc_json,
-        GROUP_CONCAT(DISTINCT json_extract(s.payload,'$.manager')) AS manager,
-        json_group_array(DISTINCT json_extract(s.payload,'$.manager')) AS manager_json,
+        f"""SELECT s.month, s.pi, {iacuc} AS iacuc, {iacuc_json} AS iacuc_json,
+        {manager} AS manager, {manager_json} AS manager_json,
         w.id AS workflow_id, w.workflow_status AS workflow_status,
         CASE WHEN w.workflow_status IN ({marks}) THEN json_extract(v.payload,'$.statement.totalAmount')
              ELSE SUM(s.total_cents) / 100.0 END AS amount,
         CASE WHEN w.workflow_status IN ('statement_sent','statement_archived','statement_locked')
              THEN w.workflow_status ELSE 'statement_generated' END AS workflow
         FROM technical_service_sheets s
-        LEFT JOIN billing_workflows w ON w.month=s.month AND json_extract(w.payload,'$.pi')=s.pi AND w.source_type=?
+        LEFT JOIN billing_workflows w ON w.month=s.month
+            AND CAST(CASE WHEN json_valid(w.payload) THEN json_extract(w.payload,'$.pi') END AS TEXT)=s.pi
+            AND w.source_type=?
         LEFT JOIN billing_statement_versions v ON v.id=w.current_version_id
         WHERE s.deleted=0 GROUP BY s.month, s.pi""",
         [*statuses, source_type],

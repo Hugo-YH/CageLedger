@@ -208,6 +208,129 @@ class TechnicalServiceTests(unittest.TestCase):
         self.assertEqual(result["page"]["total"], 7)
         self.assertEqual([item["totalAmount"] for item in result["items"]], [300, 60])
 
+    def test_unified_cold_page_batches_only_its_visible_feeding_groups_before_writing(self):
+        from server_app.domains.billing.unified_candidates import list_candidates
+        from server_app.repositories.billing_candidates import sync_billing_candidate_snapshot_registry
+        from tests.test_billing_candidates import seed_quantity_sheet
+
+        for number in range(15):
+            seed_quantity_sheet(self.conn, f"feeding-{number}", "2026-10", f"PI {number:02}", f"F{number}")
+        sync_billing_candidate_snapshot_registry(self.conn, "quantity_sheet", "before")
+        self.conn.commit()
+        calls, prepared = [], []
+
+        def calculate(month, pi):
+            calls.append((pi, self.conn.in_transaction))
+            return {"totalAmount": int(pi.split()[-1])}
+
+        filters = {"limit": 5, "offset": 5, "sortKey": "month", "sortDir": "desc", "columnFilters": {}}
+        result = list_candidates(self.conn, ADMIN, filters, calculate, prepare_calculations=prepared.append)
+        self.assertEqual(result["page"]["total"], 15)
+        self.assertEqual(calls, [(f"PI {number:02}", False) for number in range(5, 10)])
+        self.assertEqual(prepared, [[("2026-10", f"PI {number:02}") for number in range(5, 10)]])
+        self.assertEqual([item["totalAmount"] for item in result["items"]], list(range(5, 10)))
+        self.assertTrue(self.conn.in_transaction)
+        self.conn.rollback()
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM billing_candidate_snapshots WHERE is_stale=1").fetchone()[0], 15
+        )
+
+    def test_unified_amount_filter_and_facet_refresh_matching_groups_before_paging(self):
+        from server_app.domains.billing.unified_candidates import filter_options, list_candidates
+        from server_app.repositories.billing_candidates import sync_billing_candidate_snapshot_registry
+        from tests.test_billing_candidates import seed_quantity_sheet
+
+        for number in range(4):
+            seed_quantity_sheet(self.conn, f"feeding-{number}", "2026-10", f"PI {number}", f"F{number}", manager="匹配")
+        seed_quantity_sheet(self.conn, "outside", "2026-09", "无关", "OUT", manager="其他")
+        sync_billing_candidate_snapshot_registry(self.conn, "quantity_sheet", "before")
+        self.conn.commit()
+        calls = []
+
+        def calculate(month, pi):
+            calls.append(pi)
+            return {"totalAmount": int(pi.split()[-1]) * 10}
+
+        filters = {
+            "limit": 1,
+            "offset": 0,
+            "sortKey": "month",
+            "sortDir": "desc",
+            "columnFilters": {"manager": ["匹配"], "amount": ["30.00"]},
+        }
+        result = list_candidates(self.conn, ADMIN, filters, calculate)
+        self.assertEqual(calls, [f"PI {number}" for number in range(4)])
+        self.assertEqual(result["page"]["total"], 1)
+        self.assertEqual(result["items"][0]["pi"], "PI 3")
+        self.conn.commit()
+        self.conn.execute("UPDATE billing_candidate_snapshots SET is_stale=1")
+        self.conn.commit()
+        calls.clear()
+        options = filter_options(self.conn, ADMIN, filters, "amount", calculate)["items"]
+        self.assertEqual(calls, [f"PI {number}" for number in range(4)])
+        self.assertEqual([row["value"] for row in options], ["0.00", "10.00", "20.00", "30.00"])
+
+    def test_candidate_count_projection_keeps_frozen_amount_and_filter_dimensions(self):
+        from server_app.domains.technical_services import listing
+
+        self.save()
+        self.start()
+        self.save(self.sheet(id="extra", serviceId="veterinary_observation"))
+        full, values = listing.candidate_base(repo.SOURCE_TYPE)
+        thin, thin_values = listing.candidate_base(repo.SOURCE_TYPE, fields=set())
+        complete = self.conn.execute(full, values).fetchone()
+        projected = self.conn.execute(thin, thin_values).fetchone()
+        for key in ("month", "pi", "amount", "workflow_id", "workflow_status"):
+            self.assertEqual(complete[key], projected[key])
+        self.assertEqual(projected["amount"], 300)
+        self.assertEqual(projected["iacuc_json"], "[]")
+        iacuc_only, arguments = listing.candidate_base(repo.SOURCE_TYPE, fields={"iacuc"})
+        self.assertEqual(self.conn.execute(iacuc_only, arguments).fetchone()["iacuc_json"], complete["iacuc_json"])
+        plan = [row[3] for row in self.conn.execute("EXPLAIN QUERY PLAN " + thin, thin_values)]
+        self.assertTrue(
+            any("idx_billing_workflows_technical_month_pi" in line and "<expr>=?" in line for line in plan), plan
+        )
+        self.assertFalse(
+            any("group_concat(DISTINCT)" in line or "json_group_array(DISTINCT)" in line for line in plan), plan
+        )
+
+    def test_technical_lookup_index_preserves_corrupt_legacy_rows_but_candidate_reads_reject_them(self):
+        from server_app.domains.billing.unified_candidates import list_candidates
+        from server_app.persistence.indexes import create_performance_indexes
+
+        self.save()
+        self.start()
+        self.conn.execute("UPDATE billing_workflows SET payload='{broken' WHERE source_type=?", (repo.SOURCE_TYPE,))
+        self.conn.execute("DROP INDEX idx_billing_workflows_technical_month_pi")
+        create_performance_indexes(self.conn)
+        create_performance_indexes(self.conn)
+        self.assertEqual(self.conn.execute("SELECT payload FROM billing_workflows").fetchone()[0], "{broken")
+        with self.assertRaisesRegex(ValueError, "结算流程数据损坏"):
+            list_candidates(
+                self.conn, ADMIN, {"limit": 10, "offset": 0, "columnFilters": {"feeType": ["technical_service"]}}, None
+            )
+        with self.assertRaisesRegex(ValueError, "结算流程数据损坏"):
+            repo.candidate_scopes(self.conn, {})
+
+    def test_technical_lookup_keeps_original_text_affinity_for_legacy_pi_values(self):
+        from server_app.domains.technical_services import listing
+
+        self.save()
+        self.start()
+        query, arguments = listing.candidate_base(repo.SOURCE_TYPE)
+        for pi, text in (("纪老师", "纪老师"), (123, "123"), (12.5, "12.5"), (True, "1"), (None, "")):
+            with self.subTest(pi=pi):
+                self.conn.execute("UPDATE technical_service_sheets SET pi=?", (text,))
+                self.conn.execute(
+                    "UPDATE billing_workflows SET payload=json_set(payload,'$.pi',json(?))", (json.dumps(pi),)
+                )
+                original = self.conn.execute(
+                    """SELECT w.id FROM technical_service_sheets s LEFT JOIN billing_workflows w
+                    ON w.month=s.month AND json_extract(w.payload,'$.pi')=s.pi AND w.source_type=?""",
+                    (repo.SOURCE_TYPE,),
+                ).fetchone()[0]
+                self.assertEqual(self.conn.execute(query, arguments).fetchone()["workflow_id"], original)
+
     def test_protected_ids_project_sources_and_keep_historical_shapes_and_missing_version_guard(self):
         self.save()
         self.start()

@@ -138,7 +138,7 @@ describe("settlement batch", () => {
     });
     expect(requestJson).toHaveBeenNthCalledWith(2, "/api/technical-services/settlements/preview", {
       method: "POST",
-      body: JSON.stringify({ pi: "b", month: "2026-08" }),
+      body: JSON.stringify({ pi: "b", month: "2026-08", view: "notice" }),
     });
     expect(requestJson).toHaveBeenNthCalledWith(3, "/api/technical-services/settlements", {
       method: "POST",

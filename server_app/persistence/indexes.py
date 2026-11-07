@@ -52,6 +52,7 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_month ON billing_workflows(month)",
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_feeding_scope ON billing_workflows(month, iacuc) WHERE source_type='pi_merged_quantity_sheet'",
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_technical_month ON billing_workflows(month) WHERE source_type='pi_merged_technical_service'",
+    "CREATE INDEX IF NOT EXISTS idx_billing_workflows_technical_month_pi ON billing_workflows(month, CAST(CASE WHEN json_valid(payload) THEN json_extract(payload,'$.pi') END AS TEXT)) WHERE source_type='pi_merged_technical_service'",
     "CREATE INDEX IF NOT EXISTS idx_billing_workflows_status ON billing_workflows(workflow_status)",
     "CREATE INDEX IF NOT EXISTS idx_billing_versions_workflow_number ON billing_statement_versions(workflow_id, version_no)",
     "CREATE INDEX IF NOT EXISTS idx_billing_version_lines_version_date ON billing_statement_version_lines(version_id, line_date)",

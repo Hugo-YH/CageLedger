@@ -25,6 +25,18 @@ async function loginAndSeed(page: Page) {
   expect(upload.ok(), await upload.text()).toBeTruthy();
 }
 
+async function verifyCurrentPreviewPrint(page: Page) {
+  const expected = await page.frameLocator('iframe[title="结算单预览"]').locator("body").textContent();
+  const popupPromise = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "打印结算单", exact: true }).click();
+  const popup = await popupPromise;
+  try {
+    await expect(popup.locator("body")).toContainText(expected!.trim());
+  } finally {
+    await popup.close();
+  }
+}
+
 async function filterServiceColumn(page: Page, label: string, values: string[]) {
   const alternative =
     ({ 月份: "结算月份", 伦理号: "IACUC", 流程: "结算状态" } as Record<string, string>)[label] || label;
@@ -659,6 +671,7 @@ test("shared menu and settlement list keep same-PI feeding and service bills sep
   await expect(feeding).toContainText(feedingAmount.toFixed(2));
   await technical.getByRole("button", { name: /预览结算单/ }).click();
   await expect(page.frameLocator('iframe[title="结算单预览"]').getByText("服务日数：4 合计：300.00 元")).toBeVisible();
+  await verifyCurrentPreviewPrint(page);
   await page
     .getByRole("dialog", { name: new RegExp(pi) })
     .locator(".ant-modal-close")
@@ -666,6 +679,7 @@ test("shared menu and settlement list keep same-PI feeding and service bills sep
   await expect(page.getByRole("dialog", { name: new RegExp(pi) })).toBeHidden();
   await feeding.getByRole("button", { name: /预览结算单/ }).click();
   await expect(page.frameLocator('iframe[title="结算单预览"]').locator("body")).toContainText("饲养费");
+  await verifyCurrentPreviewPrint(page);
   await page
     .getByRole("dialog", { name: new RegExp(pi) })
     .locator(".ant-modal-close")
@@ -697,12 +711,18 @@ test("shared menu and settlement list keep same-PI feeding and service bills sep
       { stdio: "pipe" },
     );
   }
+  const servicePreviews: unknown[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/technical-services/settlements/preview")
+      servicePreviews.push(request.postDataJSON());
+  });
   await toolbar.getByRole("button", { name: "批量发起结算", exact: true }).click();
   await page
     .getByRole("dialog", { name: "批量发起结算流程", exact: true })
     .getByRole("button", { name: "发起 2 个流程", exact: true })
     .click();
   await expect(page.getByRole("status").filter({ hasText: "已发起 2 个结算流程" })).toBeVisible();
+  expect(servicePreviews).toEqual([{ pi, month, view: "notice" }]);
   const workflows = (
     await (
       await page.request.get(

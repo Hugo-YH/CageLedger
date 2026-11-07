@@ -6,6 +6,31 @@ from server_app.repositories.billing_workflows import *  # noqa: F403
 from .rules import unlock_status
 
 
+def _payload_projection(fields, *, statement=False):
+    """Keep the legacy decoder for malformed/root shapes; trim normal payloads."""
+    root = "$.statement" if statement else "$"
+    members = ", ".join(f"'{key}', json_extract(payload, '{root}.{key}')" for key in fields)
+    names = ",".join(f"'{key}'" for key in fields)
+    unique = f"""AND NOT EXISTS (SELECT 1 FROM json_each(payload, '{root}')
+        WHERE key IN ({names}) GROUP BY key HAVING COUNT(*)>1)"""
+    projection = f"json_object({members})"
+    legacy = ""
+    if statement:
+        projection = f"json_object('statement', {projection})"
+        unique += """AND NOT EXISTS (SELECT 1 FROM json_each(payload)
+            WHERE key='statement' GROUP BY key HAVING COUNT(*)>1)"""
+        # For technical versions, missing sourceIds means [], explicit null is
+        # an old decoder error. Do not turn the former into the latter.
+        legacy = """AND NOT (json_extract(payload,'$.statement.sourceType') IS 'pi_merged_technical_service'
+            AND json_type(payload,'$.statement.sourceIds') IS NULL)"""
+    return f"""CASE WHEN json_valid(payload) THEN
+        CASE WHEN json_type(payload)='object'
+            AND (json_type(payload, '{root}') IS NULL OR json_type(payload, '{root}') IN ('object','null'))
+            {legacy}
+            {unique}
+        THEN {projection} ELSE payload END ELSE payload END"""
+
+
 def unlock_targets(conn, workflow_ids):
     if not workflow_ids:
         return {}
@@ -24,8 +49,10 @@ def list_workflow_handlers(conn, workflow_ids, actor_id):
     if not ids:
         return {}, set()
     placeholders = ",".join("?" for _ in ids)
+    participants = _payload_projection(("sentBy", "registeredBy", "reimbursementRecordedBy"))
+    payload_column = f", {participants} AS payload" if actor_id else ""
     rows = conn.execute(
-        f"SELECT id, workflow_status, payload FROM billing_workflows WHERE id IN ({placeholders})",
+        f"SELECT id, workflow_status{payload_column} FROM billing_workflows WHERE id IN ({placeholders})",
         ids,
     ).fetchall()
     statuses = {row["id"]: row["workflow_status"] for row in rows}
@@ -47,8 +74,11 @@ def list_workflow_handlers(conn, workflow_ids, actor_id):
         [*ids, actor_id],
     ).fetchall()
     handled.update(row["workflow_id"] for row in events)
+    source_fields = _payload_projection(
+        ("sourceType", "sourceIds", "sourceId", "month", "pi", "iacucs", "iacuc"), statement=True
+    )
     versions = conn.execute(
-        f"SELECT workflow_id, payload FROM billing_statement_versions WHERE workflow_id IN ({placeholders})",
+        f"SELECT workflow_id, {source_fields} AS payload FROM billing_statement_versions WHERE workflow_id IN ({placeholders})",
         ids,
     ).fetchall()
     sources = {}
@@ -100,7 +130,21 @@ def list_workflow_handlers(conn, workflow_ids, actor_id):
             ).fetchall()
             for audit in audits:
                 handled.update(sources[audit["entity_id"]])
-    for identity, workflows in technical_sources.items():
+    source_ids = [identity for identity in technical_sources if isinstance(identity, str)]
+    for offset in range(0, len(source_ids), 400):
+        batch = source_ids[offset : offset + 400]
+        source_sql = ",".join("?" for _ in batch)
+        audits = conn.execute(
+            f"""SELECT DISTINCT entity_id FROM audit_events WHERE entity_type='technical_service_sheet'
+            AND entity_id IN ({source_sql}) AND actor_user_id=?
+            AND action IN ('technical_service.created','technical_service.updated')""",
+            [*batch, actor_id],
+        ).fetchall()
+        for audit in audits:
+            handled.update(technical_sources[audit["entity_id"]])
+    # Older payloads were iterated without coercing IDs. Preserve their exact
+    # SQLite binding/error behavior rather than changing authorization by type.
+    for identity in technical_sources.keys() - set(source_ids):
         audit = conn.execute(
             """SELECT 1 FROM audit_events WHERE entity_type='technical_service_sheet'
             AND entity_id=? AND actor_user_id=? AND action IN ('technical_service.created','technical_service.updated')
@@ -108,5 +152,5 @@ def list_workflow_handlers(conn, workflow_ids, actor_id):
             (identity, actor_id),
         ).fetchone()
         if audit:
-            handled.update(workflows)
+            handled.update(technical_sources[identity])
     return statuses, handled

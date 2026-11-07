@@ -88,6 +88,15 @@ def protected_ids(conn):
     return result
 
 
+def validate_candidate_workflows(conn):
+    # The guarded lookup index allows an old corrupt row to survive startup.
+    # Candidate reads must still reject it instead of treating its bill as new.
+    if conn.execute(
+        "SELECT 1 FROM billing_workflows WHERE source_type=? AND NOT json_valid(payload) LIMIT 1", (SOURCE_TYPE,)
+    ).fetchone():
+        raise ValueError("技术服务结算流程数据损坏，请核查历史记录")
+
+
 def list_sheets(conn, filters, *, all_rows=False):
     protected = protected_ids(conn)
     base, base_values = listing.sheet_base(protected)
@@ -145,6 +154,7 @@ def require_version(row, expected):
 
 def candidate_scopes(conn, filters):
     """Filter and page complete PI aggregates before loading statement inputs."""
+    validate_candidate_workflows(conn)
     base, base_values = listing.candidate_base(SOURCE_TYPE)
     filters = prepare_person_filters(conn, filters, "technical_service_sheets", {"pi": "pi"})
     where, values = listing.candidate_where(filters)
@@ -160,6 +170,7 @@ def candidate_scopes(conn, filters):
 
 
 def candidate_filter_options(conn, filters):
+    validate_candidate_workflows(conn)
     protected_ids(conn)
     base, values = listing.candidate_base(SOURCE_TYPE)
     return listing.filter_options(

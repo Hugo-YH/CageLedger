@@ -69,12 +69,7 @@ def list_settlement_candidates(
     if cached is not None:
         return cached
 
-    if billing_candidate_snapshot_registry_needs_sync(
-        conn,
-        source_type,
-        QUANTITY_SETTLEMENT_CALCULATION_VERSION if source_type == "quantity_sheet" else "",
-    ):
-        sync_billing_candidate_snapshot_registry(conn, source_type, now or "")
+    prepare_settlement_candidate_registry(conn, source_type, now)
     sort_key = filters.get("sortKey")
     column_filters = filters.get("columnFilters") or {}
     if sort_key == "amount" or bool(column_filters.get("amount")):
@@ -103,6 +98,20 @@ def refresh_settlement_candidate_snapshot(conn, month, pi_name, calculate, sourc
     if not group:
         return None
     return _refresh_snapshot(conn, group, calculate, source_type, now)
+
+
+def prepare_settlement_candidate_registry(conn, source_type="quantity_sheet", now=None):
+    if billing_candidate_snapshot_registry_needs_sync(
+        conn,
+        source_type,
+        QUANTITY_SETTLEMENT_CALCULATION_VERSION if source_type == "quantity_sheet" else "",
+    ):
+        sync_billing_candidate_snapshot_registry(conn, source_type, now or "")
+
+
+def refresh_settlement_candidate_snapshots(conn, keys, calculate, *, now=None, prepare_calculations=None):
+    """Publish a complete request batch with the same concurrent-commit fence."""
+    _refresh_snapshot_keys(conn, keys, calculate, "quantity_sheet", now, prepare_calculations)
 
 
 def invalidate_settlement_candidate_snapshots(conn, keys, source_type="quantity_sheet", now=None):

@@ -92,7 +92,8 @@ export function SettlementPreviewModal({
               disabled={!result}
               onClick={() => {
                 if (!result) return;
-                if (openSettlementPrint(result)) feedback.info("已打开打印窗口", "请在打印窗口中完成打印。");
+                if (openSettlementPrint(result, previewMarkup))
+                  feedback.info("已打开打印窗口", "请在打印窗口中完成打印。");
                 else feedback.error("未能打开打印窗口", "请允许浏览器弹出窗口后重试。");
               }}
             >
