@@ -23,9 +23,9 @@ from .custom_billing import (
 from .profiles import billing_profile_for_room
 
 
-def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_by_iacuc=None):
+def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_by_iacuc=None, *, amount_only=False):
     if not sheets:
-        return []
+        return 0 if amount_only else []
 
     applications_by_iacuc = applications_by_iacuc or {}
     room_by_id = {room.get("id"): room for room in rooms or []}
@@ -157,6 +157,8 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
         apply_free_cage_allocations(breakdown, free_allocations)
         charges = summarize_breakdown_charges(breakdown)
         cumulative += charges["amount"]
+        if amount_only:
+            continue
         lines.append(
             {
                 "id": new_id("line"),
@@ -170,7 +172,7 @@ def quantity_sheet_statement_lines(sheets, free_cages, rooms=None, applications_
                 "occupancyIds": [],
             }
         )
-    return lines
+    return cumulative if amount_only else lines
 
 
 def quantity_sheet_breakdown_item(

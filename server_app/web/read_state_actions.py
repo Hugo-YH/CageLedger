@@ -4,7 +4,7 @@ from http import HTTPStatus
 from urllib.parse import parse_qs, unquote, urlparse
 
 from server_app.db import connect_db
-from server_app.domains.billing.candidate_calculation import CandidateCalculation
+from server_app.domains.billing.dashboard_calculation import DashboardCalculation
 from server_app.domains.dashboard_overview import dashboard_overview_payload, default_overview_month
 from server_app.domains.iacuc.sync import read_principal_identities
 from server_app.domains.state.persistence import read_cached_state, read_state
@@ -62,7 +62,7 @@ class ReadStateActionsMixin:
                     conn, {"month": billing_month, "pi": pi, "sourceType": "quantity_sheet"}, user
                 )[0]
 
-            calculation = CandidateCalculation(conn, calculate)
+            calculation = DashboardCalculation(conn, calculate, user)
             send_overview(
                 self,
                 dashboard_overview_payload(

@@ -1,7 +1,10 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { ApartmentOutlined, ClockCircleOutlined, InboxOutlined } from "@ant-design/icons";
 import { Alert, Badge, Button, Card, Col, Row, Select, Skeleton, Statistic, Tag, Typography, theme } from "antd";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+import type { AreaConfig } from "@ant-design/plots/es/components/area";
+import type { RoseConfig } from "@ant-design/plots/es/components/rose";
 
 import type { RoomOverview } from "../../api/dashboardOverview";
 import type { DashboardOverviewResponse } from "../../api/dashboardOverview";
@@ -15,8 +18,15 @@ import { DashboardChartState } from "./DashboardChartState";
 import { PiFeeSummary } from "./PiFeeSummary";
 
 // @ant-design/plots 体积较大，拆为独立懒加载块：仅图表卡实际渲染时下载。
-const AreaChart = lazy(() => import("@ant-design/plots/es/components/area"));
-const RoseChart = lazy(() => import("@ant-design/plots/es/components/rose"));
+const LazyAreaChart = lazy(() => import("@ant-design/plots/es/components/area"));
+const LazyRoseChart = lazy(() => import("@ant-design/plots/es/components/rose"));
+// Named wrappers keep React's dev JSX name inspection from resolving lazy plots.
+const AreaChart = memo(function AreaChart(config: AreaConfig) {
+  return <LazyAreaChart {...config} />;
+});
+const RoseChart = memo(function RoseChart(config: RoseConfig) {
+  return <LazyRoseChart {...config} />;
+});
 
 function ChartBoundary({ height, children }: { height: number; children: ReactNode }) {
   return (
@@ -311,7 +321,7 @@ function DashboardContent({
   );
 }
 
-function IntakeTrend({
+const IntakeTrend = memo(function IntakeTrend({
   items,
   unit,
   batches,
@@ -322,15 +332,44 @@ function IntakeTrend({
   items: Array<{ month?: string; day?: number; batches: number; animals: number }>;
   unit: "day" | "month";
 }) {
-  const data = items.map((item) => ({
-    label: unit === "month" ? (item.month || "").slice(2) : `${item.day ?? 0}日`,
-    animals: item.animals,
-    batches: item.batches,
-  }));
+  const data = useMemo(
+    () =>
+      items.map((item) => ({
+        label: unit === "month" ? (item.month || "").slice(2) : `${item.day ?? 0}日`,
+        animals: item.animals,
+        batches: item.batches,
+      })),
+    [items, unit],
+  );
+  const config = useMemo<AreaConfig>(
+    () => ({
+      data,
+      xField: "label",
+      yField: "animals",
+      height: 180,
+      axis: {
+        x: { title: false, labelAutoRotate: false, labelFormatter: (value: string) => value.replace("日", "") },
+        y: { title: false },
+      },
+      style: {
+        shape: "smooth",
+        fill: () =>
+          `linear-gradient(90deg, ${hexToRgba("#0958d9", 0.92)} 0%, ${hexToRgba("#0958d9", 0.5)} 55%, ${hexToRgba("#0958d9", 0.1)} 100%)`,
+      },
+      tooltip: {
+        title: "label",
+        items: [(datum: { animals: number }) => ({ name: "接收只数", value: datum.animals })],
+      },
+      scale: { y: { nice: true } },
+      legend: false,
+    }),
+    [data],
+  );
   return (
     <div className="ant-dashboard-trend">
       <DeferredChart height={180}>
         <DashboardChartState
+          height={180}
           message={
             !batches && !animals
               ? "当前统计范围暂无接收记录"
@@ -339,32 +378,7 @@ function IntakeTrend({
                 : undefined
           }
         >
-          <AreaChart
-            data={data}
-            xField="label"
-            yField="animals"
-            height={180}
-            axis={{
-              x: { title: false, labelAutoRotate: false, labelFormatter: (v: string) => v.replace("日", "") },
-              y: { title: false },
-            }}
-            style={{
-              shape: "smooth",
-              fill: () =>
-                `linear-gradient(90deg, ${hexToRgba("#0958d9", 0.92)} 0%, ${hexToRgba("#0958d9", 0.5)} 55%, ${hexToRgba("#0958d9", 0.1)} 100%)`,
-            }}
-            tooltip={{
-              title: "label",
-              items: [
-                (datum: { animals: number }) => ({
-                  name: "接收只数",
-                  value: datum.animals,
-                }),
-              ],
-            }}
-            scale={{ y: { nice: true } }}
-            legend={false}
-          />
+          <AreaChart {...config} />
         </DashboardChartState>
       </DeferredChart>
       <Typography.Text type="secondary" className="ant-dashboard-trend-caption">
@@ -373,92 +387,100 @@ function IntakeTrend({
       </Typography.Text>
     </div>
   );
-}
+});
 
-function StrainDistribution({ items }: { items: Array<{ strain: string; animals: number }> }) {
+const StrainDistribution = memo(function StrainDistribution({
+  items,
+}: {
+  items: Array<{ strain: string; animals: number }>;
+}) {
   const { token } = theme.useToken();
-  const total = items.reduce((sum, item) => sum + item.animals, 0);
-  const sorted = [...items].sort((a, b) => b.animals - a.animals);
-  const top = sorted.slice(0, 5);
-  const otherAnimals = sorted.slice(5).reduce((sum, item) => sum + item.animals, 0);
-  const data = [
-    ...top.map((item) => ({
-      type: item.strain,
-      value: Math.log1p(item.animals),
-      animals: item.animals,
-      percent: total ? (item.animals / total) * 100 : 0,
-    })),
-    ...(otherAnimals > 0
-      ? [
-          {
-            type: "其他",
-            value: Math.log1p(otherAnimals),
-            animals: otherAnimals,
-            percent: total ? (otherAnimals / total) * 100 : 0,
-          },
-        ]
-      : []),
-  ];
-  const colorOf = (type: string) => {
-    const index = data.findIndex((item) => item.type === type);
-    return type === "其他" ? "#8C8C8C" : STRAIN_COLORS[index % STRAIN_COLORS.length];
-  };
+  const { total, data } = useMemo(() => {
+    const total = items.reduce((sum, item) => sum + item.animals, 0);
+    const sorted = [...items].sort((left, right) => right.animals - left.animals);
+    const otherAnimals = sorted.slice(5).reduce((sum, item) => sum + item.animals, 0);
+    return {
+      total,
+      data: [
+        ...sorted.slice(0, 5).map((item) => ({
+          type: item.strain,
+          value: Math.log1p(item.animals),
+          animals: item.animals,
+          percent: total ? (item.animals / total) * 100 : 0,
+        })),
+        ...(otherAnimals > 0
+          ? [
+              {
+                type: "其他",
+                value: Math.log1p(otherAnimals),
+                animals: otherAnimals,
+                percent: total ? (otherAnimals / total) * 100 : 0,
+              },
+            ]
+          : []),
+      ],
+    };
+  }, [items]);
+  const config = useMemo<RoseConfig>(() => {
+    const colorOf = (type: string) => {
+      const index = data.findIndex((item) => item.type === type);
+      return type === "其他" ? "#8C8C8C" : STRAIN_COLORS[index % STRAIN_COLORS.length];
+    };
+    return {
+      data,
+      xField: "type",
+      yField: "value",
+      colorField: "type",
+      radius: 0.9,
+      style: {
+        inset: 2,
+        radius: 8,
+        fill: (datum: { type: string }) => {
+          const color = colorOf(datum.type);
+          return `linear-gradient(180deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.55)} 60%, ${hexToRgba(color, 0.2)} 100%)`;
+        },
+      },
+      axis: false,
+      height: 280,
+      scale: { color: { range: data.map((item) => colorOf(item.type)) } },
+      label: {
+        text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
+        position: "outside",
+        fontSize: token.fontSizeSM,
+      },
+      legend: {
+        color: {
+          position: "bottom",
+          layout: { justifyContent: "center" },
+          labelFormatter: (label: string) => (label.length > 14 ? `${label.slice(0, 11)}…` : label),
+        },
+      },
+      tooltip: {
+        title: "type",
+        items: [
+          (datum: { animals: number; percent: number }) => ({
+            name: "接收只数",
+            value: `${datum.animals}（${datum.percent.toFixed(0)}%）`,
+          }),
+        ],
+      },
+    };
+  }, [data, token.fontSizeSM]);
   return (
     <div className="ant-dashboard-pie">
       <DeferredChart height={280}>
         <DashboardChartState
+          height={280}
           message={!items.length ? "当前统计范围暂无品系统计" : total === 0 ? "已记录品系，接收只数均为 0" : undefined}
         >
-          <RoseChart
-            data={data}
-            xField="type"
-            yField="value"
-            colorField="type"
-            radius={0.9}
-            style={{
-              inset: 2,
-              radius: 8,
-              fill: (datum: { type: string }) => {
-                const color = colorOf(datum.type);
-                return `linear-gradient(180deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.55)} 60%, ${hexToRgba(color, 0.2)} 100%)`;
-              },
-            }}
-            axis={false}
-            height={280}
-            scale={{
-              color: {
-                range: data.map((item) => colorOf(item.type)),
-              },
-            }}
-            label={{
-              text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
-              position: "outside",
-              fontSize: token.fontSizeSM,
-            }}
-            legend={{
-              color: {
-                position: "bottom",
-                layout: { justifyContent: "center" },
-                labelFormatter: (label: string) => (label.length > 14 ? `${label.slice(0, 11)}…` : label),
-              },
-            }}
-            tooltip={{
-              title: "type",
-              items: [
-                (datum: { animals: number; percent: number }) => ({
-                  name: "接收只数",
-                  value: `${datum.animals}（${datum.percent.toFixed(0)}%）`,
-                }),
-              ],
-            }}
-          />
+          <RoseChart {...config} />
         </DashboardChartState>
       </DeferredChart>
     </div>
   );
-}
+});
 
-function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
+const RoomOverviewCard = memo(function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
   const [selected, setSelected] = useState("__all__");
   const options = useMemo(
     () => [
@@ -478,16 +500,55 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
     const room = rooms.find((item) => item.roomName === selected);
     return (room?.trend || []).map((point) => ({ day: `${point.day}${suffix}`, cages: point.cages }));
   }, [rooms, selected, trendUnit]);
+  const roomColors = useMemo(() => {
+    const colors = new Map<string, string>();
+    rooms.forEach((room, index) => {
+      // Match the original findIndex: repeated legacy names use the first color.
+      if (!colors.has(room.roomName)) colors.set(room.roomName, ROOM_PALETTE[index % ROOM_PALETTE.length]);
+    });
+    return colors;
+  }, [rooms]);
   const room = rooms.find((item) => item.roomName === selected);
   const totalCageDays =
     selected === "__all__" ? rooms.reduce((sum, item) => sum + item.cageDays, 0) : room?.cageDays || 0;
   const palette = useMemo(() => rooms.map((_, index) => ROOM_PALETTE[index % ROOM_PALETTE.length]), [rooms]);
-  const selectedColor = room ? ROOM_PALETTE[rooms.indexOf(room) % ROOM_PALETTE.length] : "#3872ff";
-  const colorOf = (roomName?: string) => {
-    const index = rooms.findIndex((item) => item.roomName === roomName);
-    return index >= 0 ? ROOM_PALETTE[index % ROOM_PALETTE.length] : ROOM_PALETTE[0];
-  };
-
+  const selectedColor = roomColors.get(selected) ?? "#3872ff";
+  const config = useMemo<AreaConfig>(
+    () => ({
+      data: chartData,
+      xField: "day",
+      yField: "cages",
+      colorField: selected === "__all__" ? "roomName" : undefined,
+      stack: selected === "__all__",
+      scale: selected === "__all__" ? { color: { range: palette }, y: { nice: true } } : { y: { nice: true } },
+      height: 220,
+      axis: {
+        x: { title: false, labelAutoRotate: false, labelFormatter: (value: string) => value.replace("日", "") },
+        y: { title: false },
+      },
+      style: {
+        shape: "smooth",
+        fill: (seriesData: RoomAreaDatum[]) => {
+          const roomName = seriesData[0]?.roomName;
+          const color =
+            selected === "__all__"
+              ? ((roomName === undefined ? undefined : roomColors.get(roomName)) ?? ROOM_PALETTE[0])
+              : selectedColor;
+          return `linear-gradient(90deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.58)} 52%, ${hexToRgba(color, 0.16)} 100%)`;
+        },
+      },
+      line: selected === "__all__" ? undefined : { style: { stroke: selectedColor, lineWidth: 2 } },
+      tooltip: {
+        title: "day",
+        items:
+          selected === "__all__"
+            ? [{ field: "cages", name: "笼位" }]
+            : [(datum: RoomAreaDatum) => ({ name: selected, value: datum.cages })],
+      },
+      legend: { color: { position: "bottom", layout: { justifyContent: "center" } } },
+    }),
+    [chartData, palette, roomColors, selected, selectedColor],
+  );
   return (
     <Card className="ant-dashboard-section" size="small" title="饲养间笼位统计">
       <div className="ant-dashboard-room-toolbar">
@@ -503,55 +564,18 @@ function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
       <div className="ant-dashboard-room-area">
         <DeferredChart height={220}>
           <DashboardChartState
+            height={220}
             message={
               !rooms.length ? "当前统计范围暂无笼位统计" : !chartData.length ? "当前筛选下暂无笼位趋势记录" : undefined
             }
           >
-            <AreaChart
-              data={chartData}
-              xField="day"
-              yField="cages"
-              colorField={selected === "__all__" ? "roomName" : undefined}
-              stack={selected === "__all__"}
-              scale={selected === "__all__" ? { color: { range: palette }, y: { nice: true } } : { y: { nice: true } }}
-              height={220}
-              axis={{
-                x: {
-                  title: false,
-                  labelAutoRotate: false,
-                  labelFormatter: (v: string) => v.replace("日", ""),
-                },
-                y: { title: false },
-              }}
-              style={{
-                shape: "smooth",
-                fill: (seriesData: RoomAreaDatum[]) => {
-                  const roomName = seriesData[0]?.roomName;
-                  const color = selected === "__all__" ? colorOf(roomName) : selectedColor;
-                  return `linear-gradient(90deg, ${hexToRgba(color, 0.95)} 0%, ${hexToRgba(color, 0.58)} 52%, ${hexToRgba(color, 0.16)} 100%)`;
-                },
-              }}
-              line={selected === "__all__" ? undefined : { style: { stroke: selectedColor, lineWidth: 2 } }}
-              tooltip={{
-                title: "day",
-                items:
-                  selected === "__all__"
-                    ? [{ field: "cages", name: "笼位" }]
-                    : [
-                        (datum: RoomAreaDatum) => ({
-                          name: selected,
-                          value: datum.cages,
-                        }),
-                      ],
-              }}
-              legend={{ color: { position: "bottom", layout: { justifyContent: "center" } } }}
-            />
+            <AreaChart {...config} />
           </DashboardChartState>
         </DeferredChart>
       </div>
     </Card>
   );
-}
+});
 
 function DashboardSkeleton() {
   return (

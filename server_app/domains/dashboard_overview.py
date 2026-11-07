@@ -24,6 +24,7 @@ from server_app.domains.billing.candidates import dashboard_candidate_snapshots
 from server_app.domains.billing.profiles import billing_profile_for_room
 from server_app.domains.iacuc.rules import normalize_iacuc_number
 from server_app.domains.intake.strain_standard import standardize_strain
+from server_app.repositories.dashboard import intake_statistics_rows
 from server_app.shared import as_int, clean_text
 from server_app.shared.money_fields import money_sum
 
@@ -128,26 +129,20 @@ def _read_rooms(conn):
 
 def _intake_overview(conn, month):
     if month == "all":
-        rows = conn.execute("SELECT payload FROM intake_batches ORDER BY COALESCE(intake_date, '')").fetchall()
+        batches = intake_statistics_rows(conn)
     else:
         year, month_number = _split_month(month)
         next_year = year + 1 if month_number == 12 else year
         next_month = 1 if month_number == 12 else month_number + 1
-        rows = conn.execute(
-            """
-            SELECT payload
-            FROM intake_batches
-            WHERE intake_date >= ? AND intake_date < ?
-            ORDER BY intake_date
-            """,
-            (f"{year:04d}-{month_number:02d}-01", f"{next_year:04d}-{next_month:02d}-01"),
-        ).fetchall()
-    batches = [json.loads(row["payload"]) for row in rows]
+        batches = intake_statistics_rows(
+            conn, f"{year:04d}-{month_number:02d}-01", f"{next_year:04d}-{next_month:02d}-01"
+        )
 
     by_month = defaultdict(lambda: {"batches": 0, "animals": 0})
     by_day = defaultdict(lambda: {"batches": 0, "animals": 0})
     by_strain = Counter()
     by_species = Counter()
+    standardized = {}
 
     for batch in batches:
         intake_date = clean_text(batch.get("intakeDate", ""))[:10]
@@ -166,7 +161,9 @@ def _intake_overview(conn, month):
 
         if month == "all" or batch_month == month:
             strain_label = clean_text(batch.get("strainStandard") or batch.get("strainRaw") or "未识别")
-            strain = standardize_strain(strain_label) or strain_label
+            if strain_label not in standardized:
+                standardized[strain_label] = standardize_strain(strain_label) or strain_label
+            strain = standardized[strain_label]
             by_strain[strain] += quantity
             species = clean_text(batch.get("species", "") or "未识别")
             by_species[species] += quantity
@@ -225,21 +222,21 @@ def _rooms_overview(conn, month, room_by_id, room_by_name):
         rows = conn.execute(
             "SELECT month, room_name, payload FROM quantity_sheets "
             "WHERE TRIM(COALESCE(month, '')) != '' ORDER BY month, room_name"
-        ).fetchall()
+        )
     else:
         rows = conn.execute(
             "SELECT month, room_name, payload FROM quantity_sheets WHERE month = ? ORDER BY room_name",
             (month,),
-        ).fetchall()
-    if not rows:
-        return []
+        )
 
     # Quantity-sheet rows only record change points. Expand each sheet to every
     # calendar day: the cage count starts from the initial balance and rows
     # update it on their date, keeping the last known value in between. This
     # matches the billing statement calculation so room totals cover the whole
     # month instead of only the recorded dates.
-    daily_by_room_month: dict[str, dict[str, list[int]]] = defaultdict(lambda: defaultdict(list))
+    daily_by_room_month: dict[str, dict[str, list[int]]] = defaultdict(dict)
+    calendars = {}
+    dates = {}
     for row in rows:
         sheet_month = clean_text(row["month"] or "")
         if not sheet_month:
@@ -248,30 +245,47 @@ def _rooms_overview(conn, month, room_by_id, room_by_name):
         if not room_name:
             continue
         sheet = json.loads(row["payload"])
-        total_days = calendar.monthrange(*_split_month(sheet_month))[1]
+        if sheet_month not in calendars:
+            total_days = calendar.monthrange(*_split_month(sheet_month))[1]
+            calendars[sheet_month] = {f"{sheet_month}-{day:02d}": day for day in range(1, total_days + 1)}
+        calendar_days = calendars[sheet_month]
+        total_days = len(calendar_days)
         by_day = {}
         for detail in sheet.get("rows", []):
-            day = clean_text(detail.get("date", ""))[:10]
-            if not day.startswith(sheet_month):
-                continue
-            by_day[day] = detail
+            raw_date = detail.get("date", "")
+            # Dates are normally strings; preserve original conversion for old JSON values.
+            if isinstance(raw_date, str):
+                if raw_date not in dates:
+                    dates[raw_date] = clean_text(raw_date)[:10]
+                date_text = dates[raw_date]
+            else:
+                date_text = clean_text(raw_date)[:10]
+            day = calendar_days.get(date_text)
+            if day is not None:
+                by_day[day] = detail
         daily = daily_by_room_month[room_name].setdefault(sheet_month, [0] * (total_days + 1))
         current = max(as_int(sheet.get("initialCageCount")) or 0, 0)
-        for day_number in range(1, total_days + 1):
-            detail = by_day.get(f"{sheet_month}-{day_number:02d}")
-            if detail is not None:
-                detail_count = detail.get("cageCount")
-                if detail_count is not None:
-                    current = max(as_int(detail_count) or 0, 0)
-                else:
-                    current = max(
-                        current
-                        + max(as_int(detail.get("addedCount")) or 0, 0)
-                        - max(as_int(detail.get("removedCount")) or 0, 0),
-                        0,
-                    )
-            if current:
-                daily[day_number] += current
+        daily[1] += current
+        for day_number, detail in sorted(by_day.items()):
+            detail_count = detail.get("cageCount")
+            next_count = (
+                max(as_int(detail_count) or 0, 0)
+                if detail_count is not None
+                else max(
+                    current
+                    + max(as_int(detail.get("addedCount")) or 0, 0)
+                    - max(as_int(detail.get("removedCount")) or 0, 0),
+                    0,
+                )
+            )
+            daily[day_number] += next_count - current
+            current = next_count
+
+    # Expand each combined room/month once, rather than once per source sheet.
+    for monthly in daily_by_room_month.values():
+        for daily in monthly.values():
+            for day in range(2, len(daily)):
+                daily[day] += daily[day - 1]
 
     result = []
     for room_name, monthly in sorted(daily_by_room_month.items()):

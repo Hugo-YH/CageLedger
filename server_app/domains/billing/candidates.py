@@ -12,6 +12,7 @@ from server_app.repositories.billing_candidates import (
     list_billing_candidate_snapshot_keys,
     list_billing_candidate_snapshots_page,
     list_dashboard_billing_candidate_snapshots,
+    list_quantity_settlement_groups,
     mark_billing_candidate_snapshots_stale,
     sync_billing_candidate_snapshot_registry,
     upsert_billing_candidate_snapshot,
@@ -34,7 +35,7 @@ def dashboard_candidate_snapshots(conn, month, calculate=None, now=None, *, prep
     if calculate is not None and billing_candidate_snapshot_registry_needs_sync(
         conn, source_type, QUANTITY_SETTLEMENT_CALCULATION_VERSION
     ):
-        sync_billing_candidate_snapshot_registry(conn, source_type, now or "")
+        _prepare_dashboard_registry(conn, month, calculate, prepare_calculations, now)
 
     rows = list_dashboard_billing_candidate_snapshots(conn, source_type, month)
     if calculate is None:
@@ -49,6 +50,29 @@ def dashboard_candidate_snapshots(conn, month, calculate=None, now=None, *, prep
         _refresh_snapshot_keys(conn, refresh_keys, calculate, source_type, now, prepare_calculations)
         rows = list_dashboard_billing_candidate_snapshots(conn, source_type, month)
     return rows
+
+
+def _reset_prepared(calculate, prepare_calculations):
+    for prepared in (calculate, getattr(prepare_calculations, "__self__", None)):
+        if isinstance(prepared, CandidateCalculation):
+            prepared.reset_prepared()
+
+
+def _prepare_dashboard_registry(conn, month, calculate, prepare_calculations, now):
+    if conn.in_transaction or prepare_calculations is None:
+        sync_billing_candidate_snapshot_registry(conn, "quantity_sheet", now or "")
+        return
+    revision = conn.execute("PRAGMA data_version").fetchone()[0]
+    groups = list_quantity_settlement_groups(conn)
+    keys = [(g["month"], g["pi"]) for g in groups if month == "all" or g["month"] == month]
+    prepare_calculations(keys)
+    caller_started_write = conn.in_transaction
+    if not caller_started_write:
+        conn.execute("BEGIN IMMEDIATE")
+    if caller_started_write or conn.execute("PRAGMA data_version").fetchone()[0] != revision:
+        _reset_prepared(calculate, prepare_calculations)
+        groups = None
+    sync_billing_candidate_snapshot_registry(conn, "quantity_sheet", now or "", groups=groups)
 
 
 def list_settlement_candidates(
@@ -197,9 +221,7 @@ def _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calc
         if not conn.in_transaction:
             conn.execute("BEGIN IMMEDIATE")
         if conn.execute("PRAGMA data_version").fetchone()[0] != revision:
-            for prepared in (calculate, getattr(prepare_calculations, "__self__", None)):
-                if isinstance(prepared, CandidateCalculation):
-                    prepared.reset_prepared()
+            _reset_prepared(calculate, prepare_calculations)
             # A conflict discards all prepared results, including issued headers.
             # Recalculate under the existing write lock without committing the caller.
             return _refresh_snapshot_keys(conn, keys, calculate, source_type, now, prepare_calculations)

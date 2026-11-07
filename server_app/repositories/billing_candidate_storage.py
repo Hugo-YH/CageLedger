@@ -6,8 +6,9 @@ from .billing_candidate_groups import list_quantity_settlement_groups
 from .billing_candidate_queries import list_billing_candidate_snapshot_keys
 
 
-def sync_billing_candidate_snapshot_registry(conn, source_type, now):
-    groups = list_quantity_settlement_groups(conn) if source_type == "quantity_sheet" else []
+def sync_billing_candidate_snapshot_registry(conn, source_type, now, *, groups=None):
+    if groups is None:
+        groups = list_quantity_settlement_groups(conn) if source_type == "quantity_sheet" else []
     current_by_key = {
         (item["month"], item["pi"]): item
         for item in list_billing_candidate_snapshot_keys(conn, source_type=source_type)

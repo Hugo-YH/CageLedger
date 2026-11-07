@@ -1,10 +1,46 @@
 """Bounded candidate I/O using the same rows and serialization as single-key reads."""
 
+import json
+
+from server_app.shared import clean_text
+
 from .billing_candidates import (
     candidate_snapshot_upsert_sql,
     candidate_snapshot_values,
     quantity_settlement_group_from_rows,
 )
+
+
+def candidate_room_payloads(conn, sheets):
+    ids = sorted({clean_text(s.get("roomId")) for s in sheets} - {""})
+    names = sorted({clean_text(s.get("roomName")) for s in sheets} - {""})
+    if not ids and not names:
+        return []
+    return [
+        json.loads(row[0])
+        for row in conn.execute(
+            """SELECT payload FROM rooms WHERE id IN (SELECT value FROM json_each(?))
+            OR name IN (SELECT value FROM json_each(?)) ORDER BY rowid""",
+            (json.dumps(ids), json.dumps(names)),
+        )
+    ]
+
+
+def quantity_sheet_payloads_many(conn, keys):
+    result = {}
+    keys = list(dict.fromkeys(keys))
+    for offset in range(0, len(keys), 200):
+        batch = keys[offset : offset + 200]
+        marks = ",".join("(?,?)" for _ in batch)
+        for row in conn.execute(
+            f"""WITH requested(month,pi) AS (VALUES {marks})
+            SELECT q.month,q.pi,q.payload FROM requested
+            JOIN quantity_sheets q ON q.month=requested.month AND q.pi=requested.pi
+            ORDER BY q.updated_at DESC,q.rowid DESC""",
+            [value for key in batch for value in key],
+        ):
+            result.setdefault((row["month"], row["pi"]), []).append(json.loads(row["payload"]))
+    return result
 
 
 def quantity_settlement_groups_many(conn, keys):
