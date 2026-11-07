@@ -116,6 +116,13 @@ export interface IntakeRecognitionEvidence {
   imageIds?: string[];
   inputImages?: Array<{ name: string; sha256: string }>;
   textSupplements?: Array<{ rawMessage: string; appliedFields: string[] }>;
+  recognitionRounds?: Array<{
+    at: string;
+    rawMessage: string;
+    appliedFields: string[];
+    imageIds: string[];
+    evidence: IntakeRecognitionEvidence;
+  }>;
 }
 
 export interface IntakeAiParseResponse {
@@ -286,6 +293,7 @@ export interface IntakeDuplicateDetails {
   items: IntakeDuplicateItem[];
   total: number;
   confirmationToken: string;
+  review?: IntakeReviewPreview;
 }
 
 export interface IntakeRecognitionMergeCandidate {
@@ -310,16 +318,39 @@ export interface IntakeRecognitionMergePreview {
   total: number;
 }
 
+export type IntakeReviewOutcome = "unmatched" | "registered" | "supplement" | "conflict" | "related" | "insufficient";
+
+export interface IntakeReviewCandidate extends IntakeRecognitionMergeCandidate {
+  reviewStatus: Exclude<IntakeReviewOutcome, "unmatched">;
+  canAcknowledge: boolean;
+  comparisons: Array<{
+    field: string;
+    before: unknown;
+    incoming: unknown;
+    status: "same" | "different" | "missing" | "supplement" | "unknown";
+  }>;
+}
+
+export interface IntakeReviewPreview {
+  reviewVersion: 2;
+  outcome: IntakeReviewOutcome;
+  sourceIssues: Array<{ field: string; message: string }>;
+  incoming: Partial<IntakeBatch>;
+  items: IntakeReviewCandidate[];
+  total: number;
+}
+
 export interface IntakeSaveRequest {
   item: IntakeBatch;
   exists: boolean;
   /** New interactive saves always request the server-side duplicate check. */
   checkDuplicates?: boolean;
+  reviewVersion?: 2;
   /** Server token bound to this draft and the complete duplicate match set. */
   duplicateConfirmation?: string;
   /** New local images, persisted alongside the successful batch transaction only. */
   recognitionImages?: IntakeRecognitionImageInput[];
-  recognitionMerge?: { incoming: Partial<IntakeBatch>; confirmationToken: string };
+  recognitionMerge?: { reviewVersion?: 2; incoming: Partial<IntakeBatch>; confirmationToken: string };
 }
 
 /** Read-only public projection; never expose the complete intake batch or account data. */

@@ -223,8 +223,8 @@ def write_placement_task_entity_state(method, item_id, payload, actor, spec):
     return write_placement_task_entity_state_command(method, item_id, payload, actor, spec, placement_command_ports())
 
 
-def persist_placement_action(task_id, actor, mutator):
-    return persist_placement_action_command(task_id, actor, mutator, placement_command_ports())
+def persist_placement_action(task_id, actor, mutator, *, context=None):
+    return persist_placement_action_command(task_id, actor, mutator, placement_command_ports(), context=context)
 
 
 def occupancy_command_ports():

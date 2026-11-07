@@ -67,9 +67,19 @@ export function IntakeView({
     revision: editor.revision,
     save: saves.mutation,
     saveInFlight: saves.inFlight,
-    onSaved: (item) => {
+    snapshotImages: editor.recognition.snapshot,
+    duplicate: saves.pendingDuplicate,
+    onCloseReview: saves.clearDuplicate,
+    onAcknowledge: () => {
+      editor.startNew();
+      editor.setDialogOpen(false);
+      editor.setNotice("已确认预约已登记，原记录未改动。可继续录入下一批。");
+    },
+    onEdit: editor.editReviewed,
+    onSaved: (item, intent, popup) => {
       selection.update([item]);
-      editor.completeSavedDraft(saves.capture(editor.draft, false), item, "预约信息已合并");
+      if (intent?.print) return completeSave(intent, item, popup || null);
+      editor.completeSavedDraft(intent || saves.capture(editor.draft, editor.editing), item, "原预约已补充");
       editor.setDialogOpen(false);
     },
   });
@@ -103,17 +113,17 @@ export function IntakeView({
   function submit(event: React.FormEvent) {
     event.preventDefault();
     const item = editor.prepareSave();
-    if (item) void saves.run(saves.capture(item, mode === "batches" && editor.editing));
+    if (item) void saves.run(saves.capture(item, editor.editing));
   }
 
   const mergeFeedback = merge.state?.checking ? (
-    <Alert showIcon type="info" title="正在匹配已有图片预约…" />
+    <Alert showIcon type="info" title="正在核对已有预约…" />
   ) : merge.state?.error ? (
     <Alert
       showIcon
       type="error"
       title="已有预约匹配失败"
-      description={`${merge.state.error} 文字识别草稿已保留。`}
+      description={`${merge.state.error} 本次草稿和图片已保留。`}
       action={<Button onClick={merge.retry}>重试匹配</Button>}
     />
   ) : null;

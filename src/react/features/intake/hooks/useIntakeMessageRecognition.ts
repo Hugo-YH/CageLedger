@@ -90,7 +90,7 @@ export function useIntakeMessageRecognition({
     const multipleIacucs = intakeBatchIacucs(normalized.batchNo).length > 1;
     const match = preloaded ? preloaded.match : await findProject(parsed, normalized);
     if (!valid()) return null;
-    const isEditingSavedBatch = mode === "batches" && editing;
+    const isEditingSavedBatch = editing;
     const item = normalizeIntakeBatch(
       {
         ...draft,
@@ -129,7 +129,6 @@ export function useIntakeMessageRecognition({
     const startedRevision = revision.current;
     const isCurrentRequest = requests.begin();
     const valid = () => isCurrentRequest() && startedRevision === revision.current;
-    const hasNewImages = recognition.reading || recognition.snapshot().length > 0;
     try {
       let parsed = parseIntakeMessage(draft.rawMessage, user.displayName, roomNames);
       const normalized = normalizeParsedMessage(parsed);
@@ -158,14 +157,14 @@ export function useIntakeMessageRecognition({
             ? `预约消息已识别，请核对批次信息${info.strainNote}。`
             : `未识别到完整批次号，请手动补充${info.strainNote}。`,
       );
-      if (!hasNewImages) void onTextRecognized(info.item, info.excludeId);
+      void onTextRecognized(info.item, info.excludeId);
     } catch (error) {
       if (valid()) setNotice(error instanceof Error ? error.message : "本地识别失败，请重试。");
     }
   }
 
   function parseMessage() {
-    if (!requireRooms()) return Promise.resolve();
+    if (!requireRooms() || recognition.reading) return Promise.resolve();
     const key = JSON.stringify([revision.current, draft.rawMessage, draft.id, roomNames, user.id, mode, editing]);
     if (localRequest.current?.key === key) return localRequest.current.promise;
     const promise = recognizeLocalMessage();
@@ -208,9 +207,9 @@ export function useIntakeMessageRecognition({
         "预约消息已识别（AI）",
         info.multipleIdentifiers
           ? `已识别同一预约的多个编号，总数量只记录一次，请核对后保存${usageText}${info.strainNote}。`
-          : `${usageText}${info.strainNote}，请核对批次信息。`,
+          : `请核对批次信息${usageText}${info.strainNote}。`,
       );
-      if (!images.length) void onTextRecognized(info.item, info.excludeId);
+      void onTextRecognized(info.item, info.excludeId);
     } catch (error) {
       if (valid()) setNotice(error instanceof Error ? error.message : "AI 识别失败，请重试。");
     } finally {

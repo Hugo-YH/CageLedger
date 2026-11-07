@@ -28,12 +28,18 @@ export function useInfrastructureStructure() {
     enabled: actor.enabled,
   });
 }
-export function useRoomWorkspace(roomId: string) {
+export function useRoomWorkspace(roomId: string, view?: "cages") {
   const actor = useActorScope();
   return useQuery({
-    queryKey: queryKeys.infrastructureRoom(actor.scope, roomId),
+    queryKey:
+      view === "cages"
+        ? queryKeys.infrastructureCageRoom(actor.scope, roomId)
+        : queryKeys.infrastructureRoom(actor.scope, roomId),
     queryFn: ({ signal }) =>
-      requestJson<RoomWorkspace>(`/api/infrastructure/rooms/${encodeURIComponent(roomId)}`, { signal }),
+      requestJson<RoomWorkspace>(
+        `/api/infrastructure/rooms/${encodeURIComponent(roomId)}${view === "cages" ? "?view=cages" : ""}`,
+        { signal },
+      ),
     enabled: actor.enabled && Boolean(roomId),
   });
 }

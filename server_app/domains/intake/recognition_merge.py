@@ -213,6 +213,10 @@ def _candidate(existing, incoming, matches):
 
 
 def recognition_preview(conn, actor, body):
+    if isinstance(body, dict) and body.get("reviewVersion") == 2:
+        from .recognition_reconciliation import preview
+
+        return preview(conn, actor, body)
     if not actor or not actor.get("id"):
         raise PermissionError("请先登录")
     if not isinstance(body, dict):

@@ -1,10 +1,10 @@
-import { useMemo, useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { CageSlotButton } from "./CageSlotButton";
 import { today } from "./cageWorkspaceDate";
 
-export function VirtualRack({
+export const VirtualRack = memo(function VirtualRack({
   rack,
   roomName,
   roomSpecies,
@@ -76,7 +76,7 @@ export function VirtualRack({
                   occupancy={occupancyBySlotId.get(slot.id) || null}
                   selected={slot.id === selectedSlotId || selectedSlotIdSet.has(slot.id)}
                   today={today}
-                  onClick={() => onSelect(slot)}
+                  onSelect={onSelect}
                 />
               ))}
             </div>
@@ -85,4 +85,4 @@ export function VirtualRack({
       </div>
     </div>
   );
-}
+});

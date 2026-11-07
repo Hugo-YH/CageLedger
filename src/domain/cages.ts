@@ -8,6 +8,16 @@ export function currentOccupancy(slotId: string, occupancies: Occupancy[]) {
   );
 }
 
+/** Match currentOccupancy's first active/reserved record in source order. */
+export function currentOccupancyIndex(occupancies: Occupancy[]) {
+  const index = new Map<string, Occupancy>();
+  for (const item of occupancies) {
+    if ((item.status === "active" || item.status === "reserved") && !index.has(item.slotId))
+      index.set(item.slotId, item);
+  }
+  return index;
+}
+
 export function slotPosition(slot: CageSlot) {
   return `${columnLabel(slot.col)}${slot.row}`;
 }

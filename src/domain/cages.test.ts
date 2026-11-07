@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { animalAgeText, animalSexLabel, cageCode, occupancyPeriodTone, slotPosition } from "./cages";
+import {
+  animalAgeText,
+  animalSexLabel,
+  cageCode,
+  currentOccupancy,
+  currentOccupancyIndex,
+  emptyOccupancy,
+  occupancyPeriodTone,
+  slotPosition,
+} from "./cages";
 
 describe("cage map domain", () => {
   const slot = { id: "s1", rackId: "r1", row: 2, col: 3, status: "empty" as const };
@@ -48,4 +57,14 @@ describe("monkey occupancy details", () => {
     expect(animalSexLabel("female")).toBe("雌");
     expect(animalSexLabel(undefined)).toBe("未填写");
   });
+});
+
+it("indexes current records with the same first-match semantics as the editor", () => {
+  const first = { ...emptyOccupancy("slot", "A1", "2026-11-07"), id: "first", status: "reserved" as const };
+  const ended = { ...first, id: "ended", status: "ended" as const };
+  const second = { ...first, id: "second", status: "active" as const };
+  const records = [ended, first, second];
+  expect(currentOccupancyIndex(records).get("slot")).toBe(first);
+  expect(currentOccupancyIndex(records).get("slot")).toBe(currentOccupancy("slot", records));
+  expect(currentOccupancyIndex([ended]).has("slot")).toBe(false);
 });

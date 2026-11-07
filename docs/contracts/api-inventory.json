@@ -850,8 +850,8 @@
           "method": "GET",
           "path": "/api/infrastructure/rooms/{id}",
           "purpose": "当前授权房间工作数据",
-          "request": "id",
-          "response": "{rooms,racks,slots,occupancies,placementTasks}",
+          "request": "id；可选view=cages只读当前占用与待进驻任务",
+          "response": "{rooms,racks,slots,occupancies,placementTasks}；默认完整房间历史，cages仅active/reserved占用及非active/cancelled任务，字段与排序不变",
           "permission": "login",
           "protection": "read"
         },
@@ -1372,9 +1372,9 @@
         {
           "method": "POST",
           "path": "/api/intake-batches/recognition-preview",
-          "purpose": "只读核对文字识别与已有图片预约，生成图片优先的合并预览及关联冲突提示",
-          "request": "{item:文字识别草稿,excludeId?:自身ID}；按采购单号、完整订单编号或批次号匹配，不匹配说明性采购编号；同C不同DC后缀禁止直接合并",
-          "response": "{items,total}；候选含原记录、分类、可合并性、字段对照、mergedItem和confirmationToken；不写业务与审计",
+          "purpose": "只读核对任意图文顺序的预约，展示已登记、可补充、差异、关联或信息不足；省略版本保留旧文字补充协议",
+          "request": "{reviewVersion?:2,item,excludeId?,recognitionImageRefs?}；v2无需文字或已有原图，校验本轮原件归属及SHA，按完整编号集合、数量、标准品系、规格和来源差异核对",
+          "response": "{items,total}；v2增加reviewVersion/outcome/sourceIssues/incoming及候选comparisons/reviewStatus/canAcknowledge；canMerge仅显式补缺和留档新材料，确认令牌绑定原版本、图文及完整匹配集合；不写业务与审计，上传过期410",
           "protection": "read"
         },
         {

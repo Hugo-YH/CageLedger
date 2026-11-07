@@ -85,6 +85,36 @@ def sanitize_evidence(raw):
             for entry in supplements[-10:]
             if isinstance(entry, dict) and isinstance(entry.get("appliedFields", []), list)
         ]
+    rounds = raw.get("recognitionRounds")
+    if isinstance(rounds, list):
+        result["recognitionRounds"] = [
+            {
+                "at": str(entry.get("at") or "")[:64],
+                "rawMessage": str(entry.get("rawMessage") or "")[:20000],
+                "appliedFields": [
+                    key
+                    for key in entry.get("appliedFields", [])
+                    if isinstance(key, str) and key in FIELDS | {"project", "pi", "owner", "notes", "rawMessage"}
+                ][:40],
+                "imageIds": [
+                    value
+                    for value in entry.get("imageIds", [])
+                    if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{32}", value)
+                ][:4],
+                "evidence": sanitize_evidence(
+                    {
+                        key: value
+                        for key, value in entry["evidence"].items()
+                        if key not in ("recognitionRounds", "textSupplements")
+                    }
+                ),
+            }
+            for entry in rounds[-20:]
+            if isinstance(entry, dict)
+            and isinstance(entry.get("evidence"), dict)
+            and isinstance(entry.get("imageIds", []), list)
+            and isinstance(entry.get("appliedFields", []), list)
+        ]
     return result
 
 

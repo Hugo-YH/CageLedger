@@ -73,6 +73,7 @@ it("captures images once and uses the same draft and images when the duplicate i
     item: draft,
     exists: true,
     checkDuplicates: true,
+    reviewVersion: 2,
     recognitionImages: images,
     duplicateConfirmation: "token-1",
   });

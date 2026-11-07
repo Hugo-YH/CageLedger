@@ -34,11 +34,14 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   });
   await page.request.post("/api/racks", {
     data: {
-      item: { id: "rack-e2e-monkey-1", roomId: "room-e2e-monkey", name: "猴房 01 号笼架", index: 1, rows: 1, cols: 1 },
+      item: { id: "rack-e2e-monkey-1", roomId: "room-e2e-monkey", name: "猴房 01 号笼架", index: 1, rows: 1, cols: 2 },
     },
   });
   await page.request.post("/api/cage-slots", {
     data: { item: { id: "slot-e2e-monkey-a01", rackId: "rack-e2e-monkey-1", row: 1, col: 1, status: "empty" } },
+  });
+  await page.request.post("/api/cage-slots", {
+    data: { item: { id: "slot-e2e-monkey-a02", rackId: "rack-e2e-monkey-1", row: 1, col: 2, status: "empty" } },
   });
   await page.reload();
 
@@ -142,4 +145,65 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   expect(data.occupancies).toEqual(
     expect.arrayContaining([expect.objectContaining({ animalSex: "female", birthDate: "2024-01-15" })]),
   );
+  const full = await (await page.request.get("/api/infrastructure/rooms/room-e2e-monkey")).json();
+  const original = full.occupancies.find((item: { slotId: string }) => item.slotId === "slot-e2e-monkey-a01");
+  expect(original.updatedAt).toContain("T");
+  const created = await page.request.post("/api/occupancies", {
+    data: {
+      item: {
+        ...original,
+        id: "occupancy-e2e-monkey-second",
+        slotId: "slot-e2e-monkey-a02",
+        cageCode: "E2E 猴房-01-B1",
+      },
+    },
+  });
+  expect(created.ok()).toBe(true);
+  await page.reload();
+  await page.locator("#cages-room-select").click();
+  await page.locator(".ant-select-dropdown").filter({ visible: true }).getByText("E2E 猴房", { exact: true }).click();
+  await expect(page.getByRole("button", { name: /E2E 猴房-01-B1/ })).toContainText("雌");
+  const beforeBatch = await (await page.request.get("/api/infrastructure/rooms/room-e2e-monkey?view=cages")).json();
+  const versions = new Map(
+    beforeBatch.occupancies.map((item: { id: string; updatedAt: string }) => [item.id, item.updatedAt]),
+  );
+  const calls: Array<{
+    method: string;
+    path: string;
+    payload: { item: { id: string }; expectedUpdatedAt: string } | null;
+  }> = [];
+  page.on("request", (request) => {
+    const address = new URL(request.url());
+    if (
+      address.pathname === "/api/infrastructure/rooms/room-e2e-monkey" ||
+      address.pathname.startsWith("/api/occupancies/")
+    )
+      calls.push({
+        method: request.method(),
+        path: address.pathname + address.search,
+        payload: request.method() === "PUT" ? request.postDataJSON() : null,
+      });
+  });
+  const toolbar = page.getByRole("group", { name: "笼位图操作", exact: true });
+  await toolbar.getByRole("button", { name: "多选录入", exact: true }).click();
+  await toolbar.getByRole("button", { name: "全选当前", exact: true }).click();
+  await toolbar.getByRole("button", { name: "批量编辑", exact: true }).click();
+  const batch = page.getByRole("dialog", { name: "批量编辑 2 个笼位", exact: true });
+  await batch.getByLabel("备注", { exact: true }).fill("E2E 批量版本验证");
+  await batch.getByRole("button", { name: "批量保存", exact: true }).click();
+  await expect(batch).toBeHidden();
+  const writes = calls.filter((call) => call.method === "PUT");
+  expect(writes).toHaveLength(2);
+  for (const call of writes) expect(call.payload?.expectedUpdatedAt).toBe(versions.get(call.payload!.item.id));
+  expect(calls.filter((call) => call.method === "GET").map((call) => call.path)).toEqual([
+    "/api/infrastructure/rooms/room-e2e-monkey?view=cages",
+  ]);
+  const afterBatch = await (await page.request.get("/api/infrastructure/rooms/room-e2e-monkey?view=cages")).json();
+  expect(afterBatch.occupancies).toHaveLength(2);
+  for (const item of afterBatch.occupancies) {
+    expect(item.notes).toBe("E2E 批量版本验证");
+    expect(item.animalSex).toBe("female");
+    expect(item.birthDate).toBe("2024-01-15");
+    expect(item.updatedAt).not.toBe(versions.get(item.id));
+  }
 });

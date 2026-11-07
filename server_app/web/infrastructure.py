@@ -1,7 +1,7 @@
 """Infrastructure read endpoints; existing write and bootstrap contracts stay separate."""
 
 from http import HTTPStatus
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlparse
 
 from server_app.db import connect_db
 from server_app.domains.infrastructure import service
@@ -23,7 +23,8 @@ def handle(handler, path):
             if parts == ["structure"]:
                 result = service.structure(conn, actor)
             elif parts[0] == "rooms":
-                result = service.room_workspace(conn, actor, unquote(parts[1]))
+                view = parse_qs(urlparse(getattr(handler, "path", path)).query).get("view", [""])[0]
+                result = service.room_workspace(conn, actor, unquote(parts[1]), view=view)
             else:
                 result = service.rack_slots(conn, actor, unquote(parts[1]))
             handler.send_json(result)

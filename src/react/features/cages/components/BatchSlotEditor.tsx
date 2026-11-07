@@ -1,13 +1,12 @@
-import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Input } from "antd";
-import type { CageRack, CageSlot, CageSlotStatus, Occupancy } from "../../../api/contracts";
-import { useSaveOccupancy } from "../../../api/cages";
+import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { ModalShell } from "../../../components/WorkspaceUi";
 import { ActionButton } from "../../../components/ui";
-import { cageCode, currentOccupancy, emptyOccupancy, slotPosition } from "../../../../domain/cages";
+import { cageCode, currentOccupancyIndex, emptyOccupancy, slotPosition } from "../../../../domain/cages";
 import { Field, SlotStatusSelect } from "./CageFormControls";
 import { today } from "./cageWorkspaceDate";
+import { useBatchSlotOperation, type BatchSlotWrite } from "./useBatchSlotOperation";
 
 export function BatchSlotEditor({
   slots,
@@ -28,77 +27,40 @@ export function BatchSlotEditor({
   onDone: (message: string) => void;
   beginOperation: () => () => boolean;
 }) {
-  const feedback = useOperationFeedback();
-  const first = slots.map((slot) => currentOccupancy(slot.id, occupancies)).find(Boolean);
-  const [draft, setDraft] = useState({
-    status: (first?.status === "reserved" ? "reserved" : "active") as CageSlotStatus,
-    iacuc: first?.iacuc || "",
-    project: first?.project || "",
-    pi: first?.pi || "",
-    owner: first?.owner || "",
-    startDate: first?.startDate || today,
-    endDate: first?.endDate || "",
-    notes: first?.notes || "",
+  const occupancyBySlot = useMemo(() => currentOccupancyIndex(occupancies), [occupancies]);
+  const [draft, setDraft] = useState<
+    Pick<Occupancy, "status" | "iacuc" | "project" | "pi" | "owner" | "startDate" | "endDate" | "notes">
+  >(() => {
+    const first = slots.map((slot) => occupancyBySlot.get(slot.id)).find(Boolean);
+    return {
+      status: first?.status === "reserved" ? "reserved" : "active",
+      iacuc: first?.iacuc || "",
+      project: first?.project || "",
+      pi: first?.pi || "",
+      owner: first?.owner || "",
+      startDate: first?.startDate || today,
+      endDate: first?.endDate || "",
+      notes: first?.notes || "",
+    };
   });
-  const [error, setError] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
-  const save = useSaveOccupancy(roomId);
+  const operation = useBatchSlotOperation(roomId, beginOperation, onDone);
+  const frozen = operation.busy || Boolean(operation.job);
   const update = (key: keyof typeof draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
-  async function saveAll() {
-    const isCurrent = beginOperation();
-    let completed = 0;
-    setError("");
-    try {
-      for (const slot of slots) {
-        const current = currentOccupancy(slot.id, occupancies);
-        const item = {
+  function prepare(kind: "save" | "clear"): BatchSlotWrite[] {
+    return slots.map<BatchSlotWrite>((slot) => {
+      const current = occupancyBySlot.get(slot.id);
+      if (kind === "clear")
+        return current ? { item: { ...current, status: "ended", endDate: today }, exists: true } : null;
+      return {
+        item: {
           ...(current || emptyOccupancy(slot.id, cageCode(slot, rack.index, roomName), today)),
           ...draft,
           slotId: slot.id,
-          updatedAt: today,
-        } as Occupancy;
-        await save.mutateAsync({ item, exists: Boolean(current) });
-        completed += 1;
-      }
-      if (isCurrent()) onDone(`已批量保存 ${slots.length} 个笼位。`);
-    } catch (cause) {
-      if (isCurrent() && completed > 0)
-        feedback.warning(
-          "笼位批量操作部分完成",
-          `已处理 ${completed}/${slots.length} 个笼位，请核对编辑器中的失败原因后再操作。`,
-        );
-      if (isCurrent())
-        setError(
-          `已处理 ${completed} 个笼位；后续操作未完成：${cause instanceof Error ? cause.message : "请核对后重试"}`,
-        );
-    }
-  }
-  async function clearAll() {
-    const isCurrent = beginOperation();
-    let completed = 0;
-    setError("");
-    try {
-      for (const slot of slots) {
-        const current = currentOccupancy(slot.id, occupancies);
-        if (current)
-          await save.mutateAsync({
-            item: { ...current, status: "ended", endDate: today, updatedAt: today },
-            exists: true,
-          });
-        completed += 1;
-      }
-      if (isCurrent()) onDone(`已将 ${slots.length} 个笼位设为空。`);
-    } catch (cause) {
-      if (isCurrent() && completed > 0)
-        feedback.warning(
-          "笼位批量操作部分完成",
-          `已处理 ${completed}/${slots.length} 个笼位，请核对编辑器中的失败原因后再操作。`,
-        );
-      if (isCurrent())
-        setError(
-          `已处理 ${completed} 个笼位；后续操作未完成：${cause instanceof Error ? cause.message : "请核对后重试"}`,
-        );
-    }
+        },
+        exists: Boolean(current),
+      };
+    });
   }
   return (
     <ModalShell ariaLabel={`批量编辑 ${slots.length} 个笼位`} className="cage-slot-modal" width={720} onClose={onClose}>
@@ -112,24 +74,65 @@ export function BatchSlotEditor({
         </ActionButton>
       </div>
       <div className="modal-shell-body form compact-slot-form">
-        {error ? <Alert showIcon type="error" title={error} /> : null}
+        {operation.error ? (
+          <Alert
+            showIcon
+            type="error"
+            title={operation.error}
+            description="本次修改已固定；继续操作只处理尚未完成的笼位。版本冲突请关闭后核对最新记录。"
+          />
+        ) : null}
         <div className="compact-form-row third">
-          <SlotStatusSelect id="cage-batch-status" value={draft.status} onChange={(value) => update("status", value)} />
-          <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
-          <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
-        </div>
-        <div className="compact-form-row half">
-          <Field personNames label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
-          <Field personNames label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
+          <SlotStatusSelect
+            disabled={frozen}
+            id="cage-batch-status"
+            value={draft.status}
+            onChange={(value) => update("status", value)}
+          />
+          <Field
+            disabled={frozen}
+            label="IACUC 编号"
+            value={draft.iacuc}
+            onChange={(value) => update("iacuc", value)}
+          />
+          <Field
+            disabled={frozen}
+            label="项目名称"
+            value={draft.project}
+            onChange={(value) => update("project", value)}
+          />
         </div>
         <div className="compact-form-row half">
           <Field
+            disabled={frozen}
+            personNames
+            label="项目负责人"
+            value={draft.pi}
+            onChange={(value) => update("pi", value)}
+          />
+          <Field
+            disabled={frozen}
+            personNames
+            label="实验负责人"
+            value={draft.owner}
+            onChange={(value) => update("owner", value)}
+          />
+        </div>
+        <div className="compact-form-row half">
+          <Field
+            disabled={frozen}
             label="开始日期"
             type="date"
             value={draft.startDate}
             onChange={(value) => update("startDate", value)}
           />
-          <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
+          <Field
+            disabled={frozen}
+            label="结束日期"
+            type="date"
+            value={draft.endDate}
+            onChange={(value) => update("endDate", value)}
+          />
         </div>
         <label htmlFor="cage-batch-notes">
           备注
@@ -137,17 +140,32 @@ export function BatchSlotEditor({
             aria-label="备注"
             id="cage-batch-notes"
             rows={3}
+            disabled={frozen}
             value={draft.notes}
             onChange={(event) => update("notes", event.target.value)}
           />
         </label>
       </div>
       <div className="modal-shell-actions">
-        <ActionButton tone="destructive" onClick={() => (confirmClear ? void clearAll() : setConfirmClear(true))}>
-          {confirmClear ? "再次点击确认批量设空" : "批量设为空"}
+        <ActionButton
+          tone="destructive"
+          disabled={operation.busy || operation.job?.kind === "save"}
+          loading={operation.busy && operation.job?.kind === "clear"}
+          onClick={() =>
+            operation.job?.kind === "clear" || confirmClear
+              ? void operation.run("clear", () => prepare("clear"))
+              : setConfirmClear(true)
+          }
+        >
+          {operation.job?.kind === "clear" ? "继续批量设空" : confirmClear ? "再次点击确认批量设空" : "批量设为空"}
         </ActionButton>
-        <ActionButton disabled={save.isPending} loading={save.isPending} tone="primary" onClick={() => void saveAll()}>
-          批量保存
+        <ActionButton
+          disabled={operation.busy || operation.job?.kind === "clear"}
+          loading={operation.busy && operation.job?.kind === "save"}
+          tone="primary"
+          onClick={() => void operation.run("save", () => prepare("save"))}
+        >
+          {operation.job?.kind === "save" ? "继续批量保存" : "批量保存"}
         </ActionButton>
       </div>
     </ModalShell>

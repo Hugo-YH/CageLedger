@@ -20,6 +20,8 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 无权限返回403，不存在返回404。原 `/api/bootstrap` 的参数和响应继续兼容；summary 缓存检查在读取共享 state 之前执行。
 
+笼位图使用 `/api/infrastructure/rooms/{id}?view=cages`，响应结构和记录字段不变，只返回 `active`／`reserved` 占用和状态不为 `active`／`cancelled` 的进驻任务，保持原排序。省略 `view` 仍返回该房间完整占用历史；筛选不修改历史记录。当前视图使用独立查询键，单项操作只失效目标房间及关联笼架，批量操作在本轮结束时统一刷新一次。
+
 数量表和技术服务列表支持 `view=summary`。数量表原默认列表本来就采用 SQL 投影，显式 summary 与该投影一致；技术服务 summary 保留月份、伦理号、服务项目、服务日数、数量、金额、保护状态和 `updatedAt`，省略 `rows`、价格快照等详情。不传 view 的原列表响应保持原状。预览和编辑通过原单条详情接口读取完整数据；技术服务普通编辑仍使用原价格快照，删除继续提交列表所见版本，不能通过读详情静默替换该版本。
 
 `GET /api/intake-batches` 未指定 `sortKey` 时，接收日期待定（空字符串或 null）的批次优先置顶，已确定日期继续倒序；同组按更新时间、行号倒序稳定排列。排序在筛选后、分页前完成；显式 `sortKey`/`sortDir` 保留所选列原有升降序语义。
@@ -274,7 +276,11 @@ Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS
 
 ## 笼卡与待进驻
 
-批次详情及写入可选 `identifiers:{purchaseOrderNos:string[],orderNos:string[],batchNos:string[]}`，表示同一预约的编号集合，不声明任意两两对应关系或数量分摊。兼容 `purchaseOrderNo`、`orderNo`、`batchNo` 字符串以顿号投影；显式提供字符串（含空值）优先于旧集合，省略时可从集合读取。每类最多50个、每个最多200字符；跨IACUC需求分开保存。标准DC保留后缀并推导对应C，多编号不再视为冲突。列表编号候选及筛选支持单个成员，旧完整字符串筛选仍兼容；重复提醒按任意成员命中，确认后仍可保存。独立接收列表及Excel不按成员展开或重复合计动物数量。现有自动文字补充合并继续要求唯一匹配且完整集合相符，不据成员交集覆盖另一预约。
+批次详情及写入可选 `identifiers:{purchaseOrderNos:string[],orderNos:string[],batchNos:string[]}`，表示同一预约的编号集合，不声明任意两两对应关系或数量分摊。兼容 `purchaseOrderNo`、`orderNo`、`batchNo` 字符串以顿号投影；显式提供字符串（含空值）优先于旧集合，省略时可从集合读取。每类最多50个、每个最多200字符；跨IACUC需求分开保存。标准DC保留后缀并推导对应C，多编号不再视为冲突。列表编号候选及筛选支持单个成员，旧完整字符串筛选仍兼容；重复提醒按任意成员命中，确认后仍可保存。独立接收列表及Excel不按成员展开或重复合计动物数量。统一预约核对区分完整明确命中与仅共享编号的相关记录，不据成员交集覆盖另一预约。
+
+`POST /api/intake-batches/recognition-preview` 的 `reviewVersion:2` 接收任意图文顺序的 `item`、可选自身 `excludeId` 和本轮 `recognitionImageRefs`，无需文字或旧原图。响应保留 `{items,total}`，增加 `outcome`（unmatched／registered／supplement／conflict／related／insufficient）、`sourceIssues` 和规范后的 `incoming`；候选提供原记录、逐字段 `comparisons`（same／different／missing／supplement／unknown）、`canAcknowledge`、`canMerge`、`mergedItem` 和确认令牌。编号索引只召回相关记录，明确需求号或完整订单号的唯一相容命中才可补充；同C不同DC不能当作同单。数量、标准品系和保守规范化规格参与比较，缺失或无法解析不是一致；本轮来源差异不会被采购优先的最终表单掩盖。原图引用须属于当前账号并通过SHA校验；未参与本轮识别的图片提示核对，暂存过期返回410及原错误码。省略 `reviewVersion` 保留旧文字补充响应和规则。
+
+一致记录默认只读确认结束，不发写入。显式补充使用批次PUT的 `recognitionMerge:{reviewVersion:2,incoming,confirmationToken}`，携带本轮原图引用及原 `expectedUpdatedAt`；服务端在原写事务重新核对全部候选、版本和输入，仅补空缺、追加新材料，不信任客户端 `mergedItem`。原ID、笼卡及二维码、状态、接收和旧图片来源映射保留；已接收或有接收记录仅供查看，不能补充。新轮依据保存到 `recognition.recognitionRounds`，每轮独立保留 `at/rawMessage/appliedFields/imageIds/evidence`，不重绑旧顶层 `imageIds`；原件按SHA复用，改名不重复留档。普通新界面保存携带 `reviewVersion:2`，发现重复时409的原details增加完整 `review`，回到同一核对区；明确另建仍按原重复确认及审计处理。
 
 日期列筛选保持 `filter-options` 的 `{items:[{value,label,count}]}` 与 `columnFilters` 原始值数组契约。前端年/月/日仅为显示分组，时间列的一日节点保留并提交该日所有原始时间戳，不能以截断后的日期代替精确值。日期/月候选查询返回当前范围完整候选，不使用普通文本列的500项上限；原权限、其他列筛选及排除本列条件的聚合口径不变。候选包含空白时，`intakeDate`、`month`、`updatedAt` 的数组筛选允许显式 `""`，非日期列的空值清洗规则不变。
 

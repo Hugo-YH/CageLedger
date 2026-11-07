@@ -458,6 +458,25 @@ describe("intake message parser", () => {
     expect(updateIntakeDraft(normalizeIntakeBatch({}), "specification", "2–6月").specification).toBe("2–6月");
   });
 
+  it.each([
+    ["规格", "6周龄"],
+    ["体重/日龄", "6周龄"],
+    ["体重", "18–22g"],
+    ["日龄", "42天"],
+  ])("extracts an explicit %s without using the husbandry period as specification", (label, specification) => {
+    expect(parseIntakeMessage(`品系：C57BL/6J ${label}：${specification} 数量：24\n饲养周期：30`)).toMatchObject({
+      strainRaw: "C57BL/6J",
+      strainStandard: "C57BL/6J",
+      specification,
+      quantity: 24,
+      husbandryDays: 30,
+    });
+  });
+
+  it("does not infer animal specification from a husbandry period", () => {
+    expect(parseIntakeMessage("饲养周期：6周")).not.toHaveProperty("specification");
+  });
+
   it("preserves server cards and receipt counts", () => {
     const result = normalizeIntakeBatch({
       finalCardCount: 4,

@@ -1,13 +1,36 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
-import type { Occupancy, OccupancyWriteResponse, PlacementWriteResponse } from "./contracts";
+import type { CageSlot, Occupancy, OccupancyWriteResponse, PlacementWriteResponse, RoomWorkspace } from "./contracts";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+
+async function refreshCageRoom(client: QueryClient, roomId: string, changedSlots: CageSlot[] = []) {
+  const rackIds = new Set(changedSlots.map((slot) => slot.rackId));
+  for (const [key, data] of client.getQueriesData<RoomWorkspace>({ queryKey: queryKeys.infrastructureRoomsRoot })) {
+    if (key[3] === roomId) for (const rack of data?.racks || []) rackIds.add(rack.id);
+  }
+  await Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
+    client.invalidateQueries({
+      queryKey: queryKeys.infrastructureRoomsRoot,
+      predicate: (query) => query.queryKey[3] === roomId,
+    }),
+    client.invalidateQueries({
+      queryKey: queryKeys.infrastructureRackSlotsRoot,
+      predicate: (query) => rackIds.has(String(query.queryKey[3])),
+    }),
+  ]);
+}
+
+export function useRefreshCageRoom(roomId: string) {
+  const client = useQueryClient();
+  return () => refreshCageRoom(client, roomId);
+}
 
 export function useSaveOccupancy(roomId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ item, exists }: { item: Occupancy; exists: boolean }) =>
+    mutationFn: ({ item, exists }: { item: Occupancy; exists: boolean; deferInvalidate?: boolean }) =>
       requestJson<OccupancyWriteResponse>(
         exists ? `/api/occupancies/${encodeURIComponent(item.id)}` : "/api/occupancies",
         {
@@ -15,11 +38,8 @@ export function useSaveOccupancy(roomId: string) {
           body: JSON.stringify({ item, expectedUpdatedAt: exists ? item.updatedAt : "" }),
         },
       ),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.infrastructure }),
-      ]),
+    onSuccess: (response, variables) =>
+      variables.deferInvalidate ? undefined : refreshCageRoom(queryClient, roomId, response.affectedSlots),
   });
 }
 
@@ -31,11 +51,7 @@ export function useReservePlacement(roomId: string) {
         method: "POST",
         body: JSON.stringify({ slotId }),
       }),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.infrastructure }),
-      ]),
+    onSuccess: (response) => refreshCageRoom(queryClient, roomId, response.affectedSlots),
   });
 }
 
@@ -47,10 +63,6 @@ export function useMoveInPlacement(roomId: string) {
         method: "POST",
         body: JSON.stringify({ actualMoveInDate }),
       }),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.cageRoom(roomId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.infrastructure }),
-      ]),
+    onSuccess: (response) => refreshCageRoom(queryClient, roomId, response.affectedSlots),
   });
 }

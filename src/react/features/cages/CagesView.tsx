@@ -1,10 +1,10 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Select } from "antd";
 
 import { useRooms, useRoomWorkspace } from "../../api/infrastructure";
-import { cageCode, currentOccupancy } from "../../../domain/cages";
+import { cageCode, currentOccupancyIndex } from "../../../domain/cages";
 import { BatchSlotEditor, PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
 import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
 import { PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
@@ -19,9 +19,12 @@ export function CagesView() {
   const rooms = summary.data?.items || [];
   const [roomId, setRoomId] = useState("");
   const selectedRoomId = roomId || rooms[0]?.id || "";
-  const roomQuery = useRoomWorkspace(selectedRoomId);
+  const roomQuery = useRoomWorkspace(selectedRoomId, "cages");
   const data = roomQuery.data;
-  const racks = (data?.racks || []).filter((rack) => rack.roomId === selectedRoomId);
+  const racks = useMemo(
+    () => (data?.racks || []).filter((rack) => rack.roomId === selectedRoomId),
+    [data?.racks, selectedRoomId],
+  );
   const [rackId, setRackId] = useState("");
   const selectedRack = racks.find((rack) => rack.id === rackId) || racks[0];
   const [selectedSlotId, setSelectedSlotId] = useState("");
@@ -32,11 +35,34 @@ export function CagesView() {
   const [tasksOpen, setTasksOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [reservationError, setReservationError] = useState("");
-  const slots = (data?.slots || []).filter((slot) => slot.rackId === selectedRack?.id);
+  const slots = useMemo(
+    () => (data?.slots || []).filter((slot) => slot.rackId === selectedRack?.id),
+    [data?.slots, selectedRack?.id],
+  );
   const selectedSlot = slots.find((slot) => slot.id === selectedSlotId) || null;
   const occupancies = data?.occupancies || [];
-  const tasks = (data?.placementTasks || []).filter(
-    (task) => task.targetRoomId === selectedRoomId && task.status !== "active" && task.status !== "cancelled",
+  const occupancyBySlot = useMemo(() => currentOccupancyIndex(data?.occupancies || []), [data?.occupancies]);
+  const selectedSlotIdSet = useMemo(() => new Set(selectedSlotIds), [selectedSlotIds]);
+  const selectedSlots = useMemo(
+    () => slots.filter((slot) => selectedSlotIdSet.has(slot.id)),
+    [slots, selectedSlotIdSet],
+  );
+  const tasks = useMemo(
+    () =>
+      (data?.placementTasks || []).filter(
+        (task) => task.targetRoomId === selectedRoomId && task.status !== "active" && task.status !== "cancelled",
+      ),
+    [data?.placementTasks, selectedRoomId],
+  );
+  const selectSlot = useCallback(
+    (slot: (typeof slots)[number]) => {
+      if (batchMode)
+        setSelectedSlotIds((current) =>
+          current.includes(slot.id) ? current.filter((id) => id !== slot.id) : [...current, slot.id],
+        );
+      else setSelectedSlotId(slot.id);
+    },
+    [batchMode],
   );
   const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
 
@@ -279,13 +305,7 @@ export function CagesView() {
                 occupancies={occupancies}
                 selectedSlotId={selectedSlotId}
                 selectedSlotIds={selectedSlotIds}
-                onSelect={(slot) =>
-                  batchMode
-                    ? setSelectedSlotIds((current) =>
-                        current.includes(slot.id) ? current.filter((id) => id !== slot.id) : [...current, slot.id],
-                      )
-                    : setSelectedSlotId(slot.id)
-                }
+                onSelect={selectSlot}
               />
             ) : (
               <div className="empty-state">
@@ -303,7 +323,7 @@ export function CagesView() {
             rack={selectedRack}
             roomName={selectedRoom?.name || ""}
             roomSpecies={selectedRoom?.defaultSpecies || ""}
-            occupancy={currentOccupancy(selectedSlot.id, occupancies)}
+            occupancy={occupancyBySlot.get(selectedSlot.id) || null}
             roomId={selectedRoomId}
             onClose={() => setSelectedSlotId("")}
             beginOperation={scopeOperations.begin}
@@ -314,12 +334,15 @@ export function CagesView() {
         {batchEditorOpen && selectedRack ? (
           <BatchSlotEditor
             key={selectedRack.id}
-            slots={slots.filter((slot) => selectedSlotIds.includes(slot.id))}
+            slots={selectedSlots}
             rack={selectedRack}
             roomName={selectedRoom?.name || ""}
             occupancies={occupancies}
             roomId={selectedRoomId}
-            onClose={() => setBatchEditorOpen(false)}
+            onClose={() => {
+              scopeOperations.invalidate();
+              setBatchEditorOpen(false);
+            }}
             beginOperation={scopeOperations.begin}
             onDone={(message) => {
               setNotice("");

@@ -3,6 +3,8 @@ INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_cage_slots_rack_id ON cage_slots(rack_id)",
     "CREATE INDEX IF NOT EXISTS idx_cage_slots_status ON cage_slots(status)",
     "CREATE INDEX IF NOT EXISTS idx_occupancies_slot_id ON occupancies(slot_id)",
+    "CREATE INDEX IF NOT EXISTS idx_occupancies_current_slot ON occupancies(slot_id) WHERE json_extract(payload,'$.status') IN ('active','reserved')",
+    "CREATE INDEX IF NOT EXISTS idx_occupancies_current_payload_slot ON occupancies(json_extract(payload,'$.slotId')) WHERE json_extract(payload,'$.status') IN ('active','reserved')",
     "CREATE INDEX IF NOT EXISTS idx_occupancies_room_id ON occupancies(room_id)",
     "CREATE INDEX IF NOT EXISTS idx_occupancies_rack_id ON occupancies(rack_id)",
     "CREATE INDEX IF NOT EXISTS idx_occupancies_iacuc ON occupancies(iacuc)",

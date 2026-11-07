@@ -60,6 +60,7 @@ vi.mock("../../api/infrastructure", () => ({
 vi.mock("../../api/cages", () => ({
   useReservePlacement: () => ({ mutateAsync: reserve, isPending: false }),
   useSaveOccupancy: () => ({ mutateAsync: save, isPending: false }),
+  useRefreshCageRoom: () => () => Promise.resolve(),
   useMoveInPlacement: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("antd", () => ({
@@ -269,5 +270,26 @@ describe("cage workspace selection scope", () => {
     expect(save.mock.calls.map(([payload]) => payload.item.slotId)).toEqual(["slot-1", "slot-2"]);
     expect(screen.getByText("已选 1 项")).toBeInTheDocument();
     expect(screen.queryByText("已批量保存 2 个笼位。")).not.toBeInTheDocument();
+  });
+
+  it("does not close a reopened batch editor when a previously closed job finishes in the same scope", async () => {
+    let finish!: () => void;
+    save.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve))).mockResolvedValue(undefined);
+    render(<CagesView />);
+    fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
+    fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "slot-2" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
+    await act(async () => {
+      finish();
+      await Promise.resolve();
+    });
+    expect(save.mock.calls.map(([payload]) => payload.item.slotId)).toEqual(["slot-1", "slot-2"]);
+    expect(screen.getByText("已选 1 项")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "批量编辑 1 个笼位" })).toBeInTheDocument();
+    expect(operationFeedback.success).not.toHaveBeenCalled();
   });
 });

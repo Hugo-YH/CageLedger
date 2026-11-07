@@ -9,8 +9,10 @@ export function Field({
   type = "text",
   max,
   personNames = false,
+  disabled = false,
 }: {
   personNames?: boolean;
+  disabled?: boolean;
   label: string;
   value: string | number;
   onChange: (value: string) => void;
@@ -22,6 +24,7 @@ export function Field({
       <label>
         {label}
         <InputNumber
+          disabled={disabled}
           aria-label={label}
           min={0}
           style={{ width: "100%" }}
@@ -35,11 +38,12 @@ export function Field({
     <label>
       {label}
       {type === "date" ? (
-        <DateInput label={label} value={String(value)} onChange={onChange} max={max} />
+        <DateInput disabled={disabled} label={label} value={String(value)} onChange={onChange} max={max} />
       ) : personNames ? (
-        <PersonNamesInput aria-label={label} value={String(value)} onChange={onChange} />
+        <PersonNamesInput disabled={disabled} aria-label={label} value={String(value)} onChange={onChange} />
       ) : (
         <Input
+          disabled={disabled}
           aria-label={label}
           max={max}
           type={type}
@@ -57,6 +61,7 @@ const SLOT_STATUS_OPTIONS = [
 ];
 
 export function SlotStatusSelect({
+  disabled = false,
   id,
   value,
   onChange,
@@ -64,11 +69,13 @@ export function SlotStatusSelect({
   id: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <label htmlFor={id}>
       状态
       <Select
+        disabled={disabled}
         aria-label="状态"
         id={id}
         options={SLOT_STATUS_OPTIONS}

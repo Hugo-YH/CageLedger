@@ -7,7 +7,7 @@ import type { useIntakeSaveFlow } from "../hooks/useIntakeSaveFlow";
 import { IntakeDuplicateConfirmDialog } from "./IntakeDuplicateConfirmDialog";
 import { IntakePrintConfirmDialog } from "./IntakePrintConfirmDialog";
 import { IntakeReceiptConfirmDialog } from "./IntakeReceiptConfirmDialog";
-import { IntakeRecognitionMergeDialog } from "./IntakeRecognitionMergeDialog";
+import { IntakeReviewDialog } from "./IntakeReviewDialog";
 
 export function IntakeActionDialogs({
   actions,
@@ -80,21 +80,27 @@ export function IntakeActionDialogs({
         ) : null}
       </ModalPresence>
       <ModalPresence>
-        {preview && preview.total > 0 ? (
-          <IntakeRecognitionMergeDialog
+        {preview && (preview.total > 0 || preview.outcome !== "unmatched" || preview.sourceIssues.length > 0) ? (
+          <IntakeReviewDialog
             key={preview.items.map((candidate) => candidate.item.id).join(",")}
             preview={preview}
+            incoming={merge.state!.incoming}
+            images={merge.state!.images}
             pending={merge.state!.saving || saves.mutation.isPending}
             error={merge.state!.saveError}
             blocked={merge.state!.needsRefresh}
             onClose={merge.close}
-            onConfirm={() => void merge.confirm()}
+            onConfirm={(id) => void merge.confirm(id)}
             onRefresh={merge.retry}
+            onAcknowledge={merge.acknowledge}
+            onEdit={merge.edit}
+            canCreateAnother={Boolean(duplicate)}
+            onCreateAnother={() => void saves.confirmDuplicate()}
           />
         ) : null}
       </ModalPresence>
       <ModalPresence>
-        {duplicate ? (
+        {duplicate && !duplicate.details.review ? (
           <IntakeDuplicateConfirmDialog
             key={duplicate.details.confirmationToken}
             details={duplicate.details}

@@ -44,7 +44,11 @@ def rack_slots(conn, rack_id):
     return payloads(conn, "SELECT payload FROM cage_slots WHERE rack_id=? ORDER BY row_no,col_no,rowid", (rack_id,))
 
 
-def room_workspace(conn, room_id):
+def room_workspace(conn, room_id, *, current_only=False):
+    occupancy_filter = " AND json_extract(o.payload,'$.status') IN ('active','reserved')" if current_only else ""
+    task_filter = (
+        " AND COALESCE(json_extract(payload,'$.status'),'') NOT IN ('active','cancelled')" if current_only else ""
+    )
     return {
         "racks": payloads(conn, "SELECT payload FROM racks WHERE room_id=? ORDER BY index_no,rowid", (room_id,)),
         "slots": payloads(
@@ -54,12 +58,12 @@ def room_workspace(conn, room_id):
         ),
         "occupancies": payloads(
             conn,
-            "SELECT o.payload FROM occupancies o JOIN cage_slots s ON s.id=o.slot_id JOIN racks r ON r.id=s.rack_id WHERE r.room_id=? ORDER BY o.start_date,o.rowid",
+            f"SELECT o.payload FROM occupancies o JOIN cage_slots s ON s.id=o.slot_id JOIN racks r ON r.id=s.rack_id WHERE r.room_id=?{occupancy_filter} ORDER BY o.start_date,o.rowid",
             (room_id,),
         ),
         "placementTasks": payloads(
             conn,
-            "SELECT payload FROM placement_tasks WHERE target_room_id=? ORDER BY planned_move_in_date,rowid",
+            f"SELECT payload FROM placement_tasks WHERE target_room_id=?{task_filter} ORDER BY planned_move_in_date,rowid",
             (room_id,),
         ),
     }

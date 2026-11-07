@@ -504,6 +504,7 @@ class HandlerSupportMixin:
                     lambda state: app_ports().reserve_placement_task(
                         state, task_id, clean_text(body.get("slotId")), user
                     ),
+                    context={"slotId": clean_text(body.get("slotId"))},
                 )
             )
         except LookupError as exc:
@@ -526,6 +527,7 @@ class HandlerSupportMixin:
                     lambda state: app_ports().move_in_placement_task(
                         state, task_id, body.get("actualMoveInDate"), user
                     ),
+                    context={},
                 )
             )
         except LookupError as exc:
@@ -548,6 +550,7 @@ class HandlerSupportMixin:
                     lambda state: app_ports().reassign_placement_task_room(
                         state, task_id, clean_text(body.get("roomId")), user
                     ),
+                    context={"roomId": clean_text(body.get("roomId"))},
                 )
             )
         except LookupError as exc:

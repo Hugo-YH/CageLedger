@@ -125,13 +125,13 @@ class ImageWriteSession:
                 os.fsync(output.fileno())
             self.prepared[key] = (identity, path)
 
-    def save(self, batch_id, images, existing, at):
+    def save(self, batch_id, images, existing, at, *, by_content=False):
         result = list(existing)
         identities = {(item.get("sha256"), item.get("name")) for item in result}
         added = []
         for image in images:
             digest = hashlib.sha256(image.body).hexdigest()
-            if (digest, image.name) in identities:
+            if any(key[0] == digest for key in identities) if by_content else (digest, image.name) in identities:
                 continue
             if len(result) >= 20:
                 raise ValueError("该批次的预约来源图片已达 20 张上限")

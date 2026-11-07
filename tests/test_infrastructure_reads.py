@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import unittest
 from unittest.mock import Mock, patch
@@ -112,6 +113,48 @@ class InfrastructureReadTests(unittest.TestCase):
             handler.actor = ADMIN
             self.assertTrue(infrastructure.handle(handler, "/api/infrastructure/racks/missing/slots"))
             self.assertEqual(handler.response[1], 404)
+
+    def test_cage_view_filters_only_unused_history_and_preserves_full_api_and_permissions(self):
+        for identity, status in (("old", "ended"), ("reserved", "reserved")):
+            item = {"id": identity, "slotId": "s1", "status": status, "updatedAt": "version", "notes": "完整字段"}
+            self.conn.execute(
+                "INSERT INTO occupancies(id,slot_id,status,start_date,payload) VALUES(?,?,?,?,?)",
+                (identity, "s1", status, "2026-01-01", json.dumps(item)),
+            )
+        for identity, status in (("done", "active"), ("cancel", "cancelled"), ("legacy", "unknown")):
+            item = {"id": identity, "targetRoomId": "r1", "status": status}
+            self.conn.execute(
+                "INSERT INTO placement_tasks(id,target_room_id,status,payload,source_batch_id,source_receipt_id,planned_move_in_date) VALUES(?,?,?,?,'fixture','fixture','2026-11-07')",
+                (identity, "r1", status, json.dumps(item)),
+            )
+        self.conn.commit()
+        before = self.conn.total_changes
+        full = service.room_workspace(self.conn, LIMITED, "r1")
+        actual = service.room_workspace(self.conn, LIMITED, "r1", view="cages")
+        expected = {
+            **full,
+            "occupancies": [o for o in full["occupancies"] if o["status"] in ("active", "reserved")],
+            "placementTasks": [t for t in full["placementTasks"] if t.get("status") not in ("active", "cancelled")],
+        }
+        self.assertEqual(actual, expected)
+        self.assertEqual(self.conn.total_changes, before)
+        self.assertEqual(service.room_workspace(self.conn, LIMITED, "r1"), full)
+        with self.assertRaises(PermissionError):
+            service.room_workspace(self.conn, NO_ROOMS, "r1", view="cages")
+
+        class Handler:
+            path = "/api/infrastructure/rooms/r1?view=cages"
+
+            def require_user(self):
+                return LIMITED
+
+            def send_json(self, value, status=200):
+                self.value, self.status = value, status
+
+        handler = Handler()
+        with patch.object(infrastructure, "connect_db", return_value=self.conn):
+            self.assertTrue(infrastructure.handle(handler, "/api/infrastructure/rooms/r1"))
+        self.assertEqual(handler.value, expected)
 
     def test_bootstrap_summary_cache_hit_skips_state_assembly(self):
         state_reader = Mock(return_value=read_cached_state(self.conn))

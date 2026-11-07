@@ -57,10 +57,14 @@ export const queryKeys = {
   researchers: (params: object) => ["researchers", "list", params] as const,
   researcher: (id: string) => ["researchers", "detail", id] as const,
   infrastructure: ["infrastructure"] as const,
+  infrastructureRoomsRoot: ["infrastructure", "room"] as const,
+  infrastructureRackSlotsRoot: ["infrastructure", "rack-slots"] as const,
   roomDirectoryRoot: ["room-directory"] as const,
   roomDirectory: (actorScope: object) => ["room-directory", actorScope] as const,
   infrastructureStructure: (actorScope: object) => ["infrastructure", "structure", actorScope] as const,
   infrastructureRoom: (actorScope: object, roomId: string) => ["infrastructure", "room", actorScope, roomId] as const,
+  infrastructureCageRoom: (actorScope: object, roomId: string) =>
+    ["infrastructure", "room", actorScope, roomId, "cages"] as const,
   infrastructureRackSlots: (actorScope: object, rackId: string) =>
     ["infrastructure", "rack-slots", actorScope, rackId] as const,
   principalIdentities: ["principal-identities"] as const,

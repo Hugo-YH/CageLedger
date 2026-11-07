@@ -50,6 +50,7 @@ export function useIntakeSaveFlow({
         item: intent.item,
         exists: intent.exists,
         checkDuplicates: true,
+        reviewVersion: 2,
         recognitionImages: intent.recognitionImages,
         ...(confirmation ? { duplicateConfirmation: confirmation } : {}),
       });
@@ -106,6 +107,7 @@ export function useIntakeSaveFlow({
     run,
     confirmDuplicate,
     dismissDuplicate,
+    clearDuplicate: () => setDuplicate(null),
     pendingDuplicate: duplicate && isCurrent(duplicate.intent) ? duplicate : null,
   };
 }

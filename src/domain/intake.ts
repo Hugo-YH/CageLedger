@@ -316,8 +316,13 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
   const supplier = matchField(raw, ["供应商", "购买单位"]).split(/\s+(?:品系|数量|饲养房间)/)[0];
   const strainRaw =
     source
-      .match(/品系\s*:?\s*([\s\S]*?)(?=\s*(?:数量|饲养房间|进驻日期|拟进驻日期|预计进驻日期)\s*:|[\n\r]|$)/i)?.[1]
+      .match(
+        /品系\s*:?\s*([\s\S]*?)(?=\s*(?:规格|体重\/日龄|体重|日龄|数量|饲养房间|进驻日期|拟进驻日期|预计进驻日期)\s*:|[\n\r]|$)/i,
+      )?.[1]
       ?.trim() || "";
+  const specification = matchField(raw, ["体重/日龄", "规格", "体重", "日龄"]).split(
+    /(?:[，,；;]\s*|\s+)(?:数量|性别|供应商|购买单位|饲养房间|房间|接收日期|进驻日期|品系|饲养周期|周期)\s*[:：]/,
+  )[0];
   const quantity = numberOrNull(source.match(/数量\s*:?\s*(\d+)/)?.[1]);
   const roomName = matchField(raw, ["饲养房间", "房间"]).match(/\d{3,4}/)?.[0] || "";
   const dateText = matchField(raw, [
@@ -358,6 +363,7 @@ export function parseIntakeMessage(rawMessage: string, receiverName = "", roomNa
       supplier: abbreviateSupplier(supplier),
       strainRaw,
       strainStandard: standardizeStrain(strainRaw) || strainRaw,
+      ...(specification ? { specification } : {}),
       species: inferSpecies(`${raw} ${strainRaw}`),
       sex: matchField(raw, ["性别"]).split(
         /(?:数量|供应商|购买单位|饲养房间|房间|接收日期|进驻日期|品系|批次号|项目负责人|实验负责人)\s*[:：]/,

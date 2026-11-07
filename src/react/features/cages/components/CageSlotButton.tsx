@@ -1,8 +1,9 @@
+import { memo } from "react";
 import { formatPersonNames } from "../../../../domain/personNames";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { animalAgeText, animalSexLabel, cageCode, occupancyPeriodTone } from "../../../../domain/cages";
 
-export function CageSlotButton({
+export const CageSlotButton = memo(function CageSlotButton({
   slot,
   rack,
   roomName,
@@ -10,7 +11,7 @@ export function CageSlotButton({
   occupancy,
   selected,
   today,
-  onClick,
+  onSelect,
 }: {
   slot: CageSlot;
   rack: CageRack;
@@ -19,7 +20,7 @@ export function CageSlotButton({
   occupancy: Occupancy | null;
   selected: boolean;
   today: string;
-  onClick: () => void;
+  onSelect: (slot: CageSlot) => void;
 }) {
   const tone = occupancyPeriodTone(occupancy, today);
   const dotTone = tone || (occupancy?.status === "reserved" ? "reserved" : occupancy ? "active" : "empty");
@@ -32,7 +33,7 @@ export function CageSlotButton({
       className={`slot ${slot.status} ${tone ? `period-${tone}` : ""} ${selected ? "selected" : ""}`}
       type="button"
       aria-label={`${cageCode(slot, rack.index, roomName)} ${occupancy?.iacuc || "空"}${monkeySummary ? ` ${monkeySummary}` : ""}`}
-      onClick={onClick}
+      onClick={() => onSelect(slot)}
     >
       <i className={`slot-status-dot ${dotTone}`} aria-hidden="true" />
       <span className="slot-code">{cageCode(slot, rack.index, roomName)}</span>
@@ -50,4 +51,4 @@ export function CageSlotButton({
       )}
     </button>
   );
-}
+});

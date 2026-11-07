@@ -130,7 +130,13 @@ function QuantityFacts({ facts }: { facts: NonNullable<IntakeRecognitionSource["
   );
 }
 
-function RecognitionSources({ sources, imageNames }: { sources: IntakeRecognitionSource[]; imageNames: string[] }) {
+export function RecognitionSources({
+  sources,
+  imageNames,
+}: {
+  sources: IntakeRecognitionSource[];
+  imageNames: string[];
+}) {
   return (
     <div>
       {sources.map((source, index) => {

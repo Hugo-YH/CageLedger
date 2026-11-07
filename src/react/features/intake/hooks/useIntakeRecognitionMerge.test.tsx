@@ -1,22 +1,29 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { IntakeRecognitionMergePreview, IntakeWriteResponse } from "../../../../contracts/intake";
+import type { IntakeReviewPreview, IntakeSaveRequest, IntakeWriteResponse } from "../../../../contracts/intake";
 import { createIntakeDraft } from "../../../../domain/intake";
-import { previewIntakeRecognitionMerge } from "../../../api/intake";
+import { previewIntakeReview } from "../../../api/intake";
 import { ApiError } from "../../../api/client";
 import { useIntakeRecognitionMerge } from "./useIntakeRecognitionMerge";
 
-vi.mock("../../../api/intake", () => ({ previewIntakeRecognitionMerge: vi.fn() }));
+vi.mock("../../../api/intake", () => ({ previewIntakeReview: vi.fn() }));
 const incoming = { ...createIntakeDraft("录入人"), rawMessage: "待补充文字", batchNo: "B1", intakeDate: "2026-11-03" };
 const original = { ...createIntakeDraft("图片录入人"), id: "saved-image", updatedAt: "v1", quantity: 30 };
 const merged = { ...original, intakeDate: incoming.intakeDate };
-function previewResult(): IntakeRecognitionMergePreview {
+function previewResult(): IntakeReviewPreview {
   return {
+    reviewVersion: 2,
+    outcome: "supplement",
+    sourceIssues: [],
+    incoming,
     total: 1,
     items: [
       {
         item: original,
+        reviewStatus: "supplement",
+        canAcknowledge: true,
+        comparisons: [],
         matchedFields: ["batchNo"],
         classification: "batch_only",
         canMerge: true,
@@ -45,18 +52,14 @@ function setup() {
   const hook = renderHook(() => useIntakeRecognitionMerge({ revision, save, saveInFlight, onSaved }));
   return { ...hook, revision, saveInFlight, save, onSaved };
 }
-beforeEach(() => vi.mocked(previewIntakeRecognitionMerge).mockReset());
+beforeEach(() => vi.mocked(previewIntakeReview).mockReset());
 afterEach(cleanup);
 
 it("only previews the recognized draft, excludes an edited ID and does not write before confirmation", async () => {
-  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue(previewResult());
+  vi.mocked(previewIntakeReview).mockResolvedValue(previewResult());
   const { result, save } = setup();
   await act(() => result.current.preview(incoming, "current-editor"));
-  expect(previewIntakeRecognitionMerge).toHaveBeenCalledExactlyOnceWith(
-    incoming,
-    "current-editor",
-    expect.any(AbortSignal),
-  );
+  expect(previewIntakeReview).toHaveBeenCalledExactlyOnceWith(incoming, "current-editor", [], expect.any(AbortSignal));
   expect(result.current.state?.incoming).toEqual(incoming);
   expect(save.mutateAsync).not.toHaveBeenCalled();
   act(() => result.current.close());
@@ -65,7 +68,7 @@ it("only previews the recognized draft, excludes an edited ID and does not write
 });
 
 it("retains recognized text after a preview failure and retries the same draft", async () => {
-  vi.mocked(previewIntakeRecognitionMerge)
+  vi.mocked(previewIntakeReview)
     .mockRejectedValueOnce(new Error("匹配暂不可用"))
     .mockResolvedValueOnce(previewResult());
   const { result, save } = setup();
@@ -74,12 +77,12 @@ it("retains recognized text after a preview failure and retries the same draft",
   act(() => result.current.retry());
   await waitFor(() => expect(result.current.state?.checking).toBe(false));
   expect(result.current.state?.result?.total).toBe(1);
-  expect(previewIntakeRecognitionMerge).toHaveBeenCalledTimes(2);
+  expect(previewIntakeReview).toHaveBeenCalledTimes(2);
   expect(save.mutateAsync).not.toHaveBeenCalled();
 });
 
 it("leaves an unmatched recognized draft on the normal save path without an error or automatic write", async () => {
-  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue({ items: [], total: 0 });
+  vi.mocked(previewIntakeReview).mockResolvedValue({ ...previewResult(), items: [], total: 0, outcome: "unmatched" });
   const { result, save } = setup();
   await act(() => result.current.preview(incoming));
   expect(result.current.state).toMatchObject({ incoming, checking: false, error: "", result: { items: [], total: 0 } });
@@ -88,7 +91,7 @@ it("leaves an unmatched recognized draft on the normal save path without an erro
 });
 
 it("updates the server-provided original exactly once, keeps text after save failure and can retry", async () => {
-  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue(previewResult());
+  vi.mocked(previewIntakeReview).mockResolvedValue(previewResult());
   const { result, save, onSaved } = setup();
   const firstSave = deferred<IntakeWriteResponse>();
   save.mutateAsync
@@ -104,7 +107,9 @@ it("updates the server-provided original exactly once, keeps text after save fai
     item: merged,
     exists: true,
     checkDuplicates: true,
-    recognitionMerge: { incoming, confirmationToken: "preview-token" },
+    reviewVersion: 2,
+    recognitionImages: [],
+    recognitionMerge: { reviewVersion: 2, incoming, confirmationToken: "preview-token" },
   });
   act(() => result.current.close());
   expect(result.current.state?.saving).toBe(true);
@@ -115,16 +120,19 @@ it("updates the server-provided original exactly once, keeps text after save fai
   expect(result.current.state).toMatchObject({ incoming, saving: false, saveError: "版本已更新" });
   expect(onSaved).not.toHaveBeenCalled();
   await act(() => result.current.confirm());
-  expect(onSaved).toHaveBeenCalledExactlyOnceWith({ ...merged, updatedAt: "v2" });
+  expect(onSaved).toHaveBeenCalledExactlyOnceWith({ ...merged, updatedAt: "v2" }, undefined, null);
   expect(result.current.state).toBeNull();
 });
 
 it.each(["multiple", "blocked", "missing-token"])("never confirms an ineligible preview (%s)", async (kind) => {
   const response = previewResult();
-  if (kind === "multiple") response.total = 2;
+  if (kind === "multiple") {
+    response.total = 2;
+    response.items.push({ ...response.items[0], item: { ...original, id: "other" } });
+  }
   if (kind === "blocked") response.items[0].canMerge = false;
   if (kind === "missing-token") response.items[0].confirmationToken = "";
-  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue(response);
+  vi.mocked(previewIntakeReview).mockResolvedValue(response);
   const { result, save } = setup();
   await act(() => result.current.preview(incoming));
   await act(() => result.current.confirm());
@@ -134,7 +142,7 @@ it.each(["multiple", "blocked", "missing-token"])("never confirms an ineligible 
 it("requires a fresh preview after a 409 instead of replaying a stale merge token", async () => {
   const refreshed = previewResult();
   refreshed.items[0].confirmationToken = "refreshed-token";
-  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValueOnce(previewResult()).mockResolvedValueOnce(refreshed);
+  vi.mocked(previewIntakeReview).mockResolvedValueOnce(previewResult()).mockResolvedValueOnce(refreshed);
   const { result, save } = setup();
   save.mutateAsync
     .mockRejectedValueOnce(new ApiError("预约已更新，请重新匹配", 409, {}))
@@ -148,19 +156,19 @@ it("requires a fresh preview after a 409 instead of replaying a stale merge toke
   await waitFor(() => expect(result.current.state?.result?.items[0].confirmationToken).toBe("refreshed-token"));
   await act(() => result.current.confirm());
   expect(save.mutateAsync).toHaveBeenLastCalledWith(
-    expect.objectContaining({ recognitionMerge: { incoming, confirmationToken: "refreshed-token" } }),
+    expect.objectContaining({ recognitionMerge: { reviewVersion: 2, incoming, confirmationToken: "refreshed-token" } }),
   );
 });
 
 it("ignores late previews after a new draft revision and after unmount", async () => {
-  const read = deferred<IntakeRecognitionMergePreview>();
-  vi.mocked(previewIntakeRecognitionMerge).mockReturnValue(read.promise);
+  const read = deferred<IntakeReviewPreview>();
+  vi.mocked(previewIntakeReview).mockReturnValue(read.promise);
   const { result, revision, rerender, unmount, save } = setup();
   let pending!: Promise<void>;
   act(() => {
     pending = result.current.preview(incoming);
   });
-  const signal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[0][2]!;
+  const signal = vi.mocked(previewIntakeReview).mock.calls[0][3]!;
   expect(signal.aborted).toBe(false);
   revision.current += 1;
   rerender();
@@ -175,20 +183,20 @@ it("ignores late previews after a new draft revision and after unmount", async (
 });
 
 it("cancels superseded and closed preview requests without allowing their late results to reopen the dialog", async () => {
-  const first = deferred<IntakeRecognitionMergePreview>();
-  const second = deferred<IntakeRecognitionMergePreview>();
-  vi.mocked(previewIntakeRecognitionMerge).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const first = deferred<IntakeReviewPreview>();
+  const second = deferred<IntakeReviewPreview>();
+  vi.mocked(previewIntakeReview).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
   const { result } = setup();
   let firstPending!: Promise<void>;
   let secondPending!: Promise<void>;
   act(() => {
     firstPending = result.current.preview(incoming);
   });
-  const firstSignal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[0][2]!;
+  const firstSignal = vi.mocked(previewIntakeReview).mock.calls[0][3]!;
   act(() => {
     secondPending = result.current.preview({ ...incoming, batchNo: "NEW" });
   });
-  const secondSignal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[1][2]!;
+  const secondSignal = vi.mocked(previewIntakeReview).mock.calls[1][3]!;
   expect(firstSignal.aborted).toBe(true);
   expect(secondSignal.aborted).toBe(false);
   await act(async () => {
@@ -206,14 +214,14 @@ it("cancels superseded and closed preview requests without allowing their late r
 });
 
 it("aborts only the private preview request on unmount", async () => {
-  const read = deferred<IntakeRecognitionMergePreview>();
-  vi.mocked(previewIntakeRecognitionMerge).mockReturnValue(read.promise);
+  const read = deferred<IntakeReviewPreview>();
+  vi.mocked(previewIntakeReview).mockReturnValue(read.promise);
   const { result, unmount } = setup();
   let pending!: Promise<void>;
   act(() => {
     pending = result.current.preview(incoming);
   });
-  const signal = vi.mocked(previewIntakeRecognitionMerge).mock.calls[0][2]!;
+  const signal = vi.mocked(previewIntakeReview).mock.calls[0][3]!;
   unmount();
   expect(signal.aborted).toBe(true);
   await act(async () => {
@@ -223,7 +231,7 @@ it("aborts only the private preview request on unmount", async () => {
 });
 
 it("does not reset a newer draft when an earlier merge write finishes", async () => {
-  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue(previewResult());
+  vi.mocked(previewIntakeReview).mockResolvedValue(previewResult());
   const write = deferred<IntakeWriteResponse>();
   const { result, revision, rerender, save, onSaved } = setup();
   save.mutateAsync.mockReturnValue(write.promise);
@@ -242,20 +250,144 @@ it("does not reset a newer draft when an earlier merge write finishes", async ()
   expect(result.current.state).toBeNull();
 });
 
-it("skips matching when neither identifier was recognized", async () => {
+it("lets the server explain insufficient identifiers instead of claiming an unmatched appointment", async () => {
+  vi.mocked(previewIntakeReview).mockResolvedValue({
+    ...previewResult(),
+    items: [],
+    total: 0,
+    outcome: "insufficient",
+  });
   const { result } = setup();
   await act(() => result.current.preview({ ...incoming, batchNo: "", purchaseOrderNo: "" }));
-  expect(previewIntakeRecognitionMerge).not.toHaveBeenCalled();
-  expect(result.current.state).toBeNull();
+  expect(previewIntakeReview).toHaveBeenCalledOnce();
+  expect(result.current.state?.result?.outcome).toBe("insufficient");
 });
 
 it("still previews an order-only source with no purchase ID or batch number", async () => {
   const preview = previewResult();
   preview.items[0].classification = "order_only";
   preview.items[0].matchedFields = ["orderNo"];
-  vi.mocked(previewIntakeRecognitionMerge).mockResolvedValue(preview);
+  vi.mocked(previewIntakeReview).mockResolvedValue(preview);
   const { result } = setup();
   const orderOnly = { ...incoming, batchNo: "", purchaseOrderNo: "", orderNo: "DC202611022948607" };
   await act(() => result.current.preview(orderOnly));
-  expect(previewIntakeRecognitionMerge).toHaveBeenCalledExactlyOnceWith(orderOnly, undefined, expect.any(AbortSignal));
+  expect(previewIntakeReview).toHaveBeenCalledExactlyOnceWith(orderOnly, undefined, [], expect.any(AbortSignal));
+});
+
+it("acknowledges an existing appointment without writing and ignores acknowledgement after a newer draft", async () => {
+  const response = previewResult();
+  response.outcome = "registered";
+  const revision = { current: 1 };
+  const onAcknowledge = vi.fn();
+  const onEdit = vi.fn();
+  const save = { mutateAsync: vi.fn<(_request: IntakeSaveRequest) => Promise<IntakeWriteResponse>>() };
+  vi.mocked(previewIntakeReview).mockResolvedValue(response);
+  const { result, rerender } = renderHook(() =>
+    useIntakeRecognitionMerge({
+      revision,
+      save,
+      saveInFlight: { current: false },
+      onSaved: vi.fn(),
+      onAcknowledge,
+      onEdit,
+    }),
+  );
+  await act(() => result.current.preview(incoming));
+  act(() => result.current.acknowledge(original.id));
+  expect(onAcknowledge).toHaveBeenCalledOnce();
+  expect(save.mutateAsync).not.toHaveBeenCalled();
+  await act(() => result.current.preview(incoming));
+  revision.current += 1;
+  rerender();
+  act(() => {
+    result.current.acknowledge(original.id);
+    result.current.edit(original.id);
+  });
+  expect(onAcknowledge).toHaveBeenCalledOnce();
+  expect(onEdit).not.toHaveBeenCalled();
+});
+
+it("keeps the same image input identity through preview, failed confirmation and explicit recheck", async () => {
+  const images = [{ name: "新截图.png", dataUrl: "data:image/png;base64,eA==" }];
+  const snapshotImages = vi.fn(() => images);
+  const revision = { current: 1 };
+  const save = {
+    mutateAsync: vi
+      .fn<(_request: IntakeSaveRequest) => Promise<IntakeWriteResponse>>()
+      .mockRejectedValue(new ApiError("版本冲突", 409, {})),
+  };
+  vi.mocked(previewIntakeReview).mockResolvedValue(previewResult());
+  const { result } = renderHook(() =>
+    useIntakeRecognitionMerge({ revision, save, snapshotImages, saveInFlight: { current: false }, onSaved: vi.fn() }),
+  );
+  await act(() => result.current.preview(incoming));
+  await act(() => result.current.confirm(original.id));
+  expect(save.mutateAsync.mock.calls[0][0].recognitionImages?.[0]).toBe(images[0]);
+  snapshotImages.mockReturnValue([]);
+  act(() => result.current.retry());
+  await waitFor(() => expect(result.current.state?.checking).toBe(false));
+  expect(vi.mocked(previewIntakeReview).mock.calls[1][2]?.[0]).toBe(images[0]);
+  expect(snapshotImages).toHaveBeenCalledOnce();
+});
+
+it("reviews a duplicate save's captured intent in the same area and only edits the explicitly chosen original", () => {
+  const response = previewResult();
+  response.items.push({
+    ...response.items[0],
+    item: { ...original, id: "related" },
+    canMerge: false,
+    canAcknowledge: false,
+  });
+  response.total = 2;
+  const revision = { current: 1 };
+  const intent = {
+    item: incoming,
+    exists: false,
+    draftRevision: 1,
+    mode: "entry" as const,
+    recognitionImages: [{ name: "冻结图.png", dataUrl: "data:image/png;base64,eA==" }],
+  };
+  const onEdit = vi.fn();
+  const onCloseReview = vi.fn();
+  const save = { mutateAsync: vi.fn<(_request: IntakeSaveRequest) => Promise<IntakeWriteResponse>>() };
+  const duplicate = {
+    intent,
+    details: { items: [], total: 2, confirmationToken: "duplicate-token", review: response },
+    error: "",
+  };
+  const { result } = renderHook(() =>
+    useIntakeRecognitionMerge({
+      revision,
+      save,
+      saveInFlight: { current: false },
+      onSaved: vi.fn(),
+      onEdit,
+      onCloseReview,
+      duplicate,
+    }),
+  );
+  expect(result.current.state?.intent).toBe(intent);
+  expect(result.current.state?.images[0]).toBe(intent.recognitionImages[0]);
+  act(() => result.current.edit("related"));
+  expect(onEdit).toHaveBeenCalledExactlyOnceWith(response.items[1].item);
+  expect(onCloseReview).toHaveBeenCalledOnce();
+  expect(save.mutateAsync).not.toHaveBeenCalled();
+});
+
+it("allows the server's sole eligible target even when other records only share a related purchase number", async () => {
+  const response = previewResult();
+  response.total = 2;
+  response.items.push({
+    ...response.items[0],
+    item: { ...original, id: "other" },
+    canMerge: false,
+    canAcknowledge: false,
+  });
+  vi.mocked(previewIntakeReview).mockResolvedValue(response);
+  const { result, save } = setup();
+  save.mutateAsync.mockResolvedValue({ item: merged });
+  await act(() => result.current.preview(incoming));
+  await act(() => result.current.confirm(original.id));
+  expect(save.mutateAsync).toHaveBeenCalledOnce();
+  expect(save.mutateAsync.mock.calls[0][0]).toMatchObject({ item: { id: original.id, updatedAt: "v1" } });
 });

@@ -12,10 +12,15 @@ from typing import Any
 from server_app.cache import invalidate_data_cache, invalidate_data_cache_prefixes, log_perf
 from server_app.db import connect_db
 from server_app.domains.administration import audit_event, merge_audit_logs, write_audit_events
-from server_app.domains.intake.duplicates import confirm_duplicate_identifiers, duplicate_confirmation_event
+from server_app.domains.intake.duplicates import (
+    IntakeDuplicateConfirmationRequired,
+    confirm_duplicate_identifiers,
+    duplicate_confirmation_event,
+)
 from server_app.domains.intake.recognition_evidence import sanitize_evidence
 from server_app.domains.intake.recognition_images import ImageWriteSession
 from server_app.domains.intake.recognition_merge import confirmed_merge
+from server_app.domains.intake.recognition_reconciliation import append_round, confirmed_supplement, preview
 from server_app.domains.intake.recognition_uploads import acknowledge_saved_images, request_images
 from server_app.domains.state.audit_diff import build_audit_events, validate_state_write_permission
 from server_app.repositories.entities import (
@@ -66,12 +71,21 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
         state = copy.deepcopy(old_state)
         existing = next((entry for entry in old_state.get("intakeBatches", []) if entry.get("id") == item_id), None)
         merge_changes = None
+        round_incoming = None
+        review_merge = (
+            isinstance(payload.get("recognitionMerge"), dict) and payload["recognitionMerge"].get("reviewVersion") == 2
+        )
         if "recognitionMerge" in payload:
-            if method != "PUT" or images:
+            if method != "PUT" or (images and not review_merge):
                 raise ValueError("文字补充合并只能更新已有预约，请先核对合并预览")
-            raw_item, merge_changes = confirmed_merge(
-                conn, existing, payload["recognitionMerge"], payload.get("expectedUpdatedAt")
-            )
+            if review_merge:
+                raw_item, merge_changes, round_incoming = confirmed_supplement(
+                    conn, actor, existing, payload["recognitionMerge"], payload.get("expectedUpdatedAt"), images
+                )
+            else:
+                raw_item, merge_changes = confirmed_merge(
+                    conn, existing, payload["recognitionMerge"], payload.get("expectedUpdatedAt")
+                )
         if method == "PUT" and existing and "orderNo" in existing and "orderNo" not in raw_item:
             raw_item["orderNo"] = existing["orderNo"]
         raw_item.pop("recognitionImages", None)
@@ -84,6 +98,10 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
         raw_item.pop("recognition", None)
         if evidence is not None:
             evidence["images"] = old_images
+            # Historical rounds and persisted image identities are server-owned.
+            evidence.pop("recognitionRounds", None)
+            if old_recognition.get("recognitionRounds"):
+                evidence["recognitionRounds"] = copy.deepcopy(old_recognition["recognitionRounds"])
             if isinstance(old_recognition, dict) and old_recognition.get("imageIds"):
                 evidence["imageIds"] = old_recognition["imageIds"]
             raw_item["recognition"] = evidence
@@ -105,13 +123,27 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
 
         validate_state_write_permission(actor, old_state, state)
         confirmation = None
-        if method != "DELETE" and payload.get("checkDuplicates") is True:
+        if method != "DELETE" and payload.get("checkDuplicates") is True and not review_merge:
             candidate = next(entry for entry in state["intakeBatches"] if entry.get("id") == item["id"])
-            confirmation = confirm_duplicate_identifiers(
-                conn, candidate, item_id if method == "PUT" else "", payload.get("duplicateConfirmation")
-            )
+            try:
+                confirmation = confirm_duplicate_identifiers(
+                    conn, candidate, item_id if method == "PUT" else "", payload.get("duplicateConfirmation")
+                )
+            except IntakeDuplicateConfirmationRequired as exc:
+                if payload.get("reviewVersion") == 2:
+                    exc.details["review"] = preview(
+                        conn,
+                        actor,
+                        {"item": normalized_payload["item"], "excludeId": item_id if method == "PUT" else ""},
+                        images=images,
+                    )
+                raise
         added_images = []
-        if images:
+        if review_merge:
+            candidate = next(entry for entry in state["intakeBatches"] if entry.get("id") == item["id"])
+            metadata, added_images = image_writer.save(candidate["id"], images, old_images, updated_at, by_content=True)
+            append_round(candidate, round_incoming, images, metadata, merge_changes, updated_at)
+        elif images:
             candidate = next(entry for entry in state["intakeBatches"] if entry.get("id") == item["id"])
             metadata, added_images = image_writer.save(candidate["id"], images, old_images, updated_at)
             inputs = (evidence or {}).get("inputImages") or [
@@ -149,7 +181,9 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
                     "intake_batch.recognition_merged",
                     "intake_batch",
                     item["id"],
-                    f"{actor['displayName']} 核对图片后合并预约文字 {item.get('batchNo', '')}",
+                    f"{actor['displayName']} 核对后补充预约图文 {item.get('batchNo', '')}"
+                    if review_merge
+                    else f"{actor['displayName']} 核对图片后合并预约文字 {item.get('batchNo', '')}",
                     [],
                     updated_at,
                     {"updatedAt": existing.get("updatedAt")},

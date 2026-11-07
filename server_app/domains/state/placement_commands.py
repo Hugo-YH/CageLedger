@@ -16,6 +16,7 @@ from server_app.domains.state.audit_diff import build_audit_events, changed_keys
 from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.state.occupancy import occupancy_with_snapshots
 from server_app.domains.state.persistence import assemble_state, read_applications_by_iacuc
+from server_app.repositories.cage_transactions import read_cage_applications, read_cage_context
 from server_app.repositories.entities import (
     delete_placement_task as delete_placement_task_repository,
 )
@@ -43,9 +44,9 @@ def write_placement_task_entity_state(method, item_id, payload, actor, spec, por
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
-        state = json.loads(json.dumps(old_state))
         item = ports.normalize_entity_payload("placementTasks", payload, item_id, method, spec["id_prefix"])
+        old_state = read_cage_context(conn, "placementTasks", item_id, item)
+        state = json.loads(json.dumps(old_state))
         item["updatedAt"] = updated_at
         old_item = next((entry for entry in old_state.get("placementTasks", []) if entry.get("id") == item_id), None)
         removed_occupancy_id = ""
@@ -98,12 +99,16 @@ def write_placement_task_entity_state(method, item_id, payload, actor, spec, por
     return response, status
 
 
-def persist_placement_action(task_id, actor, mutator, ports):
+def persist_placement_action(task_id, actor, mutator, ports, *, context=None):
     started_at = time.perf_counter()
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
+        old_state = (
+            assemble_state(conn) or empty_state()
+            if context is None
+            else read_cage_context(conn, "placementTasks", task_id, context=context)
+        )
         state = json.loads(json.dumps(old_state))
         result = mutator(state)
         task = result[0] if isinstance(result, tuple) else result
@@ -112,7 +117,9 @@ def persist_placement_action(task_id, actor, mutator, ports):
         events = build_audit_events(actor, old_state, state, updated_at)
         upsert_placement_task_repository(conn, task)
         if occupancy:
-            applications_by_iacuc = read_applications_by_iacuc(conn)
+            applications_by_iacuc = (
+                read_applications_by_iacuc(conn) if context is None else read_cage_applications(conn, [occupancy])
+            )
             occupancy = occupancy_with_snapshots(occupancy, state, applications_by_iacuc)
             ports.upsert_occupancy_record(conn, occupancy)
         affected_slots = [slot for slot in state.get("slots", []) if slot.get("id") in affected_slot_ids]

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
-import { aiParseIntakeMessage, intakeDuplicateDetails, saveIntakeBatch } from "./intake";
+import { aiParseIntakeMessage, intakeDuplicateDetails, previewIntakeReview, saveIntakeBatch } from "./intake";
 import { createIntakeDraft } from "../../domain/intake";
 
 describe("intake save API", () => {
@@ -63,6 +63,19 @@ describe("intake save API", () => {
         body: JSON.stringify({ rawMessage: "", roomNames: ["8101"], imageRefs: [{ uploadId: "a".repeat(32) }] }),
       }),
     );
+    await previewIntakeReview(item, "excluded", [image], controller.signal);
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      "/api/intake-batches/recognition-preview",
+      expect.objectContaining({
+        signal: controller.signal,
+        body: JSON.stringify({
+          reviewVersion: 2,
+          item,
+          excludeId: "excluded",
+          recognitionImageRefs: [{ uploadId: "a".repeat(32) }],
+        }),
+      }),
+    );
     await saveIntakeBatch({ item, exists: false, recognitionImages: [image] });
     expect(fetchSpy).toHaveBeenLastCalledWith(
       "/api/intake-batches",
@@ -72,7 +85,7 @@ describe("intake save API", () => {
     );
     await saveIntakeBatch({ item, exists: false, recognitionImages: [image], duplicateConfirmation: "confirmed" });
     expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/intake/recognition-uploads")).toHaveLength(1);
-    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(fetchSpy).toHaveBeenCalledTimes(5);
     for (const [url, init] of fetchSpy.mock.calls) {
       if (url !== "/api/intake/recognition-uploads") expect(String(init?.body)).not.toContain(image.dataUrl);
     }

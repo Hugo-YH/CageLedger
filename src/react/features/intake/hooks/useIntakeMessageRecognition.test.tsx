@@ -312,12 +312,12 @@ it("invalidates an earlier pending result when the operator rejects conflicting 
   expect(onTextRecognized).not.toHaveBeenCalled();
 });
 
-it.each(["local", "ai"])("does not match text when new images accompany %s recognition", async (kind) => {
+it.each(["local", "ai"])("reviews both text and new images after %s recognition", async (kind) => {
   const { result, recognition, onTextRecognized, replaceDraft } = setup();
   vi.mocked(recognition.snapshot).mockReturnValue([{ name: "新图片.png", dataUrl: "data:image/png;base64,eA==" }]);
   await act(() => (kind === "local" ? result.current.parseMessage() : result.current.aiParseMessage()));
   expect(replaceDraft).toHaveBeenCalledOnce();
-  expect(onTextRecognized).not.toHaveBeenCalled();
+  expect(onTextRecognized).toHaveBeenCalledOnce();
 });
 
 it("does not start text matching while newly selected images are still being read", async () => {

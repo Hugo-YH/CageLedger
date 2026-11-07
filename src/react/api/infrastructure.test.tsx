@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { useDeleteRoom, useSaveInfrastructure } from "./administration";
-import { useRooms } from "./infrastructure";
+import { useRooms, useRoomWorkspace } from "./infrastructure";
 import { queryKeys } from "./queryKeys";
 
 const actor = (id: string, roomIds: string[]) => ({
@@ -64,5 +64,36 @@ it.each(["save", "delete"])("invalidates shared and legacy infrastructure caches
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
   expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.infrastructure });
   unmount();
+  client.clear();
+});
+
+it("keeps cage and full workspace responses in separate cancellable queries", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(queryKeys.session, { user: actor("one", ["r1"]) });
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+    Promise.resolve(
+      Response.json({
+        rooms: [],
+        racks: [],
+        slots: [],
+        occupancies: String(input).endsWith("?view=cages") ? [] : [{ id: "historical", status: "ended" }],
+        placementTasks: [],
+      }),
+    ),
+  );
+  function wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  }
+  const hook = renderHook(() => ({ full: useRoomWorkspace("r1"), cages: useRoomWorkspace("r1", "cages") }), {
+    wrapper,
+  });
+  await waitFor(() => expect(hook.result.current.full.isSuccess && hook.result.current.cages.isSuccess).toBe(true));
+  expect(hook.result.current.full.data?.occupancies).toHaveLength(1);
+  expect(hook.result.current.cages.data?.occupancies).toHaveLength(0);
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual(
+    expect.arrayContaining(["/api/infrastructure/rooms/r1", "/api/infrastructure/rooms/r1?view=cages"]),
+  );
+  expect(fetch.mock.calls.every(([, init]) => init?.signal instanceof AbortSignal)).toBe(true);
+  hook.unmount();
   client.clear();
 });

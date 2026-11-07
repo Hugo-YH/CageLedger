@@ -1,339 +1,242 @@
-import type { IntakeBatch, IntakeRecognitionMergePreview } from "../../src/contracts/intake";
-import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry, test } from "./fixtures";
+import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
+import type { IntakeBatch, IntakeReviewPreview } from "../../src/contracts/intake";
+import { ensureTestInfrastructure, expect, openIntakeEntry, test } from "./fixtures";
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAD0lEQVR4nGP4TwAwjAwFAIS1/wF0QtmAAAAAAElFTkSuQmCC";
-
+const bytes = Buffer.from(png, "base64");
 async function setup(page: Page) {
   await page.goto("/app");
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("admin123");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByLabel("用户名", { exact: true })).toBeHidden();
-  const health = await page.request.get("/api/health");
-  expect((await health.json()).database).toContain("cageledger-e2e-");
+  expect((await (await page.request.get("/api/health")).json()).database).toContain("cageledger-e2e-");
   await ensureTestInfrastructure(page);
   await openIntakeEntry(page);
+  await page.route("**/api/intake/standardize-strain", (route) => route.fulfill({ json: { item: "C57BL/6J" } }));
 }
-
-async function original(page: Page, suffix: string, overrides: Partial<IntakeBatch> = {}) {
+async function original(page: Page, image: boolean, overrides: Partial<IntakeBatch> = {}) {
+  const suffix = `${Date.now()}`;
   const item: IntakeBatch = {
+    id: `review-${suffix}`,
+    intakePurpose: "housing",
+    purchaseOrderNo: `C${suffix}`,
+    orderNo: `DC${suffix}01`,
+    batchNo: `(Z2026001)${suffix}`,
+    iacuc: "Z2026001",
+    supplier: "药康",
     species: "mouse",
-    roomMatched: true,
-    receiverName: "原预约接收人",
-    vetPhone: "",
-    project: "",
-    notes: "",
+    strainRaw: "C57BL/6J",
+    strainStandard: "C57BL/6J",
+    specification: "6周龄",
+    sex: "雌性",
+    quantity: 24,
+    finalCardCount: 4,
     suggestedAnimalsPerCage: 6,
     suggestedCardCount: 4,
     confirmedCardCount: 0,
     remainingCardCount: 4,
-    receipts: [],
     cards: [],
-    updatedAt: "",
-    id: `merge-${suffix}`,
-    purchaseOrderNo: `C${suffix}`,
-    batchNo: `(Z2026001)${suffix}`,
-    iacuc: "Z2026001",
-    supplier: "图片供应商",
-    strainRaw: "C57BL/6",
-    strainStandard: "C57BL/6",
-    quantity: 24,
-    sex: "雌性",
-    finalCardCount: 4,
+    receipts: [],
     roomName: "8014",
-    pi: "图片项目负责人",
-    owner: "图片实验负责人",
-    rawMessage: "已保存的图片预约原文",
-    intakeDate: "",
+    roomMatched: true,
+    pi: "合成项目负责人",
+    owner: "合成实验负责人",
+    receiverName: "合成接收人",
+    vetPhone: "",
+    project: "",
+    rawMessage: "原预约合成原文",
+    intakeDate: "2026-11-06",
     husbandryDays: null,
     husbandryMonths: 2,
     endDate: "",
+    notes: "",
     status: "pending_print",
-    recognition: {
-      extractedText: "原图24只雌性，4笼，饲养2个月",
-      warnings: [],
-      fieldSources: { quantity: "原图24只" },
-    },
+    updatedAt: "",
     ...overrides,
   };
   const response = await page.request.post("/api/intake-batches", {
-    data: { item, recognitionImages: [{ name: "原预约.png", dataUrl: `data:image/png;base64,${png}` }] },
+    data: {
+      item,
+      ...(image ? { recognitionImages: [{ name: "原预约.png", dataUrl: `data:image/png;base64,${png}` }] } : {}),
+    },
   });
   expect(response.ok(), await response.text()).toBe(true);
   return (await response.json()).item as IntakeBatch;
 }
-
-function message(item: IntakeBatch) {
-  return `饲养需求批次号：${item.batchNo}\n锐竞采购单号：${item.purchaseOrderNo}\n预约送货日期：2026-11-06\n数量：99\n性别：雄性`;
-}
-
 async function saved(page: Page, id: string) {
   const response = await page.request.get(`/api/intake-batches/${encodeURIComponent(id)}`);
   expect(response.ok(), await response.text()).toBe(true);
   return (await response.json()).item as IntakeBatch;
 }
+function text(item: IntakeBatch) {
+  return `饲养需求批次号：${item.batchNo}\n采购单号：${item.purchaseOrderNo}\n订单编号：${item.orderNo}\n品系：C57BL/6J\n规格：6周龄\n数量：24\n性别：雌性\n供应商：药康\n饲养房间：8014\n预约送货日期：2026-11-06\n饲养周期：2个月`;
+}
+function recognized(item: IntakeBatch, overrides: Partial<IntakeBatch> = {}) {
+  const fields: Partial<IntakeBatch> = { ...item };
+  delete fields.id;
+  delete fields.updatedAt;
+  delete fields.recognition;
+  return { ...fields, ...overrides };
+}
+async function ai(page: Page, item: IntakeBatch, image: boolean, overrides: Partial<IntakeBatch> = {}) {
+  await page.route("**/api/intake/ai-parse", (route) =>
+    route.fulfill({
+      json: {
+        item: recognized(item, overrides),
+        recognition: {
+          extractedText: "合成来源：24只 C57BL/6J 6周龄",
+          warnings: [],
+          fieldSources: {},
+          ...(image
+            ? { inputImages: [{ name: "本次.png", sha256: createHash("sha256").update(bytes).digest("hex") }] }
+            : {}),
+        },
+      },
+    }),
+  );
+  if (image)
+    await page
+      .getByLabel("预约图片文件", { exact: true })
+      .setInputFiles({ name: "本次.png", mimeType: "image/png", buffer: bytes });
+  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+}
+const review = (page: Page) => page.getByRole("dialog", { name: "核对已有预约", exact: true });
 
-for (const recognition of ["本地识别", "AI识别"]) {
-  test(`${recognition} offers a real image-first merge and updates one original with retained image bytes`, async ({
+for (const [incomingImage, originalImage] of [
+  [false, true],
+  [true, true],
+  [true, false],
+  [false, false],
+]) {
+  test(`${incomingImage ? "image" : "text"} to ${originalImage ? "image" : "text"} exact review ends without changing the registered appointment`, async ({
     page,
   }, info) => {
     await setup(page);
-    const item = await original(page, `${Date.now()}`);
-    const imageUrl = item.recognition!.images![0].url;
-    const imageBefore = await (await page.request.get(imageUrl)).body();
-    const text = message(item);
-    if (recognition === "AI识别")
-      await page.route("**/api/intake/ai-parse", (route) =>
-        route.fulfill({
-          json: {
-            item: {
-              batchNo: item.batchNo,
-              purchaseOrderNo: item.purchaseOrderNo,
-              quantity: 99,
-              sex: "雄性",
-              intakeDate: "2026-11-06",
-              supplier: "文字供应商",
-              iacuc: "Z2026001",
-            },
-          },
-        }),
-      );
-    await page.getByLabel("预约消息", { exact: true }).fill(text);
-    await page.getByRole("button", { name: recognition, exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "核对已有图片预约", exact: true });
+    const item = await original(page, originalImage);
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (
+        (request.method() === "POST" && path === "/api/intake-batches") ||
+        (request.method() === "PUT" && /^\/api\/intake-batches\/[^/]+$/.test(path))
+      )
+        writes.push(request.url());
+    });
+    await page.getByLabel("预约消息", { exact: true }).fill(text(item));
+    if (!incomingImage && originalImage) await page.getByRole("button", { name: "本地识别", exact: true }).click();
+    else await ai(page, item, incomingImage);
+    const dialog = review(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("img", { name: "原预约图片：原预约.png", exact: true })).toBeVisible();
-    const dateRow = dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "接收日期", exact: true }) });
-    await expect(dateRow).toContainText("2026-11-06");
-    const quantityRow = dialog
-      .getByRole("row")
-      .filter({ has: page.getByRole("cell", { name: "动物数量", exact: true }) });
-    await expect(quantityRow).toContainText("99");
-    expect((await saved(page, item.id)).updatedAt).toBe(item.updatedAt);
-    await page.screenshot({ path: info.outputPath("recognition-merge-preview.png"), animations: "disabled" });
-    await dialog.getByRole("button", { name: "确认更新原预约", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "已登记，结束本次录入", exact: true })).toBeEnabled();
+    await page.screenshot({ path: info.outputPath("unified-review-initial.png"), animations: "disabled" });
+    await dialog.getByText("原预约原文与图片", { exact: true }).click();
+    await expect(dialog).toContainText("原预约合成原文");
+    if (originalImage)
+      await expect(dialog.getByRole("img", { name: "原预约图片：原预约.png", exact: true })).toBeVisible();
+    await page.screenshot({ path: info.outputPath("unified-reservation-review.png"), animations: "disabled" });
+    if (incomingImage && originalImage) {
+      for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 1180, height: 820 },
+        { width: 760, height: 900 },
+        { width: 844, height: 390 },
+      ]) {
+        await page.setViewportSize(viewport);
+        await expect(dialog).toBeVisible();
+        const geometry = await dialog.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const body = element.querySelector<HTMLElement>(".modal-shell-body")!;
+          return {
+            left: box.left,
+            right: box.right,
+            viewport: innerWidth,
+            bodyOverflow: body.scrollWidth > body.clientWidth + 1,
+            pageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+          };
+        });
+        expect(geometry.left).toBeGreaterThanOrEqual(0);
+        expect(geometry.right).toBeLessThanOrEqual(geometry.viewport + 1);
+        expect(geometry.bodyOverflow).toBe(false);
+        expect(geometry.pageOverflow).toBe(false);
+        await expect(dialog.getByRole("button", { name: "已登记，结束本次录入", exact: true })).toBeInViewport();
+        await page.screenshot({
+          path: info.outputPath(`unified-review-${viewport.width}x${viewport.height}.png`),
+          animations: "disabled",
+        });
+      }
+    }
+    await dialog.getByRole("button", { name: "已登记，结束本次录入", exact: true }).click();
     await expect(dialog).toBeHidden();
-    const updated = await saved(page, item.id);
-    expect(updated).toMatchObject({
-      id: item.id,
-      quantity: 24,
-      sex: "雌性",
-      supplier: "图片供应商",
-      status: "pending_print",
-      intakeDate: "2026-11-06",
-      endDate: "2027-01-06",
-      husbandryDays: 61,
-      husbandryMonths: 2,
-      pi: "图片项目负责人",
-      owner: "图片实验负责人",
-    });
-    expect(updated.recognition!.images).toEqual(item.recognition!.images);
-    expect(updated.rawMessage).toContain(text);
-    expect(await (await page.request.get(imageUrl)).body()).toEqual(imageBefore);
-    const matching = await page.request.post("/api/intake-batches/recognition-preview", {
-      data: { item: { ...item, rawMessage: text } },
-    });
-    expect(((await matching.json()) as IntakeRecognitionMergePreview).total).toBe(1);
-    const audits = await page.request.get("/api/audit-events?limit=100&offset=0");
-    expect(
-      (await audits.json()).items.filter(
-        (event: { entityId: string; action: string }) =>
-          event.entityId === item.id && event.action === "intake_batch.recognition_merged",
-      ),
-    ).toHaveLength(1);
+    await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue("");
+    expect(writes).toEqual([]);
+    expect(await saved(page, item.id)).toEqual(item);
+    if (originalImage) expect(await (await page.request.get(item.recognition!.images![0].url)).body()).toEqual(bytes);
   });
 }
 
-test("association conflicts cannot merge and a stale preview keeps the text until rechecked", async ({ page }) => {
+test("a conflicting animal quantity returns to the same review on save and allows editing the original in place", async ({
+  page,
+}) => {
   await setup(page);
-  const item = await original(page, `${Date.now()}`);
-  await page.getByLabel("预约消息", { exact: true }).fill(message({ ...item, purchaseOrderNo: "C2026119999999" }));
-  await page.getByRole("button", { name: "本地识别", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "核对已有图片预约", exact: true });
+  const item = await original(page, true);
+  const incomingText = text(item).replace("数量：24", "数量：99");
+  await page.getByLabel("预约消息", { exact: true }).fill(incomingText);
+  await ai(page, item, false, { quantity: 99 });
+  const dialog = review(page);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "确认更新原预约", exact: true })).toHaveCount(0);
-  await expect(dialog).toContainText("已对应其他编号");
-  await dialog.getByRole("button", { name: "取消合并，保留草稿", exact: true }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(
-    message({ ...item, purchaseOrderNo: "C2026119999999" }),
-  );
-  await page.getByLabel("预约消息", { exact: true }).fill(message(item));
-  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  await expect(
+    dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "动物数量", exact: true }) }),
+  ).toContainText("99");
+  await expect(dialog.getByRole("button", { name: "确认补充原预约", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "返回修改本次草稿", exact: true }).click();
+  await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(incomingText);
+  await page.getByRole("button", { name: "保存待接收批次", exact: true }).click();
   await expect(dialog).toBeVisible();
-  const concurrent = await page.request.put(`/api/intake-batches/${item.id}`, {
-    data: {
-      item: { ...item, notes: "另一位同事已核对" },
-      expectedUpdatedAt: item.updatedAt,
-    },
-  });
-  expect(concurrent.ok(), await concurrent.text()).toBe(true);
-  await dialog.getByRole("button", { name: "确认更新原预约", exact: true }).click();
-  await expect(dialog).toContainText("已有预约已更新");
-  await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(message(item));
-  await dialog.getByRole("button", { name: "重新匹配", exact: true }).click();
-  await expect(dialog.getByText("已有预约已更新", { exact: false })).toHaveCount(0);
-  await dialog.getByRole("button", { name: "确认更新原预约", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "确认为另一预约，另行保存", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "在当前页面编辑原预约", exact: true }).click();
   await expect(dialog).toBeHidden();
-  expect((await saved(page, item.id)).notes).toBe("另一位同事已核对");
+  await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(item.rawMessage);
+  await expect(page.getByRole("heading", { name: "编辑接收笼卡", exact: true })).toBeVisible();
+  expect((await saved(page, item.id)).updatedAt).toBe(item.updatedAt);
 });
 
-test("standard batch-number spacing matches the saved image original through both identifiers and batch-only lookup", async ({
+test("explicit supplementation rechecks a concurrent version and retains the original images and identity", async ({
   page,
-}, info) => {
+}) => {
   await setup(page);
-  const room = await page.request.post("/api/rooms", {
-    data: {
-      item: {
-        id: "room-e2e-8101-spacing",
-        name: "8101",
-        area: "E2E",
-        roomManager: "E2E 房间管理员",
-        facility: "zhujiang",
-        defaultSpecies: "mouse",
-        defaultBillingItem: "mouse_standard",
-        defaultCustomerType: "internal",
-        defaultAnimalCount: 1,
-      },
-    },
-  });
-  expect(room.ok(), await room.text()).toBe(true);
-  await page.reload();
-  await openIntakeEntry(page);
-  const originalBatchNo = "(Z2025170)  2026102902";
-  const savedBatchNo = "（Z2025170）2026102902";
-  const purchaseOrderNo = "C2026110229486";
-  const item = await original(page, `spacing-${Date.now()}`, {
-    batchNo: originalBatchNo,
-    purchaseOrderNo,
-    iacuc: "Z2025170",
-    roomName: "8101",
-    quantity: 6,
-    finalCardCount: 1,
-    suggestedCardCount: 1,
-    remainingCardCount: 1,
-    recognition: {
-      extractedText: "原图6只，房间8101",
-      warnings: [],
-      fieldSources: { quantity: "原图6只", roomName: "原图8101" },
-    },
-  });
-  expect(item.batchNo).toBe(savedBatchNo);
+  const item = await original(page, true, { intakeDate: "" });
   const image = item.recognition!.images![0];
-  const imageBefore = await (await page.request.get(image.url)).body();
-
-  const batchOnly = await page.request.post("/api/intake-batches/recognition-preview", {
-    data: {
-      item: {
-        batchNo: "(Z2025170)2026102902",
-        intakeDate: "2026-11-11",
-        rawMessage: "饲养需求批次号为(Z2025170) 2026102902\n进驻日期：2026-11-11",
-      },
-    },
+  await page.getByLabel("预约消息", { exact: true }).fill(text(item));
+  await ai(page, item, false, { intakeDate: "2026-11-06" });
+  const dialog = review(page);
+  await expect(dialog.getByRole("button", { name: "确认补充原预约", exact: true })).toBeEnabled();
+  const concurrent = await page.request.put(`/api/intake-batches/${item.id}`, {
+    data: { item: { ...item, notes: "其他同事已核对" }, expectedUpdatedAt: item.updatedAt },
   });
-  expect(batchOnly.ok(), await batchOnly.text()).toBe(true);
-  const batchOnlyPreview = (await batchOnly.json()) as IntakeRecognitionMergePreview;
-  expect(batchOnlyPreview.total).toBe(1);
-  expect(batchOnlyPreview.items[0]).toMatchObject({
-    item: { id: item.id, batchNo: savedBatchNo },
-    matchedFields: ["batchNo"],
-    classification: "batch_only",
-    canMerge: true,
-  });
-
-  const text =
-    "经审核采购申请单号为C2026110229486，饲养需求批次号为(Z2025170) 2026102902\n" +
-    "供应商：广东药康\n品系：C57\n数量：6\n饲养房间：8101\n进驻日期： 2026-11-11";
-  await page.getByLabel("预约消息", { exact: true }).fill(text);
-  const previewResponse = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/intake-batches/recognition-preview" &&
-      response.request().method() === "POST",
-  );
-  await page.getByRole("button", { name: "本地识别", exact: true }).click();
-  const response = await previewResponse;
-  expect(response.ok(), await response.text()).toBe(true);
-  const preview = (await response.json()) as IntakeRecognitionMergePreview;
-  expect(preview.total).toBe(1);
-  expect(preview.items[0]).toMatchObject({ item: { id: item.id }, classification: "same_pair", canMerge: true });
-  expect(preview.items[0].matchedFields).toHaveLength(2);
-  expect(preview.items[0].matchedFields).toEqual(expect.arrayContaining(["purchaseOrderNo", "batchNo"]));
-  const dialog = page.getByRole("dialog", { name: "核对已有图片预约", exact: true });
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("匹配：采购单号、批次号");
-  const confirm = dialog.getByRole("button", { name: "确认更新原预约", exact: true });
-  await expect(confirm).toBeEnabled();
-  expect((await saved(page, item.id)).updatedAt).toBe(item.updatedAt);
-  await page.screenshot({ path: info.outputPath("spacing-merge-preview.png"), animations: "disabled" });
-  await confirm.click();
+  expect(concurrent.ok(), await concurrent.text()).toBe(true);
+  await dialog.getByRole("button", { name: "确认补充原预约", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "重新核对", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "确认补充原预约", exact: true })).toBeDisabled();
+  await dialog.getByRole("button", { name: "重新核对", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "确认补充原预约", exact: true })).toBeEnabled();
+  await dialog.getByRole("button", { name: "确认补充原预约", exact: true }).click();
   await expect(dialog).toBeHidden();
   const updated = await saved(page, item.id);
   expect(updated).toMatchObject({
     id: item.id,
-    batchNo: savedBatchNo,
-    purchaseOrderNo,
-    quantity: 6,
-    roomName: "8101",
-    intakeDate: "2026-11-11",
+    quantity: 24,
+    sex: "雌性",
+    intakeDate: "2026-11-06",
+    notes: "其他同事已核对",
+    cards: item.cards,
   });
-  expect(updated.rawMessage).toContain(item.rawMessage);
-  expect(updated.rawMessage).toContain(text);
   expect(updated.recognition!.images).toEqual(item.recognition!.images);
-  expect(await (await page.request.get(image.url)).body()).toEqual(imageBefore);
-  const matching = await page.request.post("/api/intake-batches/recognition-preview", {
-    data: { item: { batchNo: "(Z2025170)2026102902", purchaseOrderNo, rawMessage: text } },
+  expect(updated.recognition!.recognitionRounds?.length).toBeGreaterThan(0);
+  expect(await (await page.request.get(image.url)).body()).toEqual(bytes);
+  const preview = await page.request.post("/api/intake-batches/recognition-preview", {
+    data: { reviewVersion: 2, item: recognized(updated) },
   });
-  expect(matching.ok(), await matching.text()).toBe(true);
-  const afterPreview = (await matching.json()) as IntakeRecognitionMergePreview;
-  expect(afterPreview.total).toBe(1);
-  expect(afterPreview.items[0].item.id).toBe(item.id);
-});
-
-test("purchase requests and full orders are separately saved, visible and checked during image merge", async ({
-  page,
-}, info) => {
-  await setup(page);
-  const purchase = "C2026080333568";
-  const order = "DC202608033356801";
-  const item = await original(page, `separate-orders-${Date.now()}`, { purchaseOrderNo: order });
-  try {
-    expect(item).toMatchObject({ purchaseOrderNo: purchase, orderNo: order });
-    const image = item.recognition!.images![0];
-    const imageBefore = await (await page.request.get(image.url)).body();
-    const text = message(item);
-    await page.getByLabel("预约消息", { exact: true }).fill(text);
-    await page.getByRole("button", { name: "本地识别", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "核对已有图片预约", exact: true });
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText(purchase);
-    await expect(dialog).toContainText(order);
-    await dialog.getByRole("button", { name: "确认更新原预约", exact: true }).click();
-    await expect(dialog).toBeHidden();
-    const updated = await saved(page, item.id);
-    expect(updated).toMatchObject({ id: item.id, purchaseOrderNo: purchase, orderNo: order, intakeDate: "2026-11-06" });
-    expect(updated.rawMessage).toContain(item.rawMessage);
-    expect(updated.recognition!.images).toEqual(item.recognition!.images);
-    expect(await (await page.request.get(image.url)).body()).toEqual(imageBefore);
-
-    await page.getByLabel("预约消息", { exact: true }).fill(`${text}\n订单编号：${order.slice(0, -2)}07`);
-    await page.getByRole("button", { name: "本地识别", exact: true }).click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("已对应其他编号");
-    await expect(dialog.getByRole("button", { name: "确认更新原预约", exact: true })).toHaveCount(0);
-    await dialog.getByRole("button", { name: "取消合并，保留草稿", exact: true }).click();
-
-    await openNavigationEntry(page, "笼卡管理", "待接收批次");
-    const row = page.getByRole("row").filter({ hasText: item.batchNo });
-    await expect(row).toContainText(purchase);
-    await expect(row).not.toContainText(order);
-    await expect(page.getByRole("columnheader", { name: /订单编号/ })).toHaveCount(0);
-    await row.getByRole("button", { name: "编辑", exact: true }).click();
-    await expect(page.getByLabel("采购单号", { exact: true })).toHaveValue(purchase);
-    await expect(page.getByLabel("订单编号", { exact: true })).toHaveValue(order);
-    await page.screenshot({ path: info.outputPath("separate-purchase-and-order.png"), animations: "disabled" });
-  } finally {
-    const removed = await page.request.delete(`/api/intake-batches/${encodeURIComponent(item.id)}`);
-    expect(removed.ok(), await removed.text()).toBe(true);
-  }
+  expect(((await preview.json()) as IntakeReviewPreview).items[0].item.id).toBe(item.id);
 });

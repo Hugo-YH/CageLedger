@@ -13,7 +13,7 @@ import type {
   PagedResponse,
 } from "./contracts";
 import type { IntakeRecognitionMergePreview } from "../../contracts/intake";
-import type { IntakePrintBatch } from "../../contracts/intake";
+import type { IntakePrintBatch, IntakeReviewPreview } from "../../contracts/intake";
 import { ApiError, requestDownload, requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
@@ -107,6 +107,7 @@ export function saveIntakeBatch({
   duplicateConfirmation,
   recognitionImages,
   recognitionMerge,
+  reviewVersion,
 }: IntakeSaveRequest) {
   return withIntakeImageRefs(recognitionImages, (recognitionImageRefs) =>
     requestJson<IntakeWriteResponse>(
@@ -119,6 +120,7 @@ export function saveIntakeBatch({
           ...(recognitionMerge ? { recognitionMerge } : {}),
           expectedUpdatedAt: exists ? item.updatedAt : "",
           ...(checkDuplicates ? { checkDuplicates: true } : {}),
+          ...(reviewVersion ? { reviewVersion } : {}),
           ...(duplicateConfirmation ? { duplicateConfirmation } : {}),
         }),
       },
@@ -132,6 +134,29 @@ export function previewIntakeRecognitionMerge(item: Partial<IntakeBatch>, exclud
     signal,
     body: JSON.stringify({ item, ...(excludeId ? { excludeId } : {}) }),
   });
+}
+
+export function previewIntakeReview(
+  item: Partial<IntakeBatch>,
+  excludeId?: string,
+  images: IntakeRecognitionImageInput[] = [],
+  signal?: AbortSignal,
+) {
+  return withIntakeImageRefs(
+    images,
+    (recognitionImageRefs) =>
+      requestJson<IntakeReviewPreview>("/api/intake-batches/recognition-preview", {
+        method: "POST",
+        signal,
+        body: JSON.stringify({
+          reviewVersion: 2,
+          item,
+          ...(excludeId ? { excludeId } : {}),
+          ...(recognitionImageRefs.length ? { recognitionImageRefs } : {}),
+        }),
+      }),
+    signal,
+  );
 }
 
 function isIntakeDuplicateDetails(value: unknown): value is IntakeDuplicateDetails {

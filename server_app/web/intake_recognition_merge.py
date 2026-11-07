@@ -4,6 +4,7 @@ from http import HTTPStatus
 
 from server_app.db import connect_db
 from server_app.domains.intake.recognition_merge import recognition_preview
+from server_app.domains.intake.recognition_uploads import UploadExpired
 from server_app.web import JsonResponse
 
 
@@ -17,5 +18,7 @@ def intake_recognition_preview_handler(handler, _params):
             conn.execute("PRAGMA query_only=ON")
             conn.execute("BEGIN")
             return JsonResponse(recognition_preview(conn, actor, body))
+    except UploadExpired as exc:
+        return JsonResponse({"error": str(exc), "code": "INTAKE_UPLOAD_EXPIRED"}, HTTPStatus.GONE)
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, HTTPStatus.BAD_REQUEST)

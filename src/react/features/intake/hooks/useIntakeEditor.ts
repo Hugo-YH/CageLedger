@@ -95,6 +95,14 @@ export function useIntakeEditor({
     setDialogOpen(false);
     editRead.cancel();
   }
+  function editReviewed(item: IntakeBatch) {
+    editRead.cancel();
+    recognition.reset();
+    replaceDraft(normalizeIntakeBatch(item, roomNames));
+    setEditing(true);
+    setNotice("正在编辑原预约；本次保存仍会校验原记录版本。");
+    setDialogOpen(mode === "batches");
+  }
   function prepareSave() {
     if (!requireRooms() || recognition.reading) return null;
     const item = normalizeIntakeBatch(draft, roomNames);
@@ -144,6 +152,7 @@ export function useIntakeEditor({
     update,
     startNew,
     edit,
+    editReviewed,
     close,
     prepareSave,
     completeSavedDraft,

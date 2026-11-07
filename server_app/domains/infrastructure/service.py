@@ -38,12 +38,12 @@ def structure(conn, actor):
     return result
 
 
-def room_workspace(conn, actor, room_id):
+def room_workspace(conn, actor, room_id, *, view=""):
     require_room(actor, room_id)
     room = repo.room(conn, room_id)
     if room is None:
         raise LookupError("饲养间不存在")
-    return {"rooms": [room], **repo.room_workspace(conn, room_id)}
+    return {"rooms": [room], **repo.room_workspace(conn, room_id, current_only=view == "cages")}
 
 
 def rack_slots(conn, actor, rack_id):
