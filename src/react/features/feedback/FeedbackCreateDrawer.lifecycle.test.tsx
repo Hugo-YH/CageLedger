@@ -15,6 +15,7 @@ vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () =>
 
 const api = vi.hoisted(() => ({ create: vi.fn(), upload: vi.fn() }));
 vi.mock("../../api/feedback", () => ({
+  useRefreshFeedback: () => vi.fn().mockResolvedValue(undefined),
   useCreateFeedback: () => ({ isPending: false, mutateAsync: api.create }),
   uploadFeedbackAttachment: api.upload,
 }));

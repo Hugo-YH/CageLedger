@@ -58,6 +58,7 @@ vi.mock("../../api/feedback", () => ({
   useQueueFeedbackSync: () => ({ isPending: false }),
   useSetFeedbackEncounter: () => ({ isPending: false }),
   useAddFeedbackComment: () => ({ isPending: false }),
+  useRefreshFeedback: () => vi.fn().mockResolvedValue(undefined),
   useCreateFeedback: () => ({ isPending: false }),
   uploadFeedbackAttachment: vi.fn(),
 }));

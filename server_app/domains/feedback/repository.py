@@ -56,6 +56,8 @@ def ensure_schema(conn):
         CREATE INDEX IF NOT EXISTS feedback_tasks_ready ON feedback_tasks(state, due_at);
         CREATE INDEX IF NOT EXISTS feedback_tasks_feedback ON feedback_tasks(feedback_id, state);
         CREATE INDEX IF NOT EXISTS feedback_remote ON feedback(repository, issue_number);
+        CREATE INDEX IF NOT EXISTS feedback_attachments_parent ON feedback_attachments(feedback_id, comment_id, visible);
+        CREATE INDEX IF NOT EXISTS feedback_attachments_comment ON feedback_attachments(comment_id, visible);
         CREATE TABLE IF NOT EXISTS feedback_import_requests (
             actor_id TEXT NOT NULL, request_id TEXT NOT NULL, request_hash TEXT NOT NULL,
             results TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
@@ -69,6 +71,10 @@ def ensure_schema(conn):
     }.items():
         if name not in columns:
             conn.execute(f"ALTER TABLE feedback ADD COLUMN {name} {definition}")
+    attachment_columns = {row[1] for row in conn.execute("PRAGMA table_info(feedback_attachments)")}
+    for name in ("cache_sha256", "cache_etag", "cache_identity"):
+        if name not in attachment_columns:
+            conn.execute(f"ALTER TABLE feedback_attachments ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
 
 
 def get(conn, feedback_id):
@@ -189,19 +195,34 @@ def page_metadata(conn, rows, actor_id, configured):
 def queue_stale(conn, age=300):
     from datetime import datetime
 
+    due = []
+    now = time.time()
     for row in conn.execute(
-        "SELECT id,last_synced_at FROM feedback WHERE issue_number IS NOT NULL AND status!='deleted'"
+        """SELECT f.id,f.last_synced_at,t.state FROM feedback f LEFT JOIN feedback_tasks t
+        ON t.kind='refresh' AND t.entity_id=f.id WHERE f.issue_number IS NOT NULL AND f.status!='deleted'"""
     ).fetchall():
         try:
             at = datetime.fromisoformat(row["last_synced_at"]).timestamp()
         except ValueError:
             at = 0
-        if time.time() - at >= age:
-            existing = conn.execute(
-                "SELECT state FROM feedback_tasks WHERE kind='refresh' AND entity_id=?", (row["id"],)
-            ).fetchone()
-            if not existing or existing["state"] in {"done", "blocked"}:
-                enqueue(conn, row["id"], "refresh")
+        if now - at >= age and row["state"] in {None, "done", "blocked"}:
+            due.append((row["id"], row["last_synced_at"]))
+    # sqlite3 does not implicitly BEGIN for a statement starting with WITH.
+    # Keep the original caller-owned all-or-nothing sweep transaction.
+    if due and not conn.in_transaction:
+        conn.execute("BEGIN")
+    for offset in range(0, len(due), 200):
+        batch = due[offset : offset + 200]
+        # Recheck deletion, sync timestamp and task state in the publishing SQL.
+        conn.execute(
+            f"""WITH due(id,last_synced_at) AS (VALUES {",".join("(?,?)" for _ in batch)})
+            INSERT INTO feedback_tasks(feedback_id,kind,entity_id)
+            SELECT f.id,'refresh',f.id FROM due JOIN feedback f ON f.id=due.id AND f.last_synced_at=due.last_synced_at
+            LEFT JOIN feedback_tasks t ON t.kind='refresh' AND t.entity_id=f.id
+            WHERE f.status!='deleted' AND (t.id IS NULL OR t.state IN ('done','blocked'))
+            ON CONFLICT(kind,entity_id) DO UPDATE SET generation=generation+1,state='pending',due_at=0,error=''""",
+            [value for row in batch for value in row],
+        )
 
 
 def list_columns(configured):
@@ -275,9 +296,15 @@ def list_page(conn, user, params, configured):
     if sort not in columns or direction not in {"asc", "desc"}:
         raise ValueError("反馈排序无效")
     expression = "json_extract(f.author,'$.name')" if sort == "author" else columns[sort]
+    projection = "f.*"
+    if params.get("view") == "summary":
+        projection = """f.id,f.number,f.title,f.kind,f.module,f.status,f.author,f.created_at,f.updated_at,
+            f.version,f.source,f.assignees,f.fix_version,f.last_synced_at,f.issue_number,f.issue_url"""
     total = conn.execute("SELECT COUNT(*) FROM feedback f" + clause, args).fetchone()[0]
     rows = conn.execute(
-        "SELECT f.* FROM feedback f" + clause + f" ORDER BY {expression} {direction},f.number DESC LIMIT ? OFFSET ?",
+        f"SELECT {projection} FROM feedback f"
+        + clause
+        + f" ORDER BY {expression} {direction},f.number DESC LIMIT ? OFFSET ?",
         [*args, limit, offset],
     ).fetchall()
     return {"items": rows, "total": total, "limit": limit, "offset": offset}

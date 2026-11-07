@@ -102,6 +102,15 @@ export interface FeedbackDetail {
   diagnostics?: FeedbackDiagnostics | null;
 }
 
+export type FeedbackListItem = Omit<FeedbackItem, "description" | "environment" | "importMetadata">;
+
+export interface FeedbackSummaryResponse {
+  items: FeedbackListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface FeedbackListResponse {
   items: FeedbackItem[];
   total: number;

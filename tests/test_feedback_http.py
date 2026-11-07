@@ -14,13 +14,14 @@ class FeedbackHttpTests(FeedbackFixture, unittest.TestCase):
             user = ACTOR
             status = None
             payload = None
+            headers = {}
 
             def require_user(self):
                 if not self.user:
                     self.send_json({"error": "请登录"}, 401)
                 return self.user
 
-            def send_json(self, payload, status=200):
+            def send_json(self, payload, status=200, extra_headers=None):
                 self.status, self.payload = status, payload
 
             def read_json_body(self):

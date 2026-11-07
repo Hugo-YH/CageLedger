@@ -203,9 +203,17 @@ AI仅产生待核对草稿，不确认登记；逐证逐行保留证号、品系
 | POST       | `/api/feedback/{id}/sync`                                    | 缓存过期后排队检查，`{queued}`               |
 | GET / POST | `/api/feedback/integration` / `/api/feedback/{id}/retry`     | 管理员集成状态 / `{queued}`                  |
 
+反馈列表默认保持完整响应；可选 `view=summary` 使用同一筛选、排序、分页和可见性，仅省略各项的 `description`、`environment`、`importMetadata`。前端摘要与完整列表使用不同 Query 键，不能把摘要填入详情缓存。列表和详情支持基于最终账号响应的弱 ETag；鉴权、逻辑删除、可见性及原详情刷新排队先执行，匹配时返回私有 `no-store` 的 304。客户端的验证器和数据由同一 Query 持有，注销时一并清理，404 不复用旧详情。
+
+创建／补充及其截图串行写链在结束后统一刷新受影响列表、详情、筛选与集成状态，部分附件失败也刷新已落库内容；保留原请求标识、未知结果重放及仅重传失败截图。普通操作不重新读取无关导入预览，导入完成仅协调一次预览刷新。原前台 5／15／30 秒轮询节奏保留，后台页停止轮询。
+
 集成状态返回 `configured`、`repository`、`pending`、`errors`、`lastError`，另含 `workerState`（`running/recovering/blocked/stopped/unconfigured`）和脱敏的 `workerError`。任务失败数和服务健康独立统计；仅管理员可读取。管理员 `retry` 保留任务的不确定标记，唤醒或重新启动串行同步线程，并按现有一分钟缓存规则排队核对已关联的工单。页面在前台每 15 秒刷新集成状态。
 
 Gitea 读取请求遇到短暂连接或响应错误时最多尝试三次；HTTPS 写入仅在连接建立阶段明确失败、尚未发送 API 请求时允许有限重试。连接阶段错误不会标记为发送结果不确定，证书校验不会关闭或降级；发送后的响应超时仍保留不确定标记并核对远端，不自动重复写入。
+
+Gitea 条件读取缓存仅属于单个串行 Client 的仓库／凭据实例，最多 128 项及 8MiB，始终真实请求，只有服务器返回 304 才复用已收到的完整 JSON；服务器未提供验证器时继续完整读取。写入或认证失败清除该缓存，重试从原始 URL、方法、正文和头重建请求，避免代理处理改写下一次的目的地。远端同步按差异更新评论和附件，保留原文、公开性、删除、任务 generation 和审计规则；每次成功刷新仍更新最近同步时间及原只读版本。过期扫描按批排队，沿用调用者事务和整轮回滚。
+
+远端截图每次仍读取父工单／评论和附件元数据，核对当前内部标记及下载地址；本地缓存以仓库、反馈、父资源、远端附件 ID 和 URL 绑定，并完整校验文件 SHA、大小和类型。可靠 ETag 允许条件下载；缺少有效验证器或本地凭据时重新下载。相同完整字节可复用已验证结果，省去重复解码与落盘；损坏／缺失缓存不会发送旧验证器。返回前继续复核可访问性，附件仍为 `no-store`。新增 `feedback_attachments.cache_sha256/cache_etag/cache_identity` 仅保存非凭据缓存证据，旧库空值自动回填，备份恢复时随数据库和既有附件文件一起保留；校验不匹配会退化为重新获取。
 
 历史工单导入：`GET /api/feedback/import/preview?state=all&page=1` 返回 `{repository,items,page,hasMore}`，每页 20 条，可选 `all/open/closed`。`POST /api/feedback/import` 接受 `{requestId,repository,numbers}`，每次 1 至 10 个唯一正整数编号，返回 `{items:[{number,outcome,feedbackId?,message}]}`；结果为 `imported/skipped/failed`。仓库必须与当前预览一致；请求 ID 绑定操作人和导入范围，重放同请求复用逐项结果，失败项通过新请求重试。并发导入按仓库身份和工单编号核对，逻辑删除的关联不重新导入。PR、内部正文和带系统建单标识的工单跳过。
 

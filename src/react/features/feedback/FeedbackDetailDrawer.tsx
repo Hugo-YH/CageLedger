@@ -10,6 +10,7 @@ import {
   useAddFeedbackComment,
   useFeedbackDetail,
   useQueueFeedbackSync,
+  useRefreshFeedback,
   useSetFeedbackEncounter,
 } from "../../api/feedback";
 import { ApiError } from "../../api/client";
@@ -63,7 +64,8 @@ export function FeedbackDetailDrawer({
   const encounter = useSetFeedbackEncounter(item?.id || "");
   const sync = useQueueFeedbackSync(item?.id || "");
   const retry = useQueueFeedbackSync(item?.id || "", true);
-  const comment = useAddFeedbackComment(item?.id || "");
+  const comment = useAddFeedbackComment(item?.id || "", { refresh: false });
+  const refreshFeedback = useRefreshFeedback();
   const [commentBody, setCommentBody] = useState("");
   const [commentFiles, setCommentFiles] = useState<UploadFile[]>([]);
   const [supplementId, setSupplementId] = useState("");
@@ -125,12 +127,15 @@ export function FeedbackDetailDrawer({
         undefined,
         `feedback:${item.id}:comment:${commentId}`,
       );
-      await detail.refetch();
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "追加说明失败，请重试");
     } finally {
-      setUploading(false);
-      submitting.current = false;
+      try {
+        await refreshFeedback(item.id);
+      } finally {
+        setUploading(false);
+        submitting.current = false;
+      }
     }
   }
   async function setEncounter() {

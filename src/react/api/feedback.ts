@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type {
   FeedbackAttachment,
@@ -8,10 +9,10 @@ import type {
   FeedbackImportPreview,
   FeedbackImportResult,
   FeedbackItem,
-  FeedbackListResponse,
+  FeedbackSummaryResponse,
   FeedbackSubmission,
 } from "../../contracts/feedback";
-import { ApiError, requestJson, requestMultipart } from "./client";
+import { ApiError, requestConditionalJson, requestJson, requestMultipart, type ConditionalJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
 export type FeedbackListColumn =
@@ -25,14 +26,15 @@ export type FeedbackFilters = {
 };
 
 export function useFeedbackList(filters: FeedbackFilters) {
-  return useQuery<FeedbackListResponse>({
-    queryKey: queryKeys.feedback(filters),
+  return useQuery<FeedbackSummaryResponse>({
+    queryKey: queryKeys.feedbackSummary(filters),
     placeholderData: (previous) => previous,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     queryFn: ({ signal }) =>
-      requestJson<FeedbackListResponse>(
+      requestJson<FeedbackSummaryResponse>(
         `/api/feedback?${new URLSearchParams({
+          view: "summary",
           columnFilters: JSON.stringify(filters.columnFilters),
           sortKey: filters.sortKey,
           sortDir: filters.sortDir,
@@ -62,9 +64,17 @@ export function useFeedbackFilterOptions(
 }
 
 export function useFeedbackDetail(id: string | null, refresh = false) {
-  return useQuery<FeedbackDetail>({
-    queryKey: queryKeys.feedbackDetail(id || ""),
-    queryFn: ({ signal }) => requestJson<FeedbackDetail>(`/api/feedback/${encodeURIComponent(id || "")}`, { signal }),
+  const client = useQueryClient();
+  const key = queryKeys.feedbackDetail(id || "");
+  return useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) =>
+      requestConditionalJson<FeedbackDetail>(
+        `/api/feedback/${encodeURIComponent(id || "")}`,
+        client.getQueryData<ConditionalJson<FeedbackDetail>>(key),
+        signal,
+      ),
+    select: selectFeedbackDetail,
     enabled: Boolean(id),
     retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 2,
     refetchInterval: (query) =>
@@ -72,6 +82,29 @@ export function useFeedbackDetail(id: string | null, refresh = false) {
     refetchIntervalInBackground: false,
   });
 }
+
+function selectFeedbackDetail(response: ConditionalJson<FeedbackDetail>) {
+  return response.value;
+}
+
+/** Keep unrelated remote import previews out of ordinary feedback writes. */
+function refreshFeedbackQueries(client: QueryClient, id?: string, includeImports = false) {
+  return client.invalidateQueries({
+    queryKey: queryKeys.feedbackRoot,
+    predicate: ({ queryKey }) =>
+      ["list", "filter-options", "integration"].includes(String(queryKey[1])) ||
+      (queryKey[1] === "detail" && (!id || queryKey[2] === id)) ||
+      (includeImports && queryKey[1] === "import"),
+  });
+}
+
+/** A create/comment and its attachment uploads publish one final refresh. */
+export function useRefreshFeedback() {
+  const client = useQueryClient();
+  return useCallback((id?: string) => refreshFeedbackQueries(client, id), [client]);
+}
+
+type FeedbackWriteOptions = { refresh?: boolean };
 
 export function useFeedbackIntegration(enabled: boolean) {
   return useQuery<FeedbackIntegration>({
@@ -100,20 +133,20 @@ export function useImportFeedback() {
   return useMutation({
     mutationFn: (body: { requestId: string; repository: string; numbers: number[] }) =>
       requestJson<FeedbackImportResult>("/api/feedback/import", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.feedbackRoot }),
+    onSuccess: () => refreshFeedbackQueries(client, undefined, true),
   });
 }
 
-export function useCreateFeedback() {
+export function useCreateFeedback(options: FeedbackWriteOptions = {}) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: FeedbackSubmission) =>
       requestJson<{ item: FeedbackItem }>("/api/feedback", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.feedbackRoot }),
+    onSuccess: ({ item }) => (options.refresh === false ? undefined : refreshFeedbackQueries(client, item.id)),
   });
 }
 
-export function useAddFeedbackComment(id: string) {
+export function useAddFeedbackComment(id: string, options: FeedbackWriteOptions = {}) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: { requestId: string; body: string }) =>
@@ -122,7 +155,7 @@ export function useAddFeedbackComment(id: string) {
         body: JSON.stringify(body),
       }),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: queryKeys.feedbackRoot });
+      if (options.refresh !== false) void refreshFeedbackQueries(client, id);
     },
   });
 }
@@ -136,7 +169,7 @@ export function useSetFeedbackEncounter(id: string) {
         body: JSON.stringify({ encountered }),
       }),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: queryKeys.feedbackRoot });
+      void refreshFeedbackQueries(client, id);
     },
   });
 }
@@ -150,7 +183,7 @@ export function useQueueFeedbackSync(id: string, retry = false) {
         body: "{}",
       }),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: queryKeys.feedbackRoot });
+      void refreshFeedbackQueries(client, id);
     },
   });
 }

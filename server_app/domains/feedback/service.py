@@ -56,7 +56,7 @@ def audit(conn, user, action, feedback_id, before=None, after=None):
     )
 
 
-def present(conn, row, user, metadata=None):
+def present(conn, row, user, metadata=None, *, summary=False):
     require_active(row)
     if metadata is None:
         state, error = repo.sync_state(conn, row["id"], bool(CAGELEDGER_GITEA_TOKEN))
@@ -72,16 +72,24 @@ def present(conn, row, user, metadata=None):
         "title": row["title"],
         "kind": row["kind"],
         "module": row["module"],
-        "description": row["description"],
         "status": row["status"],
         "syncStatus": state,
         "createdBy": json.loads(row["author"]),
-        "environment": {key: value for key, value in json.loads(row["environment"]).items() if key != "diagnostics"},
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
         "version": row["version"],
         "source": row["source"],
-        "importMetadata": json.loads(row["import_metadata"]),
+        **(
+            {}
+            if summary
+            else {
+                "description": row["description"],
+                "environment": {
+                    key: value for key, value in json.loads(row["environment"]).items() if key != "diagnostics"
+                },
+                "importMetadata": json.loads(row["import_metadata"]),
+            }
+        ),
         "encounterCount": counts["total"],
         "encountered": bool(counts["encountered"]),
         "assignees": json.loads(row["assignees"]),
@@ -96,7 +104,13 @@ def present(conn, row, user, metadata=None):
 def list_page(conn, user, params):
     page = repo.list_page(conn, user, params, bool(CAGELEDGER_GITEA_TOKEN))
     metadata = repo.page_metadata(conn, page["items"], user["id"], bool(CAGELEDGER_GITEA_TOKEN))
-    return {**page, "items": [present(conn, row, user, metadata[row["id"]]) for row in page["items"]]}
+    return {
+        **page,
+        "items": [
+            present(conn, row, user, metadata[row["id"]], summary=params.get("view") == "summary")
+            for row in page["items"]
+        ],
+    }
 
 
 def filter_options(conn, user, params):
@@ -113,10 +127,11 @@ def attachment(row):
     }
 
 
-def comment(conn, row):
-    attachments = conn.execute(
-        "SELECT * FROM feedback_attachments WHERE comment_id=? AND visible=1", (row["id"],)
-    ).fetchall()
+def comment(conn, row, attachments=None):
+    if attachments is None:
+        attachments = conn.execute(
+            "SELECT * FROM feedback_attachments WHERE comment_id=? AND visible=1 ORDER BY rowid", (row["id"],)
+        ).fetchall()
     return {
         "id": row["id"],
         "body": row["remote_body"] if row["remote_body"] is not None else row["body"],
@@ -135,13 +150,16 @@ def detail(conn, user, feedback_id):
         "SELECT * FROM feedback_comments WHERE feedback_id=? AND visible=1 ORDER BY created_at,id", (feedback_id,)
     ).fetchall()
     attachments = conn.execute(
-        "SELECT * FROM feedback_attachments WHERE feedback_id=? AND comment_id IS NULL AND visible=1", (feedback_id,)
+        "SELECT * FROM feedback_attachments WHERE feedback_id=? AND visible=1 ORDER BY rowid", (feedback_id,)
     ).fetchall()
+    by_comment = {}
+    for item in attachments:
+        by_comment.setdefault(item["comment_id"], []).append(item)
     queue_refresh(conn, feedback_id)
     return {
         "item": present(conn, row, user),
-        "comments": [comment(conn, item) for item in comments],
-        "attachments": [attachment(item) for item in attachments],
+        "comments": [comment(conn, item, by_comment.get(item["id"], [])) for item in comments],
+        "attachments": [attachment(item) for item in by_comment.get(None, [])],
         "diagnostics": json.loads(row["environment"]).get("diagnostics"),
     }
 

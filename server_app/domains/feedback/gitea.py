@@ -2,8 +2,10 @@
 
 import errno
 import json
+import re
 import socket
 import ssl
+from collections import OrderedDict
 from http.client import HTTPSConnection
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
@@ -11,6 +13,14 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 from uuid import uuid4
 
 from server_app.domains.administration.system import parse_gitea_repository_url
+
+
+def safe_etag(value):
+    return (
+        value
+        if isinstance(value, str) and len(value) <= 512 and re.fullmatch(r'(?:W/)?"[\x21\x23-\x7e]*"', value)
+        else ""
+    )
 
 
 class RemoteError(Exception):
@@ -69,13 +79,33 @@ class Client:
         self.token = token
         self.auth_blocked = False
         self.opener = build_opener(NoRedirect(), TrackedHTTPSHandler())
+        self._reads = OrderedDict()
+        self._read_bytes = 0
+        self._response_etag = ""
+
+    def remember(self, path, payload):
+        prior = self._reads.pop(path, None)
+        if prior:
+            self._read_bytes -= len(prior[0])
+        if self._response_etag:
+            self._reads[path] = (payload, self._response_etag)
+            self._read_bytes += len(payload)
+        while len(self._reads) > 128 or self._read_bytes > 8 * 1024 * 1024:
+            _, entry = self._reads.popitem(last=False)
+            self._read_bytes -= len(entry[0])
 
     def read_response(self, request, limit):
         # GETs are safe to repeat. A write is repeated only when connection setup
         # failed before sending its headers/body; response timeouts remain uncertain.
+        self._response_etag = ""
+        # urllib's ProxyHandler mutates Request host/scheme while opening it.
+        # Each bounded retry must begin from the original destination/headers.
+        original = (request.full_url, request.data, dict(request.header_items()), request.get_method())
         for attempt in range(3):
             try:
-                with self.opener.open(request, timeout=10) as response:
+                current = Request(original[0], data=original[1], headers=original[2], method=original[3])
+                with self.opener.open(current, timeout=10) as response:
+                    self._response_etag = safe_etag(getattr(response, "headers", {}).get("ETag", ""))
                     return response.read(limit + 1)
             except HTTPError:
                 raise
@@ -90,6 +120,13 @@ class Client:
 
     def request(self, method, path, body=None, *, raw=None, content_type="application/json", binary=False):
         headers = {"Accept": "application/json", "Authorization": "token " + self.token}
+        cached = self._reads.get(path) if method == "GET" and body is None and raw is None and not binary else None
+        if cached:
+            headers["If-None-Match"] = cached[1]
+            self._reads.move_to_end(path)
+        if method != "GET":
+            self._reads.clear()
+            self._read_bytes = 0
         data = raw if raw is not None else json.dumps(body).encode() if body is not None else None
         if data is not None:
             headers["Content-Type"] = content_type
@@ -99,10 +136,19 @@ class Client:
             payload = self.read_response(request, limit)
             if len(payload) > limit:
                 raise RemoteError("Gitea 响应过大，请管理员检查", permanent=True)
-            return payload if binary else json.loads(payload or b"{}")
+            value = payload if binary else json.loads(payload or b"{}")
+            if method == "GET" and body is None and raw is None and not binary:
+                self.remember(path, payload)
+            return value
         except HTTPError as exc:
             exc.close()
+            if exc.code == 304:
+                if cached:
+                    return json.loads(cached[0] or b"{}")
+                raise RemoteError("Gitea 返回无对应缓存的未变化响应，请重试", permanent=True) from None
             if exc.code in (401, 403):
+                self._reads.clear()
+                self._read_bytes = 0
                 self.auth_blocked = True
                 raise RemoteError(
                     "Gitea 凭据或工单权限不足；需 read:repository、write:issue 及仓库访问权限", permanent=True
@@ -149,6 +195,9 @@ class Client:
         )
 
     def download_asset(self, value):
+        return self.download_asset_version(value)[0]
+
+    def download_asset_version(self, value, *, validator="", cached=None):
         # Attachment metadata is untrusted. Only same-origin /attachments/ UUID URLs are allowed.
         url = urlparse(value)
         base = urlparse(self.base)
@@ -164,13 +213,19 @@ class Client:
         if not suffix or "/" in suffix or ".." in suffix:
             raise RemoteError("远端附件地址不受信任", permanent=True)
         try:
-            request = Request(value, headers={"Authorization": "token " + self.token})
+            validator = safe_etag(validator) if cached is not None else ""
+            headers = {"Authorization": "token " + self.token}
+            if validator:
+                headers["If-None-Match"] = validator
+            request = Request(value, headers=headers)
             content = self.read_response(request, 10 * 1024 * 1024)
             if len(content) > 10 * 1024 * 1024:
                 raise RemoteError("远端截图超过 10MiB", permanent=True)
-            return content
+            return content, self._response_etag
         except HTTPError as exc:
             exc.close()
+            if exc.code == 304 and validator:
+                return cached, validator
             raise RemoteError("远端截图下载失败，请稍后重试") from None
         except (URLError, TimeoutError, OSError):
             raise RemoteError("远端截图下载失败，请稍后重试") from None

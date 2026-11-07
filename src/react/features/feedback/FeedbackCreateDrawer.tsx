@@ -4,7 +4,7 @@ import type { UploadFile } from "antd/es/upload/interface";
 import { useRef, useState } from "react";
 
 import type { FeedbackKind, FeedbackSubmission } from "../../../contracts/feedback";
-import { uploadFeedbackAttachment, useCreateFeedback } from "../../api/feedback";
+import { uploadFeedbackAttachment, useCreateFeedback, useRefreshFeedback } from "../../api/feedback";
 import { ApiError } from "../../api/client";
 import { Drawer } from "../../components/ui/Drawer";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
@@ -31,7 +31,8 @@ export function FeedbackCreateDrawer({
 }) {
   const feedback = useOperationFeedback();
   const [form] = Form.useForm<Draft>();
-  const create = useCreateFeedback();
+  const create = useCreateFeedback({ refresh: false });
+  const refreshFeedback = useRefreshFeedback();
   const requestId = useRef(crypto.randomUUID());
   const attachmentRequestIds = useRef(new Map<string, string>());
   const saving = useRef(false);
@@ -53,6 +54,9 @@ export function FeedbackCreateDrawer({
     const isCurrent = request.begin();
     setBusy(true);
     setUploadError("");
+    let writtenId = createdId;
+    let writeStarted = false;
+    let complete = false;
     try {
       const values = submission.current ? null : await form.validateFields();
       // Validation may finish after navigation or a parent closes the drawer.
@@ -67,7 +71,9 @@ export function FeedbackCreateDrawer({
         };
         setSubmissionLocked(true);
       }
+      writeStarted = true;
       const item = createdId ? { id: createdId } : (await create.mutateAsync(submission.current!)).item;
+      writtenId = item.id;
       if (!createdId && isCurrent()) setCreatedId(item.id);
       // Complete attachments for a write already initiated, even if navigation
       // has retired its UI. A stale completion must not open another drawer.
@@ -98,7 +104,7 @@ export function FeedbackCreateDrawer({
         return;
       }
       feedback.success(createdId ? "反馈截图已补传" : "反馈已提交", undefined, `feedback:${item.id}:submission`);
-      onCreated(item.id);
+      complete = true;
     } catch (error) {
       if (!isCurrent()) return;
       if (
@@ -115,9 +121,14 @@ export function FeedbackCreateDrawer({
       }
       setUploadError(error instanceof Error ? error.message : "提交失败，请重试");
     } finally {
-      setBusy(false);
-      saving.current = false;
+      try {
+        if (writeStarted) await refreshFeedback(writtenId || undefined);
+      } finally {
+        setBusy(false);
+        saving.current = false;
+      }
     }
+    if (complete && isCurrent()) onCreated(writtenId);
   }
   return (
     <Drawer

@@ -1,5 +1,7 @@
 """Feedback HTTP boundary: every endpoint is authenticated; administration is role checked."""
 
+import hashlib
+import json
 import logging
 import sqlite3
 from pathlib import Path
@@ -7,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 from server_app.config import CAGELEDGER_GITEA_TOKEN, CAGELEDGER_REPOSITORY_URL, FEEDBACK_FILES_PATH
 from server_app.db import connect_db
-from server_app.domains.feedback import files, importer, repository, service
+from server_app.domains.feedback import attachment_cache, files, importer, repository, service
 from server_app.domains.feedback.gitea import Client, RemoteError
 from server_app.runtime_logging import emit_event
 from server_app.web.multipart import parse_multipart_upload
@@ -28,7 +30,10 @@ def handle(handler, method, path):
             return True
         with connect_db() as conn:
             payload = dispatch(handler, conn, user, method, parts, params)
-        handler.send_json(payload)
+        if method == "GET" and (not parts or (len(parts) == 1 and parts[0] not in {"integration", "filter-options"})):
+            send_read(handler, payload)
+        else:
+            handler.send_json(payload)
     except LookupError as exc:
         handler.send_json({"error": str(exc)}, 404)
     except PermissionError as exc:
@@ -44,6 +49,21 @@ def handle(handler, method, path):
         emit_event("file_operation_failed", level=logging.ERROR, error=exc, component="feedback", rate_limit=True)
         handler.send_json({"error": "截图文件处理失败，请稍后重试"}, 500)
     return True
+
+
+def send_read(handler, payload):
+    # Hash the actual actor-specific response, after authorization, visibility
+    # checks and the original refresh-queue side effect have all run.
+    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+    etag = f'W/"{hashlib.sha256(encoded).hexdigest()}"'
+    matches = handler.headers.get("If-None-Match", "").split(",")
+    if any(value.strip() == "*" or value.strip().removeprefix("W/") == etag.removeprefix("W/") for value in matches):
+        handler.send_response(304)
+        handler.send_header("ETag", etag)
+        handler.send_header("Cache-Control", "no-store")
+        handler.end_headers()
+    else:
+        handler.send_json(payload, extra_headers={"ETag": etag})
 
 
 def dispatch(handler, conn, user, method, parts, params):
@@ -110,16 +130,16 @@ def download(handler, attachment_id):
                     )
             raise LookupError("附件已隐藏")
         metadata = client.request("GET", f"{parent_path}/assets/{item['remote_id']}")
-        content = client.download_asset(metadata.get("browser_download_url", ""))
-        mime, suffix = files.validate(content)
-        storage = attachment_id + suffix
-        files.store(FEEDBACK_FILES_PATH, storage, content)
+        content, cached = attachment_cache.load(client, FEEDBACK_FILES_PATH, item, parent_path, metadata)
+        mime = cached["mime"]
         with connect_db() as conn:
-            files.accessible(conn, attachment_id)
-            conn.execute(
-                "UPDATE feedback_attachments SET storage_name=?,mime=?,size=? WHERE id=?",
-                (storage, mime, len(content), attachment_id),
-            )
+            current = files.accessible(conn, attachment_id)
+            if any(current.get(key) != value for key, value in cached.items()):
+                conn.execute(
+                    """UPDATE feedback_attachments SET storage_name=?,mime=?,size=?,cache_sha256=?,cache_etag=?,cache_identity=?
+                    WHERE id=?""",
+                    [*cached.values(), attachment_id],
+                )
     else:
         content = (Path(FEEDBACK_FILES_PATH) / item["storage_name"]).read_bytes()
         mime = item["mime"]

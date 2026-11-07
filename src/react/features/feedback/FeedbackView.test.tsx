@@ -36,6 +36,7 @@ Object.defineProperty(globalThis, "ResizeObserver", { writable: true, value: Res
 
 vi.mock("../../api/feedback", () => ({
   uploadFeedbackAttachment: api.upload,
+  useRefreshFeedback: () => vi.fn().mockResolvedValue(undefined),
   useCreateFeedback: () => ({ isPending: false, mutateAsync: api.create }),
   useAddFeedbackComment: (id: string) => ({ isPending: false, mutateAsync: (body: unknown) => api.comment(id, body) }),
   useFeedbackDetail: () => ({ data: undefined, isPending: false, isError: false, refetch: vi.fn() }),

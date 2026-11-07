@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import type {
   FeedbackIntegration,
-  FeedbackItem,
+  FeedbackListItem,
   FeedbackKind,
   FeedbackStatus,
   FeedbackSyncStatus,
@@ -51,7 +51,7 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
   );
   const activeFilters = Object.values(columnFilters).filter((values) => values?.length).length;
   const list = useFeedbackList(filters);
-  const retained = useRetainedListData(list, queryKeys.feedback(filters), "feedback");
+  const retained = useRetainedListData(list, queryKeys.feedbackSummary(filters), "feedback");
   const integration = useFeedbackIntegration(user.role === "admin");
   const total = retained.data?.total || 0;
   const shownSize = retained.data?.limit || pageSize;
@@ -93,7 +93,7 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
     );
   }
 
-  const columns: ColumnsType<FeedbackItem> = [
+  const columns: ColumnsType<FeedbackListItem> = [
     { title: columnTitle("number", "编号"), dataIndex: "number", width: 88, render: (number) => `#${number}` },
     {
       title: columnTitle("title", "反馈内容"),
@@ -131,7 +131,7 @@ export function FeedbackView({ user, page }: { user: SessionUser; page: string }
       title: columnTitle("author", "提出人"),
       dataIndex: "createdBy",
       width: 120,
-      render: (value: FeedbackItem["createdBy"]) => value.name,
+      render: (value: FeedbackListItem["createdBy"]) => value.name,
     },
     {
       title: columnTitle("syncStatus", "同步"),

@@ -260,23 +260,41 @@ def project_remote(conn, feedback, remote):
         "UPDATE feedback SET status=?,assignees=?,fix_version=?,last_synced_at=?,version=version+1 WHERE id=?",
         (status(issue), repo.encode(assigned), milestone.get("title", ""), now_iso(), feedback["id"]),
     )
+    comments = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT * FROM feedback_comments WHERE feedback_id=? AND remote_id IS NOT NULL", (feedback["id"],)
+        )
+    ]
+    by_remote = {row["remote_id"]: row for row in comments}
+    assets = {}
+    for row in conn.execute("SELECT * FROM feedback_attachments WHERE feedback_id=? ORDER BY rowid", (feedback["id"],)):
+        assets.setdefault(row["comment_id"], []).append(dict(row))
     if feedback.get("source") == "gitea":
-        project_assets(conn, feedback["id"], None, remote.get("assets", []))
-    conn.execute(
-        "UPDATE feedback_comments SET visible=0 WHERE feedback_id=? AND remote_id IS NOT NULL", (feedback["id"],)
-    )
+        project_assets(conn, feedback["id"], None, remote.get("assets", []), rows=assets.setdefault(None, []))
+    seen = set()
     for item in remote["comments"]:
-        row = conn.execute(
-            "SELECT id FROM feedback_comments WHERE feedback_id=? AND remote_id=?", (feedback["id"], item["id"])
-        ).fetchone()
+        row = (
+            by_remote.get(item["id"])
+            if type(item["id"]) is int
+            else conn.execute(
+                "SELECT * FROM feedback_comments WHERE feedback_id=? AND remote_id=?", (feedback["id"], item["id"])
+            ).fetchone()
+        )
         comment_id = row["id"] if row else str(uuid4())
+        seen.add(comment_id)
         body = without_markers(item.get("body", ""))
         user = item.get("user") or {}
         if row:
-            conn.execute(
-                "UPDATE feedback_comments SET remote_body=?,updated_at=?,visible=1 WHERE id=?",
-                (body, item.get("updated_at", ""), comment_id),
-            )
+            row = dict(row)
+            by_remote[item["id"]] = row
+            current = row["remote_body"] if row["remote_body"] is not None else row["body"]
+            if current != body or row["updated_at"] != item.get("updated_at", "") or not row["visible"]:
+                conn.execute(
+                    "UPDATE feedback_comments SET remote_body=?,updated_at=?,visible=1 WHERE id=?",
+                    (body, item.get("updated_at", ""), comment_id),
+                )
+                row.update(remote_body=body, updated_at=item.get("updated_at", ""), visible=1)
         else:
             conn.execute(
                 """INSERT INTO feedback_comments(id,feedback_id,body,author,source,created_at,updated_at,remote_id)
@@ -291,14 +309,32 @@ def project_remote(conn, feedback, remote):
                     item["id"],
                 ),
             )
-        project_assets(conn, feedback["id"], comment_id, item.get("assets", []))
+            by_remote[item["id"]] = {
+                "id": comment_id,
+                "remote_body": None,
+                "body": body,
+                "visible": 1,
+                "updated_at": item.get("updated_at", ""),
+            }
+        project_assets(conn, feedback["id"], comment_id, item.get("assets", []), rows=assets.setdefault(comment_id, []))
+    hidden = [(row["id"],) for row in comments if row["id"] not in seen and row["visible"]]
+    if hidden:
+        conn.executemany("UPDATE feedback_comments SET visible=0 WHERE id=?", hidden)
 
 
-def project_assets(conn, feedback_id, comment_id, assets):
-    conn.execute(
-        "UPDATE feedback_attachments SET visible=0 WHERE feedback_id=? AND comment_id IS ? AND source='gitea'",
-        (feedback_id, comment_id),
-    )
+def project_assets(conn, feedback_id, comment_id, assets, *, rows=None):
+    if rows is None:
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM feedback_attachments WHERE feedback_id=? AND comment_id IS ? ORDER BY rowid",
+                (feedback_id, comment_id),
+            )
+        ]
+    by_remote = {}
+    for row in rows:
+        by_remote.setdefault(row["remote_id"], row)
+    seen = set()
     for asset in assets:
         size, name = asset.get("size", 0), asset.get("name", "")
         if (
@@ -307,12 +343,20 @@ def project_assets(conn, feedback_id, comment_id, assets):
             or Path(name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}
         ):
             continue
-        attachment = conn.execute(
-            "SELECT id FROM feedback_attachments WHERE feedback_id=? AND comment_id IS ? AND remote_id=?",
-            (feedback_id, comment_id, asset["id"]),
-        ).fetchone()
+        attachment = (
+            by_remote.get(asset["id"])
+            if type(asset["id"]) is int
+            else conn.execute(
+                "SELECT * FROM feedback_attachments WHERE feedback_id=? AND comment_id IS ? AND remote_id=? ORDER BY rowid",
+                (feedback_id, comment_id, asset["id"]),
+            ).fetchone()
+        )
         if attachment:
-            conn.execute("UPDATE feedback_attachments SET visible=1 WHERE id=?", (attachment["id"],))
+            seen.add(attachment["id"])
+            if not attachment["visible"]:
+                conn.execute("UPDATE feedback_attachments SET visible=1 WHERE id=?", (attachment["id"],))
+                if isinstance(attachment, dict):
+                    attachment["visible"] = 1
         else:
             attachment_id = str(uuid4())
             conn.execute(
@@ -332,3 +376,14 @@ def project_assets(conn, feedback_id, comment_id, assets):
                     now_iso(),
                 ),
             )
+            seen.add(attachment_id)
+            entry = {"id": attachment_id, "visible": 1, "remote_id": asset["id"], "source": "gitea"}
+            rows.append(entry)
+            by_remote[asset["id"]] = entry
+    hidden = [(row["id"],) for row in rows if row["source"] == "gitea" and row["visible"] and row["id"] not in seen]
+    if hidden:
+        conn.executemany("UPDATE feedback_attachments SET visible=0 WHERE id=?", hidden)
+        hidden_ids = {identity for (identity,) in hidden}
+        for row in rows:
+            if row["id"] in hidden_ids:
+                row["visible"] = 0

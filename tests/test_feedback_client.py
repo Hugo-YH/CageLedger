@@ -19,6 +19,66 @@ class ClientTests(unittest.TestCase):
         response.read.return_value = body
         return response
 
+    def test_conditional_reads_still_contact_remote_and_return_independent_objects(self):
+        client = Client(REPOSITORY, "mock-token")
+        first = self.response(b'{"body":"original"}')
+        first.headers = {"ETag": 'W/"one"'}
+        with patch.object(
+            client.opener, "open", side_effect=[first, HTTPError(REPOSITORY, 304, "unchanged", {}, None)]
+        ) as opened:
+            result = client.request("GET", "/issues/1")
+            result["body"] = "local mutation"
+            self.assertEqual(client.request("GET", "/issues/1"), {"body": "original"})
+            self.assertEqual(opened.call_count, 2)
+            self.assertEqual(opened.call_args.args[0].get_header("If-none-match"), 'W/"one"')
+        with patch.object(client.opener, "open", return_value=self.response()):
+            client.request("POST", "/issues", {})
+        self.assertFalse(client._reads)
+        with patch.object(client.opener, "open", side_effect=HTTPError(REPOSITORY, 304, "unexpected", {}, None)):
+            with self.assertRaises(RemoteError):
+                client.request("GET", "/issues/1")
+
+    def test_conditional_read_cache_is_bounded_and_auth_failure_discards_it(self):
+        client = Client(REPOSITORY, "mock-token")
+        response = self.response(b'{"value":1}')
+        response.headers = {"ETag": '"one"'}
+        with patch.object(client.opener, "open", return_value=response):
+            for number in range(130):
+                client.request("GET", f"/issues/{number}")
+        self.assertEqual(len(client._reads), 128)
+        self.assertNotIn("/issues/0", client._reads)
+        large = self.response(b'{"body":"' + b"x" * (3 * 1024 * 1024) + b'"}')
+        large.headers = {"ETag": '"large"'}
+        with patch.object(client.opener, "open", return_value=large):
+            for number in range(4):
+                client.request("GET", f"/large/{number}")
+        self.assertLessEqual(client._read_bytes, 8 * 1024 * 1024)
+        self.assertEqual(len(client._reads), 2)
+        with patch.object(client.opener, "open", side_effect=HTTPError(REPOSITORY, 403, "denied", {}, None)):
+            with self.assertRaises(RemoteError):
+                client.request("GET", "/large/3")
+        self.assertFalse(client._reads)
+        self.assertEqual(client._read_bytes, 0)
+        self.assertTrue(client.auth_blocked)
+
+    def test_conditional_asset_needs_verified_bytes_and_preserves_url_boundary(self):
+        client = Client(REPOSITORY, "mock-token")
+        url = client.base + "/attachments/id"
+        with patch.object(client.opener, "open", side_effect=HTTPError(url, 304, "unchanged", {}, None)) as opened:
+            self.assertEqual(
+                client.download_asset_version(url, validator='"one"', cached=b"image"), (b"image", '"one"')
+            )
+            self.assertEqual(opened.call_args.args[0].get_header("If-none-match"), '"one"')
+            with self.assertRaises(RemoteError):
+                client.download_asset_version(url, validator='"one"', cached=None)
+            self.assertIsNone(opened.call_args.args[0].get_header("If-none-match"))
+        with patch.object(client.opener, "open") as opened:
+            with self.assertRaises(RemoteError):
+                client.download_asset_version(
+                    "https://other.invalid/attachments/id", validator='"one"', cached=b"image"
+                )
+            opened.assert_not_called()
+
     def test_get_retries_transient_connection_and_response_timeouts(self):
         client = Client(REPOSITORY, "mock-token")
         for reason in (TimeoutError("read timed out"), ConnectionResetError("reset")):
@@ -30,6 +90,21 @@ class ClientTests(unittest.TestCase):
             ):
                 self.assertEqual(client.request("GET", "/issues/1"), {"number": 1})
                 self.assertEqual(opened.call_count, 2)
+
+    def test_retries_keep_original_destination_when_proxy_handler_mutates_request(self):
+        client = Client("https://example.test/hugo/cageledger", "mock-token")
+        seen = []
+
+        def opened(request, timeout):
+            seen.append((request.type, request.host, request._tunnel_host, request.get_header("Authorization")))
+            request.set_proxy("proxy.invalid:8080", "http")
+            if len(seen) < 3:
+                raise URLError(ConnectionSetupError(TimeoutError()))
+            return self.response(b'{"number":1}')
+
+        with patch.object(client.opener, "open", side_effect=opened):
+            self.assertEqual(client.request("POST", "/issues", {"title": "test"}), {"number": 1})
+        self.assertEqual(seen, [("https", "example.test", None, "token mock-token")] * 3)
 
     def test_get_retries_are_bounded_and_do_not_leak_transport_details(self):
         client = Client(REPOSITORY, "mock-token")

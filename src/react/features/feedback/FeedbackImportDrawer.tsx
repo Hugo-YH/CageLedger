@@ -90,7 +90,6 @@ export function FeedbackImportDrawer({ onClose }: { onClose: () => void }) {
       else feedback.success("历史工单导入已完成", summary);
       setNumbers(response.items.filter((item) => item.outcome === "failed").map((item) => item.number));
       setRequest(null);
-      void preview.refetch();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "导入失败，请重试");
     } finally {
