@@ -21,7 +21,7 @@ from server_app.domains.quantity.facade import (
     get_quantity_sheet,
     list_quantity_sheets_by_month_pi,
 )
-from server_app.domains.state.persistence import read_applications_by_iacuc
+from server_app.domains.quantity.validation_context import QuantityValidationContext
 from server_app.repositories.billing import (
     delete_quantity_sheet_by_id as delete_quantity_sheet_by_id_repository,
 )
@@ -39,6 +39,7 @@ from server_app.repositories.billing import (
 )
 from server_app.repositories.entities import read_principal_type_by_pi as read_principal_type_by_pi_repository
 from server_app.repositories.payload import dump_json, placeholders
+from server_app.repositories.quantity_save_context import read_transfer_applications
 from server_app.repositories.quantity_sheets import (
     get_quantity_sheet_for_write as get_quantity_sheet_repository,
 )
@@ -56,7 +57,7 @@ def quantity_service_deps():
         "new_id": new_id,
         "normalize_iacuc_number": normalize_iacuc_number,
         "quantity_sheet_db_values": quantity_sheet_db_values,
-        "read_applications_by_iacuc": read_applications_by_iacuc,
+        "read_transfer_applications": read_transfer_applications,
         "select_quantity_sheets_for_transfer": select_quantity_sheets_for_transfer_repository,
         "update_quantity_sheet": update_quantity_sheet_repository,
     }
@@ -110,9 +111,10 @@ def save_quantity_sheet(conn, payload, actor, sheet_id=None):
     sheet["manager"] = clean_text(actor.get("displayName", ""))
     sheet["roomManager"] = clean_text(room.get("roomManager", ""))
     validate_quantity_sheet_permission(actor, sheet)
-    validate_quantity_sheet_animal_requirements(conn, sheet)
-    validate_quantity_sheet_free_cage_settings(conn, sheet)
-    validate_quantity_sheet_tier_priority(conn, sheet)
+    context = QuantityValidationContext(conn, sheet, room)
+    validate_quantity_sheet_animal_requirements(conn, sheet, room=room)
+    validate_quantity_sheet_free_cage_settings(conn, sheet, context=context)
+    validate_quantity_sheet_tier_priority(conn, sheet, context=context)
     previous_sheet = get_quantity_sheet_repository(conn, sheet["id"])
     exists = previous_sheet is not None
     if exists:
@@ -285,8 +287,8 @@ def read_room_payloads_for_context(conn, room_ids=None, room_names=None):
     return [json.loads(row["payload"]) for row in rows]
 
 
-def validate_quantity_sheet_animal_requirements(conn, sheet):
-    room = read_room_payload(conn, sheet.get("roomId"))
+def validate_quantity_sheet_animal_requirements(conn, sheet, *, room=None):
+    room = read_room_payload(conn, sheet.get("roomId")) if room is None else room
     profile = billing_profile_for_room(room, sheet.get("billingUnit"))
     if profile["unit"] != "animal_day":
         return
@@ -295,7 +297,7 @@ def validate_quantity_sheet_animal_requirements(conn, sheet):
         raise ValueError("该房间按只/天计费，请打开动物数量并补充结余总数")
 
 
-def validate_quantity_sheet_free_cage_settings(conn, sheet):
+def validate_quantity_sheet_free_cage_settings(conn, sheet, *, context=None):
     preferred = max(as_int(sheet.get("preferredFreeCages")) or 0, 0)
     has_priority = as_int(sheet.get("freeCagePriority")) is not None
     if preferred <= 0 and not has_priority:
@@ -303,14 +305,17 @@ def validate_quantity_sheet_free_cage_settings(conn, sheet):
     pi_name = clean_text(sheet.get("pi", ""))
     if not pi_name:
         raise ValueError("设置优先减免笼数前，请先填写项目负责人")
-    principal_type_by_pi = read_principal_type_by_pi(conn)
+    principal_type_by_pi = context.principal_types if context is not None else read_principal_type_by_pi(conn)
     allowance = billing_free_cages_for_pi(principal_type_by_pi, pi_name)
     if preferred > allowance:
         raise ValueError(f"优先减免笼数不能超过 {pi_name} 的每日总减免额度 {allowance} 笼")
     # Merge preferred amounts per IACUC: the same IACUC may span multiple
     # sheets, and allocation treats it as one unit.
     preferred_by_iacuc = {normalize_iacuc_number(sheet.get("iacuc", "")): preferred}
-    for item in list_quantity_sheets_by_month_pi(conn, sheet.get("month"), pi_name):
+    peers = (
+        context.sheets if context is not None else list_quantity_sheets_by_month_pi(conn, sheet.get("month"), pi_name)
+    )
+    for item in peers:
         if item.get("id") == sheet.get("id") or not item.get("iacuc"):
             continue
         iacuc = normalize_iacuc_number(item.get("iacuc"))
@@ -323,11 +328,11 @@ def validate_quantity_sheet_free_cage_settings(conn, sheet):
         raise ValueError(f"{pi_name} 本月已指定优先减免 {total} 笼/天，超过总额度 {allowance} 笼/天")
 
 
-def validate_quantity_sheet_tier_priority(conn, sheet):
+def validate_quantity_sheet_tier_priority(conn, sheet, *, context=None):
     priority = as_int(sheet.get("tierCagePriority"))
     if priority is None:
         return
-    room = read_room_payload(conn, sheet.get("roomId"))
+    room = context.room if context is not None else read_room_payload(conn, sheet.get("roomId"))
     profile = billing_profile_for_room(room, sheet.get("billingUnit"))
     if profile["unit"] != "cage_day" or not profile.get("tiered"):
         raise ValueError("当前房间计费口径不支持优先梯度")
@@ -335,7 +340,10 @@ def validate_quantity_sheet_tier_priority(conn, sheet):
     if not pi_name:
         raise ValueError("设置优先梯度前，请先填写项目负责人")
     enabled_count = 1
-    for item in list_quantity_sheets_by_month_pi(conn, sheet.get("month"), pi_name):
+    peers = (
+        context.sheets if context is not None else list_quantity_sheets_by_month_pi(conn, sheet.get("month"), pi_name)
+    )
+    for item in peers:
         if item.get("id") == sheet.get("id"):
             continue
         if as_int(item.get("tierCagePriority")) is not None:

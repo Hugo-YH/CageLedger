@@ -46,7 +46,6 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
 
     target_iacucs = sorted({transfer["targetIacuc"] for transfer in transfer_rows if transfer["targetIacuc"]})
     source_row_ids = sorted({transfer["sourceRowId"] for transfer in transfer_rows if transfer.get("sourceRowId")})
-    applications_by_iacuc = deps["read_applications_by_iacuc"](conn) if transfer_rows else {}
     sheets = deps["select_quantity_sheets_for_transfer"](conn, month, source_sheet_id, target_iacucs, source_row_ids)
     events = []
     affected_sheet_by_id = {}
@@ -88,7 +87,6 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
         if changed:
             target_sheet["rows"] = sorted(next_rows, key=lambda item: (item.get("date", ""), item.get("id", "")))
             target_sheet["updatedAt"] = now
-            deps["update_quantity_sheet"](conn, target_sheet, deps["quantity_sheet_db_values"](target_sheet))
             affected_sheet_by_id[target_sheet["id"]] = target_sheet
 
     target_sheet_by_iacuc = {}
@@ -96,6 +94,10 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
         key = deps["normalize_iacuc_number"](target_sheet.get("iacuc", ""))
         if key and key != source_iacuc and key not in target_sheet_by_iacuc:
             target_sheet_by_iacuc[key] = target_sheet
+
+    missing = [code for code in target_iacucs if code not in target_sheet_by_iacuc]
+    applications_by_iacuc = deps["read_transfer_applications"](conn, missing) if missing else {}
+    created_ids = set()
 
     for transfer in transfer_rows:
         target_iacuc = transfer["targetIacuc"]
@@ -123,7 +125,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
                 "rows": [],
                 "updatedAt": now,
             }
-            deps["insert_quantity_sheet"](conn, target_sheet, deps["quantity_sheet_db_values"](target_sheet))
+            created_ids.add(target_sheet["id"])
             target_sheet_by_iacuc[target_iacuc] = target_sheet
             sheets.append(target_sheet)
             affected_sheet_by_id[target_sheet["id"]] = target_sheet
@@ -213,7 +215,6 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
             target_rows.append(mirrored_row)
         target_sheet["rows"] = sorted(target_rows, key=lambda item: (item.get("date", ""), item.get("id", "")))
         target_sheet["updatedAt"] = now
-        deps["update_quantity_sheet"](conn, target_sheet, deps["quantity_sheet_db_values"](target_sheet))
         affected_sheet_by_id[target_sheet["id"]] = target_sheet
         events.append(
             deps["audit_event"](
@@ -228,4 +229,7 @@ def sync_quantity_sheet_transfer_rows(conn, source_sheet, actor, now, deps):
                 {"targetSheetId": target_sheet["id"], "targetIacuc": target_iacuc, "rowId": row_id},
             )
         )
+    for target_sheet in affected_sheet_by_id.values():
+        write = deps["insert_quantity_sheet"] if target_sheet["id"] in created_ids else deps["update_quantity_sheet"]
+        write(conn, target_sheet, deps["quantity_sheet_db_values"](target_sheet))
     return events, list(affected_sheet_by_id.values())

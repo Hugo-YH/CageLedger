@@ -17,15 +17,17 @@ export const QuantityEntryCells = memo(
     {
       row: QuantitySheetRow;
       index: number;
+      animalDetails: boolean;
       month: string;
       shortViewport: boolean;
       showCalculatedPlaceholders: boolean;
       onChanged: () => void;
     }
   >(function QuantityEntryCells(
-    { row: initial, index, month, shortViewport, showCalculatedPlaceholders, onChanged },
+    { row: initial, index, animalDetails, month, shortViewport, showCalculatedPlaceholders, onChanged },
     ref,
   ) {
+    // Animal inputs can unmount while the row draft and live save handle stay intact.
     const [row, setRow] = useState(initial);
     const [calculated, setCalculated] = useState({
       animals: Number(initial.animalCount || 0),
@@ -162,112 +164,118 @@ export const QuantityEntryCells = memo(
           </div>
         </td>
         <td className="quantity-change-cell animal-detail-col">
-          <div className="quantity-change-editor">
-            <Input
-              aria-label={`第 ${index + 1} 行增加`}
-              type="number"
-              min="0"
-              value={row.addedCount ?? ""}
-              onChange={(event) => update("addedCount", count(event.target.value))}
-              onKeyDown={handleTab}
-              data-quantity-focusable="true"
-              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-              data-quantity-row={index}
-              data-quantity-field="addedCount"
-            />
-            <Select
-              aria-label={`第 ${index + 1} 行增加类型`}
-              className="quantity-type-select"
-              options={[
-                { label: "类型", value: "" },
-                { label: "购入", value: "购入" },
-                { label: "转入", value: "转入" },
-                { label: "分笼", value: "分笼" },
-              ]}
-              value={row.addedType}
-              onChange={(value) => update("addedType", value)}
-              onKeyDown={handleTab}
-              data-quantity-focusable="true"
-              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-              data-quantity-row={index}
-              data-quantity-field="addedType"
-            />
-            {row.addedType === "转入" ? (
+          {animalDetails ? (
+            <div className="quantity-change-editor">
               <Input
-                className="iacuc-lookup"
-                aria-label={`第 ${index + 1} 行转入伦理号`}
-                value={row.transferInFromIacuc}
-                onChange={(event) => update("transferInFromIacuc", event.target.value.toUpperCase())}
+                aria-label={`第 ${index + 1} 行增加`}
+                type="number"
+                min="0"
+                value={row.addedCount ?? ""}
+                onChange={(event) => update("addedCount", count(event.target.value))}
                 onKeyDown={handleTab}
                 data-quantity-focusable="true"
                 data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
                 data-quantity-row={index}
-                data-quantity-field="addedTransferIn"
+                data-quantity-field="addedCount"
               />
-            ) : null}
-          </div>
+              <Select
+                aria-label={`第 ${index + 1} 行增加类型`}
+                className="quantity-type-select"
+                options={[
+                  { label: "类型", value: "" },
+                  { label: "购入", value: "购入" },
+                  { label: "转入", value: "转入" },
+                  { label: "分笼", value: "分笼" },
+                ]}
+                value={row.addedType}
+                onChange={(value) => update("addedType", value)}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="addedType"
+              />
+              {row.addedType === "转入" ? (
+                <Input
+                  className="iacuc-lookup"
+                  aria-label={`第 ${index + 1} 行转入伦理号`}
+                  value={row.transferInFromIacuc}
+                  onChange={(event) => update("transferInFromIacuc", event.target.value.toUpperCase())}
+                  onKeyDown={handleTab}
+                  data-quantity-focusable="true"
+                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                  data-quantity-row={index}
+                  data-quantity-field="addedTransferIn"
+                />
+              ) : null}
+            </div>
+          ) : null}
         </td>
         <td className="quantity-change-cell animal-detail-col">
-          <div className="quantity-change-editor">
-            <Input
-              aria-label={`第 ${index + 1} 行减少`}
-              type="number"
-              min="0"
-              value={row.removedCount ?? ""}
-              onChange={(event) => update("removedCount", count(event.target.value))}
-              onKeyDown={handleTab}
-              data-quantity-focusable="true"
-              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-              data-quantity-row={index}
-              data-quantity-field="removedCount"
-            />
-            <Select
-              aria-label={`第 ${index + 1} 行减少类型`}
-              className="quantity-type-select"
-              options={[
-                { label: "类型", value: "" },
-                { label: "取材", value: "取材" },
-                { label: "死亡", value: "死亡" },
-                { label: "转出", value: "转出" },
-              ]}
-              value={row.removedType}
-              onChange={(value) => update("removedType", value)}
-              onKeyDown={handleTab}
-              data-quantity-focusable="true"
-              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-              data-quantity-row={index}
-              data-quantity-field="removedType"
-            />
-            {row.removedType === "转出" ? (
+          {animalDetails ? (
+            <div className="quantity-change-editor">
               <Input
-                className="iacuc-lookup"
-                aria-label={`第 ${index + 1} 行转出伦理号`}
-                value={row.transferOutToIacuc}
-                onChange={(event) => update("transferOutToIacuc", event.target.value.toUpperCase())}
+                aria-label={`第 ${index + 1} 行减少`}
+                type="number"
+                min="0"
+                value={row.removedCount ?? ""}
+                onChange={(event) => update("removedCount", count(event.target.value))}
                 onKeyDown={handleTab}
                 data-quantity-focusable="true"
                 data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
                 data-quantity-row={index}
-                data-quantity-field="removedTransferOut"
+                data-quantity-field="removedCount"
               />
-            ) : null}
-          </div>
+              <Select
+                aria-label={`第 ${index + 1} 行减少类型`}
+                className="quantity-type-select"
+                options={[
+                  { label: "类型", value: "" },
+                  { label: "取材", value: "取材" },
+                  { label: "死亡", value: "死亡" },
+                  { label: "转出", value: "转出" },
+                ]}
+                value={row.removedType}
+                onChange={(value) => update("removedType", value)}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="removedType"
+              />
+              {row.removedType === "转出" ? (
+                <Input
+                  className="iacuc-lookup"
+                  aria-label={`第 ${index + 1} 行转出伦理号`}
+                  value={row.transferOutToIacuc}
+                  onChange={(event) => update("transferOutToIacuc", event.target.value.toUpperCase())}
+                  onKeyDown={handleTab}
+                  data-quantity-focusable="true"
+                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                  data-quantity-row={index}
+                  data-quantity-field="removedTransferOut"
+                />
+              ) : null}
+            </div>
+          ) : null}
         </td>
         <td className="animal-detail-col">
-          <Input
-            className="quantity-balance-input"
-            aria-label={`第 ${index + 1} 行结余总数`}
-            type="number"
-            min="0"
-            placeholder={showCalculatedPlaceholders && calculated.animals > 0 ? String(calculated.animals) : ""}
-            value={row.animalCount ?? ""}
-            onChange={(event) => update("animalCount", count(event.target.value))}
-            onKeyDown={handleTab}
-            data-quantity-focusable="true"
-            data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-            data-quantity-row={index}
-            data-quantity-field="animalCount"
-          />
+          {animalDetails ? (
+            <Input
+              className="quantity-balance-input"
+              aria-label={`第 ${index + 1} 行结余总数`}
+              type="number"
+              min="0"
+              placeholder={showCalculatedPlaceholders && calculated.animals > 0 ? String(calculated.animals) : ""}
+              value={row.animalCount ?? ""}
+              onChange={(event) => update("animalCount", count(event.target.value))}
+              onKeyDown={handleTab}
+              data-quantity-focusable="true"
+              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+              data-quantity-row={index}
+              data-quantity-field="animalCount"
+            />
+          ) : null}
         </td>
         <td>
           <Input

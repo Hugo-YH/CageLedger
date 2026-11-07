@@ -20,7 +20,7 @@ export {
   type GenerateBillingStatementPayload,
 } from "./settlements";
 
-function listUrl(params: QuantitySheetListParams, view?: "summary") {
+function listUrl(params: QuantitySheetListParams, view?: "summary" | "ids") {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.sortKey) search.set("sortKey", params.sortKey);
   if (params.sortDir) search.set("sortDir", params.sortDir);
@@ -65,6 +65,16 @@ export function useQuantitySheetPiHistory(iacuc: string, beforeMonth: string, en
 export function listAllQuantitySheets(params: QuantitySheetListParams, signal?: AbortSignal) {
   params = individualPeople(params);
   return loadAllPages((offset, limit) => listQuantitySheetSummaries({ ...params, offset, limit }, signal));
+}
+
+export async function listAllQuantitySheetIds(params: QuantitySheetListParams, signal?: AbortSignal) {
+  params = individualPeople(params);
+  const items = await loadAllPages((offset, limit) =>
+    requestJson<PagedResponse<Pick<QuantitySheetListItem, "id">>>(listUrl({ ...params, offset, limit }, "ids"), {
+      signal,
+    }),
+  );
+  return items.map(({ id }) => id);
 }
 
 export function useQuantitySheetRooms(enabled = true) {

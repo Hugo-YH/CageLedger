@@ -488,6 +488,7 @@ def _enqueue_quantity_pdf(sheet, owner_id, *, priority=0):
             sheet, priority=PDF_RENDER_PRIORITY_WARM if priority >= PDF_PRIORITY_WARM else 0
         ),
         priority=priority,
+        warm_scope=f"quantity-sheet:{sheet.get('id', '')}",
     )
 
 
@@ -512,6 +513,7 @@ def _enqueue_billing_pdf(month, pi, owner_id, *, connect_db, generate_statement,
             )
         ),
         priority=priority,
+        warm_scope=f"billing-statement:{payload['sourceType']}:{month}:{pi}",
     )
 
 

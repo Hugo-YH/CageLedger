@@ -37,6 +37,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
     useSavedQuantityList();
   const selection = useQuantitySheetSelection();
   const { selected, selectingAll, allFilteredSelected, clear, toggle, toggleAll } = selection;
+  const selectedIds = useMemo(() => new Set(selected), [selected]);
   useSelectionScope(JSON.stringify(filters), clear, selected.length > 0 || selectingAll);
   const [viewId, setViewId] = useState("");
   const [deleteId, setDeleteId] = useState("");
@@ -72,7 +73,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
         render: (_, item) => (
           <Checkbox
             aria-label={`选择 ${item.iacuc}`}
-            checked={selected.includes(item.id)}
+            checked={selectedIds.has(item.id)}
             disabled={blocked}
             onChange={(event) => toggle(item.id, event.target.checked)}
           />
@@ -157,7 +158,7 @@ export const SavedQuantitySheets = memo(function SavedQuantitySheets({
       blocked,
       onEdit,
       params,
-      selected,
+      selectedIds,
       selectingAll,
       setFilters,
       setPage,

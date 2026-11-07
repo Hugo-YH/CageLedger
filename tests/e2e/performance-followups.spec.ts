@@ -68,6 +68,7 @@ test("saved quantity selection preserves all paginated results with at most thre
     const limit = Number(params.get("limit") || "10");
     const offset = Number(params.get("offset") || "0");
     if (limit === 100) {
+      expect(params.get("view")).toBe("ids");
       active++;
       maximum = Math.max(maximum, active);
       offsets.push(offset);
@@ -76,7 +77,9 @@ test("saved quantity selection preserves all paginated results with at most thre
       await new Promise((resolve) => setTimeout(resolve, 50));
       await route.fulfill({
         json: {
-          items: items.slice(offset, offset + limit),
+          items: items
+            .slice(offset, offset + limit)
+            .map((item) => (params.get("view") === "ids" ? { id: item.id } : item)),
           page: { limit, offset, total: items.length, hasMore: offset + limit < items.length },
         },
       });

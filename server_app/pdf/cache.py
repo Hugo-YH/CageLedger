@@ -9,13 +9,13 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
 from queue import PriorityQueue
 from threading import Lock, Thread
 
 from server_app.config import PDF_CACHE_MAX_BYTES, PDF_CACHE_PATH, PDF_CACHE_TTL_SECONDS, PDF_EXPORT_MAX_PENDING
+from server_app.pdf.cache_work import ArtifactWork, PdfExportJob, PendingArtifacts, ScheduledTask
 from server_app.runtime_logging import bind_log_context, emit_event
 
 PDF_JOB_TTL_SECONDS = 24 * 60 * 60
@@ -29,30 +29,6 @@ PDF_MAX_RETAINED_JOBS = 512
 class PdfQueueFull(RuntimeError):
     def __init__(self):
         super().__init__("PDF 导出队列繁忙，请稍后重试")
-
-
-@dataclass
-class PdfExportJob:
-    id: str
-    owner_id: str
-    key: str
-    filename: str
-    content_type: str
-    total: int
-    status: str = "queued"
-    completed: int = 0
-    error: str = ""
-    path: Path | None = None
-    updated_at: float = 0
-    owner_ids: set[str] = field(default_factory=set)
-    priority: int = PDF_PRIORITY_USER
-
-
-@dataclass(order=True)
-class _ScheduledTask:
-    priority: int
-    sequence: int
-    callback: Callable[[], None] = field(compare=False)
 
 
 class PdfExportCache:
@@ -76,7 +52,8 @@ class PdfExportCache:
         self._generation = 0
         self._key_locks: dict[str, tuple[Lock, int]] = {}
         self._lock = Lock()
-        self._tasks: PriorityQueue[_ScheduledTask] = PriorityQueue(maxsize=self.max_pending)
+        self._tasks: PriorityQueue[ScheduledTask] = PriorityQueue(maxsize=self.max_pending)
+        self._pending_artifacts = PendingArtifacts()
         self._task_sequence = count()
         self._worker: Thread | None = None
         self._last_prune_at = 0.0
@@ -121,6 +98,7 @@ class PdfExportCache:
         content_type: str,
         render: Callable[[], bytes],
         priority: int = PDF_PRIORITY_USER,
+        warm_scope: str | None = None,
     ) -> PdfExportJob:
         cached = self.artifact_path(key)
         with self._lock:
@@ -134,17 +112,29 @@ class PdfExportCache:
             if active_id and active_id in self._jobs:
                 self._jobs[active_id].owner_ids.add(owner_id)
                 return self._jobs[active_id]
+            version = (self._generation, self._versions.get(key, 0))
+            work = ArtifactWork(key, version, render, warm_scope if priority >= PDF_PRIORITY_WARM else None)
+            replacement = self._pending_artifacts.coalesce(self._jobs, owner_id, work, filename, content_type)
+            if replacement:
+                job, old_key = replacement
+                if self._active_keys.get(old_key) == job.id:
+                    self._active_keys.pop(old_key)
+                self._active_keys[key] = job.id
+                self._prune_version_locked(old_key)
+                return job
             self._admit_locked(priority)
             job = self._new_job(owner_id, key, filename, content_type, 1, priority=priority)
-            version = (self._generation, self._versions.get(key, 0))
+            self._pending_artifacts.add(job, work)
             self._active_keys[key] = job.id
         try:
-            self._submit(priority, lambda: self._run_artifact(job.id, key, version, render))
+            self._submit(priority, lambda: self._run_artifact(job.id))
         except Exception:
             self._fail(job.id, "PDF 后台任务暂时无法启动，请重试")
             with self._lock:
-                if self._active_keys.get(key) == job.id:
-                    self._active_keys.pop(key, None)
+                pending = self._pending_artifacts.start(job.id)
+                if self._active_keys.get(pending.key) == job.id:
+                    self._active_keys.pop(pending.key, None)
+                self._prune_version_locked(pending.key)
             raise
         return job
 
@@ -276,10 +266,19 @@ class PdfExportCache:
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
         return self.root / "artifacts" / f"{digest}.pdf"
 
-    def _run_artifact(self, job_id: str, key: str, version: tuple[int, int], render: Callable[[], bytes]):
-        self._set_status(job_id, "rendering")
+    def _run_artifact(self, job_id: str):
+        with self._lock:
+            work = self._pending_artifacts.start(job_id)
+            key, version, render = work.key, work.version, work.render
+            current = version == (self._generation, self._versions.get(key, 0))
+            if current:
+                self._jobs[job_id].status = "rendering"
+                self._jobs[job_id].updated_at = time.time()
         started_at = time.perf_counter()
         try:
+            if not current:
+                self._fail(job_id, "源数据已更新，请重新导出 PDF")
+                return
             body = render()
             path = self.artifact_path(key)
             if self._publish_artifact(key, version, path, body):
@@ -484,7 +483,7 @@ class PdfExportCache:
                 self._worker = Thread(target=self._work, name="cageledger-pdf-export", daemon=True)
                 self._worker.start()
             sequence = next(self._task_sequence)
-        self._tasks.put(_ScheduledTask(priority, sequence, bind_log_context(callback)))
+        self._tasks.put(ScheduledTask(priority, sequence, bind_log_context(callback)))
 
     def _work(self):
         while True:

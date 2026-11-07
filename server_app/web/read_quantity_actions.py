@@ -24,11 +24,11 @@ class ReadQuantityActionsMixin:
         # unqualified legacy response byte-for-byte compatible.
         query = parse_qs(urlparse(self.path).query)
         view = clean_text(query.get("view", [""])[0])
-        if view not in ("", "summary"):
+        if view not in ("", "summary", "ids"):
             self.send_json({"error": "列表视图无效"}, HTTPStatus.BAD_REQUEST)
             return
         with connect_db() as conn:
-            self.send_json(list_quantity_sheets_page(conn, self.list_filters()))
+            self.send_json(list_quantity_sheets_page(conn, self.list_filters(), ids_only=view == "ids"))
         return
 
     def get_quantity_sheets_filter_options(self, path):

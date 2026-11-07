@@ -17,8 +17,8 @@ from server_app.repositories.quantity_sheets import (
 )
 
 
-def list_quantity_sheets_page(conn, filters):
-    return list_page_repository(conn, filters, filtered_where)
+def list_quantity_sheets_page(conn, filters, *, ids_only=False):
+    return list_page_repository(conn, filters, filtered_where, ids_only=ids_only)
 
 
 def list_quantity_sheet_filter_options(conn, filters, column):

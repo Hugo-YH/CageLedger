@@ -1472,8 +1472,8 @@
           "method": "GET",
           "path": "/api/quantity-sheets",
           "purpose": "已保存列表",
-          "request": "月份与列筛选、排序、分页；可选view=summary（不传保持原响应）；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
-          "response": "{items,page}",
+          "request": "月份与列筛选、排序、分页；可选view=summary（不传保持原响应）或view=ids（全选仅取ID）；可选personFilterMode=individual按单个人筛选，省略保留原精确匹配",
+          "response": "{items,page}；view=ids时items仅含{id}，筛选、顺序、分页及登录范围不变",
           "protection": "read",
           "permission": "login"
         },

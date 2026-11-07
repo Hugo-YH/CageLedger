@@ -19,6 +19,7 @@ it("keeps date and transfer edits local while only numeric changes notify balanc
             ref={ref}
             row={{ ...createQuantityRow("2026-10", true), addedType: "转入", removedType: "转出" }}
             index={0}
+            animalDetails
             month="2026-10"
             shortViewport={false}
             showCalculatedPlaceholders
@@ -51,4 +52,57 @@ it("keeps date and transfer edits local while only numeric changes notify balanc
   act(() => ref.current?.setCalculated(99, 33));
   expect(changed).toHaveBeenCalledTimes(5);
   expect(ref.current?.getRow()).toMatchObject({ addedCount: 5, removedCount: 2, animalCount: 9, cageCount: 3 });
+});
+
+it("unmounts animal controls without discarding row values or its live save handle", () => {
+  const ref = createRef<QuantityRowHandle>();
+  const changed = vi.fn();
+  const row = { ...createQuantityRow("2026-10", true), addedType: "转入", removedType: "转出" };
+  const editor = (animalDetails: boolean) => (
+    <table>
+      <tbody>
+        <tr>
+          <QuantityEntryCells
+            ref={ref}
+            row={row}
+            index={0}
+            month="2026-10"
+            shortViewport={false}
+            showCalculatedPlaceholders
+            animalDetails={animalDetails}
+            onChanged={changed}
+          />
+        </tr>
+      </tbody>
+    </table>
+  );
+  const { rerender } = render(editor(true));
+  for (const [label, value] of [
+    ["增加", "8"],
+    ["减少", "2"],
+    ["结余总数", "6"],
+    ["转入伦理号", "Z-IN"],
+    ["转出伦理号", "Z-OUT"],
+  ]) {
+    fireEvent.change(screen.getByLabelText(`第 1 行${label}`), { target: { value } });
+  }
+  const snapshot = ref.current?.getRow();
+  rerender(editor(false));
+  for (const label of ["增加", "减少", "结余总数", "增加类型", "减少类型", "转入伦理号", "转出伦理号"]) {
+    expect(screen.queryByLabelText(`第 1 行${label}`)).not.toBeInTheDocument();
+  }
+  expect(ref.current?.getRow()).toEqual(snapshot);
+  fireEvent.change(screen.getByLabelText("第 1 行结余笼数"), { target: { value: "3" } });
+  expect(ref.current?.getRow()).toMatchObject({ ...snapshot, cageCount: 3 });
+  rerender(editor(true));
+  for (const [label, value] of [
+    ["增加", 8],
+    ["减少", 2],
+    ["结余总数", 6],
+  ] as const) {
+    expect(screen.getByLabelText(`第 1 行${label}`)).toHaveValue(value);
+  }
+  expect(screen.getByLabelText("第 1 行转入伦理号")).toHaveValue("Z-IN");
+  expect(screen.getByLabelText("第 1 行转出伦理号")).toHaveValue("Z-OUT");
+  expect(screen.getByLabelText("第 1 行结余笼数")).toHaveValue(3);
 });

@@ -47,6 +47,8 @@ test("full-balance custom pricing saves without a fixed count and restores on ed
   expect(roomIndex).toBeGreaterThanOrEqual(0);
   await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "房间号", exact: true }), roomIndex + 1);
   await expect(page.locator(".quantity-room-select")).toContainText("E2E 全部自定义兔房");
+  await expect(page.getByRole("switch", { name: "动物数量", exact: true })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "动物数量", exact: true })).toBeDisabled();
   await page.getByRole("combobox", { name: "IACUC 编号", exact: true }).fill("E2E-ALL-CUSTOM");
   await page.locator("form").getByLabel("项目负责人", { exact: true }).fill("E2E 全部自定义负责人");
   await page.getByLabel("第 1 行结余总数", { exact: true }).fill("47");

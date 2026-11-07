@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { QuantitySheetListParams } from "../../../api/contracts";
-import { listAllQuantitySheets } from "../../../api/quantitySheets";
+import { listAllQuantitySheetIds } from "../../../api/quantitySheets";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 
 export function useQuantitySheetSelection() {
@@ -42,8 +42,8 @@ export function useQuantitySheetSelection() {
       setAllFilteredSelected(true);
       setError("");
       try {
-        const items = await listAllQuantitySheets(params, current.signal);
-        if (isCurrent()) setSelected(items.map((item) => item.id));
+        const ids = await listAllQuantitySheetIds(params, current.signal);
+        if (isCurrent()) setSelected(ids);
       } catch (cause) {
         if (isCurrent()) {
           setAllFilteredSelected(false);

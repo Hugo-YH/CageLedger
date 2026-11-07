@@ -54,12 +54,13 @@ def list_quantity_sheets_by_month(conn, month):
     return [json.loads(row["payload"]) for row in rows]
 
 
-def list_quantity_sheets_page(conn, filters, filtered_where):
+def list_quantity_sheets_page(conn, filters, filtered_where, *, ids_only=False):
     _cache_generation = cache_generation()
     where, params = quantity_sheet_where(filters, filtered_where, conn=conn)
     order_by = quantity_sheet_order_by(filters)
     key = cache_key(
         "quantity_sheets",
+        view="ids" if ids_only else "summary",
         limit=filters["limit"],
         offset=filters["offset"],
         sort_key=str(filters.get("sortKey", "")).strip(),
@@ -76,25 +77,21 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         return cached
     where_clause = f" WHERE {where}" if where else ""
     total = conn.execute(f"SELECT COUNT(*) AS total FROM quantity_sheets{where_clause}", params).fetchone()["total"]
-    rows = conn.execute(
-        f"""
-        SELECT
-            id,
-            month,
-            iacuc,
-            room_id,
-            room_name,
-            manager,
-            project,
-            pi,
-            owner,
-            funding,
-            updated_at,
+    projection = (
+        "id"
+        if ids_only
+        else """
+            id, month, iacuc, room_id, room_name, manager, project, pi, owner, funding, updated_at,
             json_extract(payload, '$.contact') AS contact,
             json_extract(payload, '$.roomManager') AS room_manager,
             json_extract(payload, '$.initialCageCount') AS initial_cage_count,
             json_extract(payload, '$.initialAnimalCount') AS initial_animal_count,
             json_extract(payload, '$.billingUnit') AS billing_unit
+        """
+    )
+    rows = conn.execute(
+        f"""
+        SELECT {projection}
         FROM quantity_sheets{where_clause}
         ORDER BY {order_by}
         LIMIT ? OFFSET ?
@@ -102,7 +99,7 @@ def list_quantity_sheets_page(conn, filters, filtered_where):
         (*params, filters["limit"], filters["offset"]),
     ).fetchall()
     payload = {
-        "items": [quantity_sheet_list_row(row) for row in rows],
+        "items": [{"id": row["id"]} for row in rows] if ids_only else [quantity_sheet_list_row(row) for row in rows],
         "page": {
             "limit": filters["limit"],
             "offset": filters["offset"],

@@ -49,7 +49,12 @@ test("quantity keyboard navigation preserves row order without measuring every f
     await page.keyboard.press("Shift+Tab");
     await expect(firstDate).toBeFocused();
   }
+  await page.getByLabel("第 1 行增加", { exact: true }).fill("8");
+  await page.getByLabel("第 1 行减少", { exact: true }).fill("2");
+  await page.getByLabel("第 1 行结余总数", { exact: true }).fill("6");
   await page.getByRole("switch", { name: "动物数量", exact: true }).setChecked(false);
+  await expect(page.locator(".quantity-entry-table .animal-detail-col input")).toHaveCount(0);
+  await expect(page.locator(".quantity-entry-table .animal-detail-col .ant-select")).toHaveCount(0);
   await page.getByLabel("第 1 行结余笼数", { exact: true }).fill("12");
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("第 2 行日期", { exact: true })).toBeFocused();
@@ -58,6 +63,11 @@ test("quantity keyboard navigation preserves row order without measuring every f
   await last.focus();
   await page.keyboard.press("Tab");
   await expect(firstDate).not.toBeFocused();
+  await page.getByRole("switch", { name: "动物数量", exact: true }).setChecked(true);
+  await expect(page.getByLabel("第 1 行增加", { exact: true })).toHaveValue("8");
+  await expect(page.getByLabel("第 1 行减少", { exact: true })).toHaveValue("2");
+  await expect(page.getByLabel("第 1 行结余总数", { exact: true })).toHaveValue("6");
+  await expect(page.getByLabel("第 1 行结余笼数", { exact: true })).toHaveValue("12");
   await writeFile(testInfo.outputPath("quantity-navigation.json"), JSON.stringify(measurements, null, 2));
 });
 

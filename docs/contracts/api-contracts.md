@@ -333,6 +333,8 @@ Animal Record ID 在批次生成、打印、接收、待进驻、占用和公开
 
 ## 数量统计表与结算
 
+数量统计表全选使用 `GET /api/quantity-sheets?view=ids`，仅返回 `{items:[{id}],page}`。登录要求、跨房间可见范围、筛选、个人姓名匹配、排序与分页均和原列表一致；查询直接投影 ID，不读取明细 payload。默认及 `view=summary` 的原摘要响应保持兼容，两种投影分别缓存。全选仍分页读取，不提供无上限全量响应。
+
 `sheet.customBillingSegments[]` 增加可选 `quantityMode: "fixed" | "all"`。`fixed` 必须填写正整数 `quantity`；`all` 保存为 `quantity: null`，区间内按每天实际结余只数或笼数核算。缺少模式的旧区间按数量推断（`null` 为全部）。全部结余区间不能与其他自定义区间重叠，固定数量区间仍校验同日合计不超过结余。结算明细保留 `customBillingQuantityMode` 与当天实际数量，打印说明据此区分固定数量和每日全部结余。
 
 | 方法     | 路径                                           | 请求或参数                               | 响应                                                                   |

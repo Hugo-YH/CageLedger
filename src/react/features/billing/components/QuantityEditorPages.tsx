@@ -66,6 +66,7 @@ export const QuantityEditorPages = memo(function QuantityEditorPages({
                             }}
                             row={rows[leftIndex]}
                             index={leftIndex}
+                            animalDetails={animalDetails}
                             month={month}
                             shortViewport={shortViewport}
                             showCalculatedPlaceholders={showCalculatedPlaceholders}
@@ -79,6 +80,7 @@ export const QuantityEditorPages = memo(function QuantityEditorPages({
                           }}
                           row={rows[rightIndex]}
                           index={rightIndex}
+                          animalDetails={animalDetails}
                           month={month}
                           shortViewport={shortViewport}
                           showCalculatedPlaceholders={showCalculatedPlaceholders}
