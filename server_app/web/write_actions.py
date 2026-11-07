@@ -305,7 +305,7 @@ class WriteActionsMixin:
         try:
             body = self.read_json_body()
             with connect_db() as conn:
-                updated = update_user(conn, user, user_id, body)
+                updated = update_user(conn, user, user_id, body, verify_actor=True)
             self.send_json({"user": updated})
         except StaleWriteError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.CONFLICT)

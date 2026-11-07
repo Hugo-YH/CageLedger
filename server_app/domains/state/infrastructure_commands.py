@@ -11,14 +11,12 @@ from server_app.db import connect_db
 from server_app.domains.administration import merge_audit_logs, write_audit_events
 from server_app.domains.state.audit_diff import build_audit_events, validate_state_write_permission
 from server_app.domains.state.entity_rules import (
-    empty_state,
     normalize_entity_batch,
     normalize_entity_payload,
     normalize_id_batch,
     validate_entity_references,
     validate_infrastructure_slot_deletes,
 )
-from server_app.domains.state.persistence import assemble_state
 from server_app.persistence.backfills import backfill_quantity_sheet_staff
 from server_app.repositories.infrastructure import (
     delete_rack_record,
@@ -31,6 +29,7 @@ from server_app.repositories.infrastructure import (
     update_room_record,
     update_slot_record,
 )
+from server_app.repositories.infrastructure_transactions import entity_batches, read_infrastructure_context
 from server_app.shared import new_id
 from server_app.shared.concurrency import begin_write
 
@@ -88,9 +87,9 @@ def write_infrastructure_entity(collection, method, item_id, payload, actor, spe
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
-        state = json.loads(json.dumps(old_state))
         item = _normalize_payload(collection, payload, item_id, method, spec["id_prefix"])
+        old_state = read_infrastructure_context(conn, entity_batches(collection, method, item_id, item))
+        state = json.loads(json.dumps(old_state))
         if method == "POST":
             _insert(state, collection, item)
         elif method == "PUT":
@@ -141,7 +140,7 @@ def write_infrastructure(payload, actor):
     with connect_db() as conn:
         begin_write(conn)
         updated_at = datetime.now(UTC).isoformat()
-        old_state = assemble_state(conn) or empty_state()
+        old_state = read_infrastructure_context(conn, batches)
         state = json.loads(json.dumps(old_state))
         for key, collection in (("rooms", "rooms"), ("racks", "racks"), ("slots", "slots")):
             for item in batches[key]:

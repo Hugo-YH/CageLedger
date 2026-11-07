@@ -16,8 +16,22 @@ def ensure_schema(conn):
         PRIMARY KEY(actor_id,request_id))""")
 
 
-def by_account(conn):
-    return {row[0]: json.loads(row[1]) for row in conn.execute("SELECT account_key,payload FROM researchers")}
+def by_account(conn, accounts=None):
+    if accounts is None:
+        return {row[0]: json.loads(row[1]) for row in conn.execute("SELECT account_key,payload FROM researchers")}
+    # Match the same casefolded directory keys, bounded by the uploaded rows.
+    keys = sorted({account.casefold() for account in accounts})
+    result = {}
+    for offset in range(0, len(keys), 400):
+        batch = keys[offset : offset + 400]
+        result.update(
+            (row[0], json.loads(row[1]))
+            for row in conn.execute(
+                f"SELECT account_key,payload FROM researchers WHERE account_key IN ({','.join('?' for _ in batch)})",
+                batch,
+            )
+        )
+    return result
 
 
 def get(conn, researcher_id):

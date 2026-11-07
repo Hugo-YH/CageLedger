@@ -4,6 +4,7 @@ import json
 from collections import Counter
 
 from . import read_repository as repo
+from .archive_cache import METADATA
 
 CODE_LABELS = {
     "occupancy_missing_slot": "占用笼位关联缺失",
@@ -38,9 +39,12 @@ def pagination(params, total):
 
 
 def metadata(report):
+    cached = METADATA.get(report.key)
+    if cached is not None:
+        return json.loads(cached)
     counts = Counter(item["reviewStatus"] for item in report["findings"])
     by_code = Counter(item["code"] for item in report["findings"])
-    return {
+    result = {
         "id": report["scanId"],
         "scannedAt": report["scannedAt"],
         "detectorVersion": report["detectorVersion"],
@@ -58,6 +62,14 @@ def metadata(report):
             for code, count in sorted(by_code.items())
         ],
     }
+    encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+    METADATA.put(report.key, encoded, len(encoded.encode()))
+    return json.loads(encoded)
+
+
+def row_metadata(row):
+    cached = METADATA.get(repo.fingerprint(row))
+    return json.loads(cached) if cached is not None else metadata(repo.manifest(row, remember=False))
 
 
 def finding(item):
@@ -74,7 +86,7 @@ def list_scans(conn, actor, params):
     page = pagination(params, 0)
     rows, total = repo.scan_rows(conn, page["limit"], page["offset"])
     return {
-        "items": [metadata(repo.manifest(row)) for row in rows],
+        "items": [row_metadata(row) for row in rows],
         "page": {**page, "total": total, "hasMore": page["offset"] + page["limit"] < total},
     }
 
@@ -111,22 +123,19 @@ def list_latest_issues(conn, actor, params):
 
 def _list_issues(report, params):
     selected = filters(params)
-    findings = report["findings"] if report else []
-
-    def matches(item, exclude=""):
-        return all(key == exclude or not values or item[key] in values for key, values in selected.items())
-
-    items = [item for item in findings if matches(item)]
-    items.sort(key=lambda item: (item["reviewStatus"] != "needs_review", item["code"], item["id"]))
-    sort_key, direction = params.get("sortKey"), params.get("sortDir", "asc")
+    sort_key, direction = params.get("sortKey") or "", params.get("sortDir", "asc")
     if sort_key and sort_key not in ("code", "reviewStatus") or direction not in ("asc", "desc"):
         raise ValueError("排序参数无效")
-    if sort_key:
-        items.sort(key=lambda item: item[sort_key], reverse=direction == "desc")
+    items = report.selected(selected, sort_key, direction) if report else ()
     page = pagination(params, len(items))
     options = {}
     for key, labels in (("code", CODE_LABELS), ("reviewStatus", STATUS_LABELS)):
-        counts = Counter(item[key] for item in findings if matches(item, key))
+        counts = Counter()
+        for (code, status), count in report.groups.items() if report else ():
+            if key == "code" and (not selected.get("reviewStatus") or status in selected["reviewStatus"]):
+                counts[code] += count
+            elif key == "reviewStatus" and (not selected.get("code") or code in selected["code"]):
+                counts[status] += count
         options[key] = [
             {"value": value, "label": labels.get(value, value), "count": count}
             for value, count in sorted(counts.items())
@@ -142,7 +151,7 @@ def _list_issues(report, params):
 def get_issue(conn, actor, scan_id, issue_id):
     authorize(actor)
     report = repo.scan(conn, scan_id)
-    item = next((item for item in report["findings"] if item["id"] == issue_id), None)
+    item = report.by_id.get(issue_id)
     if not item:
         raise LookupError("该核查留档中不存在此问题")
     value, checksum = repo.evidence(conn, scan_id, issue_id)

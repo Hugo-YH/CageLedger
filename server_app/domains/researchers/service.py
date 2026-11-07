@@ -27,7 +27,7 @@ def prepare(body):
 
 def plan(conn, prepared):
     filename, digest, rows = prepared
-    existing = repo.by_account(conn)
+    existing = repo.by_account(conn, (row["account"] for row in rows))
     counts = dict.fromkeys(("created", "updated", "unchanged", "invalid"), 0)
     decisions, versions = [], []
     for row in rows:

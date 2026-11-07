@@ -11,6 +11,7 @@ import type {
   ResearcherListParams,
   ResearcherListResponse,
 } from "../../contracts/researchers";
+import type { SessionResponse } from "../../contracts/session";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 
@@ -54,7 +55,7 @@ function useRefreshResearchers() {
 }
 
 export function useSaveResearcher() {
-  const refresh = useRefreshResearchers();
+  const client = useQueryClient();
   return useMutation({
     mutationFn: ({
       id,
@@ -69,7 +70,26 @@ export function useSaveResearcher() {
         method: "PUT",
         body: JSON.stringify({ item, expectedUpdatedAt }),
       }),
-    onSuccess: refresh,
+    onMutate: () => ({ actor: client.getQueryData<SessionResponse>(queryKeys.session)?.user }),
+    onSuccess: async (response, { id }, context) => {
+      const currentActor = () => client.getQueryData<SessionResponse>(queryKeys.session)?.user;
+      // A completed write may outlive its account. Do not recreate that account's
+      // cleared caches, including when the same user signs out and back in.
+      if (currentActor() !== context?.actor) return;
+      const key = queryKeys.researcher(id);
+      await client.cancelQueries({ queryKey: key, exact: true });
+      if (currentActor() !== context?.actor) return;
+      client.setQueryData(key, response);
+      // The PUT already returns the complete target. Lists also own department
+      // options; invalidate their active and inactive scopes, not this detail.
+      await Promise.allSettled([
+        client.invalidateQueries(
+          { queryKey: queryKeys.researchersRoot, predicate: (query) => query.queryKey[1] === "list" },
+          { throwOnError: false },
+        ),
+        client.invalidateQueries({ queryKey: queryKeys.auditEventsRoot }, { throwOnError: false }),
+      ]);
+    },
   });
 }
 

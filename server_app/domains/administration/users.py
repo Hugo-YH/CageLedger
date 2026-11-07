@@ -94,8 +94,21 @@ def create_user(conn, payload, actor=None):
     return created
 
 
-def update_user(conn, actor, user_id, payload):
+def update_user(conn, actor, user_id, payload, *, verify_actor=False):
+    # The self-service branch ignores password/role changes. Only compute a
+    # submitted reset for another account, before reserving the SQLite writer.
+    password = str(payload.get("password", "")) if user_id != actor["id"] else ""
+    password_hash = hash_password(password) if password else None
     begin_write(conn)
+    if verify_actor:
+        current_actor = get_user_by_id(conn, actor["id"])
+        if (
+            not current_actor
+            or not current_actor["active"]
+            or current_actor["role"] != "admin"
+            or current_actor["updated_at"] != actor.get("updatedAt")
+        ):
+            raise PermissionError("账号权限已变化，请重新登录后重试")
     row = get_user_by_id(conn, user_id)
     if not row:
         raise LookupError("账号不存在")
@@ -125,7 +138,6 @@ def update_user(conn, actor, user_id, payload):
 
     username = str(payload.get("username", row["username"])).strip()
     display_name = str(payload.get("displayName", row["display_name"])).strip() or username
-    password = str(payload.get("password", ""))
     role = payload.get("role", row["role"])
     room_ids = payload.get("roomIds", json.loads(row["room_ids"] or "[]"))
     billing_lock_allowed = 1 if payload.get("billingLockAllowed", bool(row["billing_lock_allowed"])) else 0
@@ -145,7 +157,7 @@ def update_user(conn, actor, user_id, payload):
             username,
             display_name,
             phone,
-            hash_password(password),
+            password_hash,
             role,
             dump_json(room_ids),
             billing_lock_allowed,

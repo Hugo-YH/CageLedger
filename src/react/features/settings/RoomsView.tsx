@@ -1,15 +1,17 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Empty, Space, Tag, Typography } from "antd";
 
 import { useInfrastructureStructure, useRackSlots } from "../../api/infrastructure";
-import type { CageRack, CageRoom, CageSlot, SessionUser } from "../../api/contracts";
+import type { CageRack, CageRoom, CageSlot, InfrastructureStructure, SessionUser } from "../../api/contracts";
 import { useDeleteRoom, useSaveInfrastructure } from "../../api/administration";
 import { ConfirmDialog, ModalShell, PageSkeleton, PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ListRefreshStatus, ModalPresence } from "../../components/ui";
 import { RackEditor, RoomEditor } from "./components/RoomEditors";
 import { facilityLabel, generateSlots, newRackDraft, newRoomDraft, type RoomDraft, slotKey } from "./model";
+
+type DeleteTarget = { kind: "room" | "rack"; id: string; label: string };
 
 export function RoomsView({ user }: { user: SessionUser }) {
   const feedback = useOperationFeedback();
@@ -21,18 +23,19 @@ export function RoomsView({ user }: { user: SessionUser }) {
   const [rackExisting, setRackExisting] = useState(false);
   const [slotSnapshot, setSlotSnapshot] = useState<{ rackId: string; items: CageSlot[] } | null>(null);
   const rackSlots = useRackSlots(rackExisting ? rackDraft?.id || "" : "");
-  const [deleteTarget, setDeleteTarget] = useState<{ kind: "room" | "rack"; id: string; label: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const canManageRooms = user.role === "admin";
   useEffect(() => {
     if (rackExisting && rackDraft && !slotSnapshot && !rackSlots.isFetching && !rackSlots.isError && rackSlots.data) {
       setSlotSnapshot({ rackId: rackDraft.id, items: rackSlots.data.items });
     }
   }, [rackDraft, rackExisting, rackSlots.data, rackSlots.isError, rackSlots.isFetching, slotSnapshot]);
-  function openRack(rack: CageRack, existing: boolean) {
+  const openRack = useCallback((rack: CageRack, existing: boolean) => {
     setSlotSnapshot(null);
     setRackExisting(existing);
     setRackDraft(rack);
-  }
+  }, []);
+  const editRoom = useCallback((room: CageRoom) => setRoomDraft({ ...room }), []);
   function closeRack() {
     setRackDraft(null);
     setSlotSnapshot(null);
@@ -52,7 +55,7 @@ export function RoomsView({ user }: { user: SessionUser }) {
         <PageState title="基础设施加载失败" retry={() => query.refetch()} />
       </section>
     );
-  const { rooms: visibleRooms, racks: cageRacks, roomSummaries, rackSummaries } = query.data;
+  const { rooms: visibleRooms, racks: cageRacks } = query.data;
   async function persistRoom() {
     if (!roomDraft?.name.trim()) return;
     const exists = visibleRooms.some((room) => room.id === roomDraft.id);
@@ -138,86 +141,13 @@ export function RoomsView({ user }: { user: SessionUser }) {
             }
           />
         ) : null}
-        <Card
-          className="settings-rooms-card"
-          extra={
-            <Tag color="processing">
-              {visibleRooms.length} 间 · {cageRacks.length} 架 ·{" "}
-              {roomSummaries.reduce((total, room) => total + room.slotCount, 0)} 笼位
-            </Tag>
-          }
-        >
-          {visibleRooms.length ? (
-            visibleRooms.map((room) => {
-              const roomRacks = cageRacks.filter((rack) => rack.roomId === room.id);
-              return (
-                <Card key={room.id} className="settings-room-card" size="small" style={{ width: "100%" }}>
-                  <div className="settings-room-content">
-                    <div className="settings-room-header">
-                      <div>
-                        <Typography.Text strong>{room.name}</Typography.Text>
-                        <Typography.Paragraph type="secondary">
-                          {room.area || "未设置区域"} · {facilityLabel(room.facility)} · 房间管理员：
-                          {room.roomManager || "未设置"}
-                        </Typography.Paragraph>
-                      </div>
-                      <Space>
-                        {canManageRooms ? <Button onClick={() => setRoomDraft({ ...room })}>编辑房间</Button> : null}
-                        {canManageRooms && visibleRooms.length > 1 ? (
-                          <Button
-                            danger
-                            type="link"
-                            onClick={() => setDeleteTarget({ kind: "room", id: room.id, label: room.name })}
-                          >
-                            删除
-                          </Button>
-                        ) : null}
-                      </Space>
-                    </div>
-                    <div className="settings-rack-list">
-                      {roomRacks.length ? (
-                        roomRacks.map((rack) => (
-                          <div key={rack.id} className="settings-rack-row">
-                            <div>
-                              <Typography.Text strong>笼架 {rack.index}</Typography.Text>
-                              <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                                {rack.rows} 行 × {rack.cols} 列 ·{" "}
-                                {rackSummaries.find((summary) => summary.rackId === rack.id)?.slotCount ?? 0} 笼位
-                              </Typography.Paragraph>
-                            </div>
-                            <Space>
-                              <Button onClick={() => openRack({ ...rack }, true)}>编辑</Button>
-                              <Button
-                                danger
-                                type="link"
-                                onClick={() =>
-                                  setDeleteTarget({
-                                    kind: "rack",
-                                    id: rack.id,
-                                    label: `${room.name} 笼架 ${rack.index}`,
-                                  })
-                                }
-                              >
-                                删除
-                              </Button>
-                            </Space>
-                          </div>
-                        ))
-                      ) : (
-                        <Typography.Text type="secondary">当前房间尚未创建笼架。</Typography.Text>
-                      )}
-                    </div>
-                    <Button block onClick={() => openRack(newRackDraft(room, cageRacks), false)}>
-                      在此房间新增笼架
-                    </Button>
-                  </div>
-                </Card>
-              );
-            })
-          ) : (
-            <Empty description="当前没有可管理的饲养间。" />
-          )}
-        </Card>
+        <RoomStructureList
+          data={query.data}
+          canManageRooms={canManageRooms}
+          onEditRoom={editRoom}
+          onOpenRack={openRack}
+          onDelete={setDeleteTarget}
+        />
       </div>
       <ModalPresence>
         {roomDraft ? (
@@ -275,3 +205,117 @@ export function RoomsView({ user }: { user: SessionUser }) {
     </section>
   );
 }
+
+const RoomStructureList = memo(function RoomStructureList({
+  data,
+  canManageRooms,
+  onEditRoom,
+  onOpenRack,
+  onDelete,
+}: {
+  data: InfrastructureStructure;
+  canManageRooms: boolean;
+  onEditRoom: (room: CageRoom) => void;
+  onOpenRack: (rack: CageRack, existing: boolean) => void;
+  onDelete: (target: DeleteTarget) => void;
+}) {
+  const { rooms: visibleRooms, racks: cageRacks, roomSummaries, rackSummaries } = data;
+  const racksByRoom = useMemo(() => {
+    const groups = new Map<string, CageRack[]>();
+    for (const rack of cageRacks) {
+      const group = groups.get(rack.roomId);
+      if (group) group.push(rack);
+      else groups.set(rack.roomId, [rack]);
+    }
+    return groups;
+  }, [cageRacks]);
+  const summaryByRack = useMemo(() => {
+    const summaries = new Map<string, InfrastructureStructure["rackSummaries"][number]>();
+    for (const summary of rackSummaries) {
+      // Preserve the previous find() behavior if legacy input repeats a key.
+      if (!summaries.has(summary.rackId)) summaries.set(summary.rackId, summary);
+    }
+    return summaries;
+  }, [rackSummaries]);
+  return (
+    <Card
+      className="settings-rooms-card"
+      extra={
+        <Tag color="processing">
+          {visibleRooms.length} 间 · {cageRacks.length} 架 ·{" "}
+          {roomSummaries.reduce((total, room) => total + room.slotCount, 0)} 笼位
+        </Tag>
+      }
+    >
+      {visibleRooms.length ? (
+        visibleRooms.map((room) => {
+          const roomRacks = racksByRoom.get(room.id) || [];
+          return (
+            <Card key={room.id} className="settings-room-card" size="small" style={{ width: "100%" }}>
+              <div className="settings-room-content">
+                <div className="settings-room-header">
+                  <div>
+                    <Typography.Text strong>{room.name}</Typography.Text>
+                    <Typography.Paragraph type="secondary">
+                      {room.area || "未设置区域"} · {facilityLabel(room.facility)} · 房间管理员：
+                      {room.roomManager || "未设置"}
+                    </Typography.Paragraph>
+                  </div>
+                  <Space>
+                    {canManageRooms ? <Button onClick={() => onEditRoom(room)}>编辑房间</Button> : null}
+                    {canManageRooms && visibleRooms.length > 1 ? (
+                      <Button
+                        danger
+                        type="link"
+                        onClick={() => onDelete({ kind: "room", id: room.id, label: room.name })}
+                      >
+                        删除
+                      </Button>
+                    ) : null}
+                  </Space>
+                </div>
+                <div className="settings-rack-list">
+                  {roomRacks.length ? (
+                    roomRacks.map((rack) => (
+                      <div key={rack.id} className="settings-rack-row">
+                        <div>
+                          <Typography.Text strong>笼架 {rack.index}</Typography.Text>
+                          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                            {rack.rows} 行 × {rack.cols} 列 · {summaryByRack.get(rack.id)?.slotCount ?? 0} 笼位
+                          </Typography.Paragraph>
+                        </div>
+                        <Space>
+                          <Button onClick={() => onOpenRack({ ...rack }, true)}>编辑</Button>
+                          <Button
+                            danger
+                            type="link"
+                            onClick={() =>
+                              onDelete({
+                                kind: "rack",
+                                id: rack.id,
+                                label: `${room.name} 笼架 ${rack.index}`,
+                              })
+                            }
+                          >
+                            删除
+                          </Button>
+                        </Space>
+                      </div>
+                    ))
+                  ) : (
+                    <Typography.Text type="secondary">当前房间尚未创建笼架。</Typography.Text>
+                  )}
+                </div>
+                <Button block onClick={() => onOpenRack(newRackDraft(room, cageRacks), false)}>
+                  在此房间新增笼架
+                </Button>
+              </div>
+            </Card>
+          );
+        })
+      ) : (
+        <Empty description="当前没有可管理的饲养间。" />
+      )}
+    </Card>
+  );
+});

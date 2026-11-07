@@ -45,44 +45,65 @@ def backfill_billing_candidate_snapshot_iacucs(conn):
         )
 
 
+# Match Python str.strip used by clean_text, including old non-ASCII whitespace.
+_STAFF_WHITESPACE = "".join(
+    chr(code)
+    for code in [*range(9, 14), *range(28, 33), 133, 160, 5760, *range(8192, 8203), 8232, 8233, 8239, 8287, 12288]
+)
+
+
+def _staff_scope(conn, column, keys):
+    encoded = json.dumps(sorted(keys))
+    # A normalized identifier without spaces cannot contain inner whitespace.
+    # Legacy identifiers with spaces also need clean_text's inner folding.
+    if any(" " in key for key in keys):
+        conn.create_function("cageledger_staff_text", 1, clean_text, deterministic=True)
+        return f"cageledger_staff_text({column}) IN (SELECT value FROM json_each(?))", (encoded,)
+    return f"trim(COALESCE({column},''),?) IN (SELECT value FROM json_each(?))", (_STAFF_WHITESPACE, encoded)
+
+
 def backfill_quantity_sheet_staff(conn, room_ids=None):
     ensure_animal_inspection_finding_location_schema(conn)
     room_filter = {clean_text(item) for item in (room_ids or []) if clean_text(item)}
-    room_rows = conn.execute("SELECT id, name, payload FROM rooms ORDER BY rowid").fetchall()
-    rooms_by_id = {}
-    rooms_by_name = {}
-    for row in room_rows:
-        payload = json.loads(row["payload"])
-        room_manager = clean_text(payload.get("roomManager", ""))
-        room_id = clean_text(row["id"])
-        room_name = clean_text(row["name"])
-        rooms_by_id[room_id] = room_manager
-        if room_name and room_name not in rooms_by_name:
-            rooms_by_name[room_name] = room_manager
-
-    audit_actor_by_sheet = {}
-    audit_rows = conn.execute(
-        """
-        SELECT entity_id, actor_display_name
-        FROM audit_events
-        WHERE entity_type = 'quantity_sheet' AND COALESCE(actor_display_name, '') <> ''
-        ORDER BY at DESC, rowid DESC
-        """
-    ).fetchall()
-    for row in audit_rows:
-        sheet_id = clean_text(row["entity_id"])
-        if sheet_id and sheet_id not in audit_actor_by_sheet:
-            audit_actor_by_sheet[sheet_id] = clean_text(row["actor_display_name"])
-
+    clause, values = _staff_scope(conn, "room_id", room_filter) if room_filter else ("", ())
+    where = " WHERE " + clause if clause else ""
     rows = conn.execute(
-        "SELECT id, room_id, room_name, manager, payload FROM quantity_sheets ORDER BY rowid"
+        "SELECT id, room_id, room_name, manager, payload FROM quantity_sheets" + where + " ORDER BY rowid", values
     ).fetchall()
+    if not rows:
+        return 0
+    entries = [(row, json.loads(row["payload"])) for row in rows]
+    rooms_by_id, rooms_by_name = {}, {}
+    if any(not clean_text(item.get("roomManager", "")) for _, item in entries):
+        for row in conn.execute("SELECT id, name, payload FROM rooms ORDER BY rowid"):
+            payload = json.loads(row["payload"])
+            room_manager = clean_text(payload.get("roomManager", ""))
+            room_id, room_name = clean_text(row["id"]), clean_text(row["name"])
+            rooms_by_id[room_id] = room_manager
+            if room_name and room_name not in rooms_by_name:
+                rooms_by_name[room_name] = room_manager
+
+    missing = {
+        clean_text(row["id"]) for row, item in entries if not clean_text(item.get("manager", "") or row["manager"])
+    }
+    audit_actor_by_sheet = {}
+    if missing:
+        clause, values = _staff_scope(conn, "entity_id", missing)
+        for row in conn.execute(
+            """SELECT entity_id, actor_display_name FROM audit_events
+            WHERE entity_type = 'quantity_sheet' AND COALESCE(actor_display_name, '') <> ''
+            AND """
+            + clause
+            + " ORDER BY at DESC, rowid DESC",
+            values,
+        ):
+            sheet_id = clean_text(row["entity_id"])
+            if sheet_id and sheet_id not in audit_actor_by_sheet:
+                audit_actor_by_sheet[sheet_id] = clean_text(row["actor_display_name"])
+
     updated = 0
-    for row in rows:
+    for row, payload in entries:
         room_id = clean_text(row["room_id"])
-        if room_filter and room_id not in room_filter:
-            continue
-        payload = json.loads(row["payload"])
         registration_staff = clean_text(payload.get("manager", "") or row["manager"])
         if not registration_staff:
             registration_staff = audit_actor_by_sheet.get(clean_text(row["id"]), "")

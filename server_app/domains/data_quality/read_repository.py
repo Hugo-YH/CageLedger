@@ -1,7 +1,9 @@
 """Read archived manifests and individual observations without running detectors."""
 
+import hashlib
 import json
 
+from .archive_cache import REPORTS, Archive
 from .repository import digest
 
 
@@ -29,7 +31,32 @@ def scan(conn, identity):
     return manifest(row)
 
 
-def manifest(row):
+def fingerprint(row):
+    checksum = hashlib.sha256()
+    for key in (
+        "id",
+        "detector_version",
+        "source_sha256",
+        "latest_business_at",
+        "scanned_at",
+        "finding_count",
+        "payload",
+    ):
+        value = row[key]
+        tag = type(value).__name__.encode()
+        checksum.update(len(tag).to_bytes(4, "big"))
+        checksum.update(tag)
+        encoded = value if isinstance(value, bytes) else str(value).encode()
+        checksum.update(len(encoded).to_bytes(8, "big"))
+        checksum.update(encoded)
+    return checksum.digest()
+
+
+def manifest(row, *, remember=True):
+    key = fingerprint(row)
+    cached = REPORTS.get(key)
+    if cached is not None:
+        return cached
     try:
         value = json.loads(row["payload"])
         findings = value["findings"]
@@ -50,7 +77,12 @@ def manifest(row):
                 for key in ("id", "code", "entityType", "entityId", "referenceId", "summary")
             ):
                 raise ValueError("invalid finding")
-        return value
+        archive = Archive(value, key)
+        # Conservative estimate includes parsed objects and bounded sort/filter
+        # reference arrays. Large inputs remain readable without being cached.
+        raw = row["payload"]
+        size = len(raw if isinstance(raw, bytes) else raw.encode())
+        return REPORTS.put(key, archive, size * 8) if remember else archive
     except (ValueError, TypeError, KeyError) as exc:
         raise ArchiveIntegrityError("核查留档清单校验失败，无法展示") from exc
 

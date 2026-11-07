@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Collapse, Descriptions, Empty, Tag, Typography } from "antd";
 import { useDataQualityIssue } from "../../../api/dataQuality";
 import { formatDateTime, ModalShell, PageSkeleton, PageState } from "../../../components/WorkspaceUi";
@@ -19,41 +20,52 @@ const labels: Record<string, string> = {
   payloadText: "历史应收快照",
   confirmedAllocations: "已确认核销条数",
 };
-function evidenceText(value: unknown): string {
+function evidenceContent(value: unknown) {
+  let parsed = value;
   if (typeof value === "string") {
     try {
-      return JSON.stringify(JSON.parse(value), null, 2);
+      parsed = JSON.parse(value) as unknown;
     } catch {
-      return value;
+      return { text: value, fields: [] };
     }
   }
-  return JSON.stringify(value, null, 2) ?? "";
+  const fields: Record<string, string> = {
+    id: "记录编号",
+    iacuc: "IACUC",
+    project: "项目",
+    pi: "项目负责人",
+    batchNo: "批次号",
+    roomName: "房间",
+    sourceBatchId: "来源批次",
+    sourceReceiptId: "来源接收明细",
+    month: "月份",
+  };
+  const record =
+    typeof value === "string" && parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  return {
+    text: JSON.stringify(parsed, null, 2) ?? "",
+    fields: record
+      ? Object.entries(fields).flatMap(([key, label]) => {
+          const item = record[key];
+          return typeof item === "string" || typeof item === "number" ? [{ key, label, children: String(item) }] : [];
+        })
+      : [],
+  };
 }
 
-function snapshotFields(value: unknown) {
-  if (typeof value !== "string") return [];
-  try {
-    const record: unknown = JSON.parse(value);
-    if (!record || typeof record !== "object" || Array.isArray(record)) return [];
-    const fields: Record<string, string> = {
-      id: "记录编号",
-      iacuc: "IACUC",
-      project: "项目",
-      pi: "项目负责人",
-      batchNo: "批次号",
-      roomName: "房间",
-      sourceBatchId: "来源批次",
-      sourceReceiptId: "来源接收明细",
-      month: "月份",
-    };
-    return Object.entries(fields).flatMap(([key, label]) => {
-      const item: unknown = (record as Record<string, unknown>)[key];
-      return typeof item === "string" || typeof item === "number" ? [{ key, label, children: String(item) }] : [];
-    });
-  } catch {
-    return [];
-  }
-}
+// Collapse mounts this subtree only when opened; constructing its items does
+// not parse or pretty-print closed snapshots. Unchanged values reuse the model.
+const EvidenceContent = memo(function EvidenceContent({ value }: { value: unknown }) {
+  const content = useMemo(() => evidenceContent(value), [value]);
+  return (
+    <>
+      {content.fields.length ? <Descriptions column={1} size="small" items={content.fields} /> : null}
+      <pre className="data-quality-evidence">{content.text}</pre>
+    </>
+  );
+});
 
 export function DataQualityDetail({
   selection,
@@ -64,7 +76,7 @@ export function DataQualityDetail({
 }) {
   const query = useDataQualityIssue(selection.scanId, selection.issueId);
   const detail = query.data;
-  const entries =
+  const entries: Array<readonly [string, unknown]> =
     detail?.evidence && typeof detail.evidence === "object" && !Array.isArray(detail.evidence)
       ? Object.entries(detail.evidence)
       : detail
@@ -119,14 +131,7 @@ export function DataQualityDetail({
                 items={entries.map(([key, value]) => ({
                   key,
                   label: labels[key] || key,
-                  children: (
-                    <>
-                      {snapshotFields(value).length ? (
-                        <Descriptions column={1} size="small" items={snapshotFields(value)} />
-                      ) : null}
-                      <pre className="data-quality-evidence">{evidenceText(value)}</pre>
-                    </>
-                  ),
+                  children: <EvidenceContent value={value} />,
                 }))}
               />
             ) : (

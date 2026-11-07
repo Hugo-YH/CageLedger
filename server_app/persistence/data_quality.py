@@ -55,5 +55,8 @@ def ensure_schema(conn):
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_data_quality_entity ON data_quality_issues(entity_type,entity_id)")
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_data_quality_scans_time ON data_quality_scans(scanned_at DESC,id DESC)"
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_data_quality_review ON data_quality_issues(review_status,code,last_seen_at)"
     )

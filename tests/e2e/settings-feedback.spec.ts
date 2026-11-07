@@ -88,3 +88,44 @@ test("infrastructure save and delete failures stay in the open dialog", async ({
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await expect(rack).toBeVisible();
 });
+
+test("room edits and rack expansion persist through the real settings forms without replacing existing slots", async ({
+  page,
+}) => {
+  const name = `设置保存 ${crypto.randomUUID()}`;
+  const id = crypto.randomUUID();
+  const created = await page.request.post("/api/rooms", { data: { item: { id, name, facility: "zhujiang" } } });
+  expect(created.status()).toBe(201);
+  await openSettingsView(page, "房间管理");
+  const card = page.locator(".settings-room-card").filter({ hasText: name });
+  await card.getByRole("button", { name: "编辑房间", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("饲养间名称", { exact: true }).fill(name + " 已编辑");
+  await dialog.getByRole("button", { name: "保存饲养间", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(card).toContainText(name + " 已编辑");
+  await card.getByRole("button", { name: "在此房间新增笼架", exact: true }).click();
+  await dialog.getByLabel("行数", { exact: true }).fill("1");
+  await dialog.getByLabel("列数", { exact: true }).fill("2");
+  await dialog.getByRole("button", { name: "保存笼架", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const structure = await page.request.get("/api/infrastructure/structure");
+  const rack = ((await structure.json()) as { racks: Array<{ id: string; roomId: string }> }).racks.find(
+    (item) => item.roomId === id,
+  );
+  expect(rack).toBeTruthy();
+  const readSlots = async () => {
+    const response = await page.request.get(`/api/infrastructure/racks/${rack!.id}/slots`);
+    expect(response.ok()).toBeTruthy();
+    return ((await response.json()) as { items: Array<{ id: string }> }).items.map((slot) => slot.id);
+  };
+  const original = await readSlots();
+  expect(original).toHaveLength(2);
+  await card.locator(".settings-rack-row").getByRole("button", { name: "编辑", exact: true }).click();
+  await dialog.getByLabel("列数", { exact: true }).fill("3");
+  await dialog.getByRole("button", { name: "保存笼架", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const expanded = await readSlots();
+  expect(expanded).toHaveLength(3);
+  expect(expanded).toEqual(expect.arrayContaining(original));
+});

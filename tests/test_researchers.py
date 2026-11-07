@@ -276,8 +276,8 @@ class ResearcherConcurrencyTests(unittest.TestCase):
             first_read, release, second_begin, second_read = (threading.Event() for _ in range(4))
             original = repo.by_account
 
-            def observed(conn):
-                value = original(conn)
+            def observed(conn, accounts=None):
+                value = original(conn, accounts)
                 if threading.current_thread().name == "first":
                     first_read.set()
                     if not release.wait(5):
