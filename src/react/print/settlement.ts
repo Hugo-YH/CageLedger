@@ -184,6 +184,7 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
             pageHasTier,
             true,
             mouseTotals.amount >= 100,
+            "summary-subtotal",
           )
         : "";
       return `<main class="document document-page${pageIndex < totalPages - 1 ? " document-page-break" : ""}"><section class="header"><div class="header-grid"><div class="header-main"><h1>${title}</h1><div class="meta"><div>单据编号：${escapeHtml(documentNumber)}</div><div>结算月份：${escapeHtml(statement.month)}</div><div>项目负责人：${escapeHtml(statement.pi)}</div></div></div></div></section>

@@ -117,6 +117,7 @@ def settlement_page_markup(
             page_has_tier,
             True,
             mouse_total_payable >= 100,
+            class_name="summary-subtotal",
         )
         if page["leading"]
         else ""
@@ -179,7 +180,7 @@ def group_headers(count_label, show_free, show_tier, needs_wide_amount=False):
     )
 
 
-def group_cells(summary, show_free, show_tier, show_amount, needs_wide_amount=False):
+def group_cells(summary, show_free, show_tier, show_amount, needs_wide_amount=False, *, class_name=""):
     has_count = as_number(summary.get("count")) > 0 or bool(summary.get("hasRecord"))
 
     def text_value(key):
@@ -196,9 +197,10 @@ def group_cells(summary, show_free, show_tier, show_amount, needs_wide_amount=Fa
     if show_amount:
         has_value = has_count or any(as_number(summary.get(key)) > 0 for key in ("count", "free", "tier", "amount"))
         cells.append(("money", f"{as_number(summary.get('amount')):.2f}" if has_value else ""))
+    extra_class = f" {class_name}" if class_name else ""
     return "".join(
-        f'<td colspan="{span}" class="{class_name}{"" if value else " group-empty-cell"}">{value}</td>'
-        for (class_name, value), span in zip(
+        f'<td colspan="{span}" class="{cell_class}{extra_class}{"" if value else " group-empty-cell"}">{value}</td>'
+        for (cell_class, value), span in zip(
             cells, group_field_spans(show_free, show_tier, needs_wide_amount), strict=False
         )
     )

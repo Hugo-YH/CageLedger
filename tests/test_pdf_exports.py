@@ -2,6 +2,7 @@ import io
 import json
 import unittest
 import zipfile
+from html.parser import HTMLParser
 from pathlib import Path
 
 from pypdf import PdfReader
@@ -14,6 +15,38 @@ from server_app.pdf import (
     render_quantity_sheet_pdf,
 )
 from server_app.pdf.documents import billing_statement_html, quantity_sheet_html
+
+
+class SettlementFooterParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self.body_classes = []
+        self.section = ""
+        self.cell = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"tbody", "tfoot"}:
+            self.section = tag
+        elif tag == "tr" and self.section == "tfoot":
+            self.rows.append([])
+        elif tag == "td":
+            classes = set(dict(attrs).get("class", "").split())
+            if self.section == "tfoot":
+                self.cell = {"classes": classes, "text": ""}
+                self.rows[-1].append(self.cell)
+            elif self.section == "tbody":
+                self.body_classes.append(classes)
+
+    def handle_endtag(self, tag):
+        if tag in {"tbody", "tfoot"}:
+            self.section = ""
+        elif tag == "td":
+            self.cell = None
+
+    def handle_data(self, data):
+        if self.cell is not None:
+            self.cell["text"] += data
 
 
 class PdfExportTests(unittest.TestCase):
@@ -35,6 +68,30 @@ class PdfExportTests(unittest.TestCase):
             "第1页 共1页",
         ):
             self.assertIn(expected, html)
+
+        footer = SettlementFooterParser()
+        footer.feed(html)
+        self.assertEqual(len(footer.rows), 2)
+        subtotal, monthly = footer.rows
+        self.assertEqual(subtotal[0], {"classes": {"row-label"}, "text": "单项合计"})
+        summary = [cell for cell in subtotal if "summary-subtotal" in cell["classes"]]
+        self.assertEqual([cell["text"] for cell in summary], ["20", "10", "45.00"])
+        iacucs = [
+            cell
+            for cell in subtotal[1:]
+            if "summary-subtotal" not in cell["classes"] and "group-empty-cell" not in cell["classes"]
+        ]
+        self.assertEqual([cell["text"] for cell in iacucs], ["20", "10", "45.00", "3", "45.00"])
+        self.assertTrue(all(cell["classes"] in ({"num"}, {"money"}) for cell in iacucs))
+        self.assertEqual(monthly[0]["classes"], {"row-label", "row-label-summary"})
+        self.assertEqual(monthly[0]["text"], "本月待缴纳饲养费总计（元）")
+        self.assertEqual(monthly[1], {"classes": {"money", "summary-total-money"}, "text": "90.00"})
+        details = [cell for cell in monthly if cell["classes"] == {"meta-summary"}]
+        self.assertEqual(
+            [cell["text"] for cell in details],
+            ["单位支持：45.00实际待缴纳：45.00", "单位支持：0.00实际待缴纳：45.00"],
+        )
+        self.assertTrue(all("summary-subtotal" not in classes for classes in footer.body_classes))
 
     def test_quantity_pdf_keeps_calendar_balances_and_blank_handlers(self):
         sheet = {

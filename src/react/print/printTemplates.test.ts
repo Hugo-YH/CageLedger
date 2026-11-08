@@ -19,6 +19,38 @@ describe("print templates", () => {
     ].forEach((expected) => expect(html).toContain(expected));
   });
 
+  it("emphasizes combined totals while keeping each ethics group's footer values regular", () => {
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    try {
+      const output = frame.contentDocument!;
+      output.open();
+      output.write(settlementStatementHtml(settlementParityFixture as BillingStatementResponse, false));
+      output.close();
+      const weight = (element: Element) => frame.contentWindow!.getComputedStyle(element).fontWeight;
+      const totals = output.querySelector<HTMLTableSectionElement>(".summary-table tfoot")!;
+      const combined = Array.from(totals.rows[0].querySelectorAll(".summary-subtotal"));
+      expect(combined.map((cell) => cell.textContent)).toEqual(["20", "10", "45.00"]);
+      expect(combined.map(weight)).toEqual(["700", "700", "700"]);
+      expect(weight(totals.rows[0].cells[0])).toBe("700");
+      const individual = Array.from(totals.rows[0].cells)
+        .slice(1)
+        .filter((cell) => !combined.includes(cell));
+      expect(individual.some((cell) => cell.textContent === "45.00")).toBe(true);
+      expect(individual.every((cell) => weight(cell) === "400")).toBe(true);
+      const monthly = totals.rows[1];
+      expect(weight(monthly.querySelector(".row-label-summary")!)).toBe("700");
+      expect(monthly.querySelector(".summary-total-money")).toHaveTextContent("90.00");
+      expect(weight(monthly.querySelector(".summary-total-money")!)).toBe("800");
+      const details = Array.from(monthly.querySelectorAll(".meta-summary"));
+      expect(details[0]).toHaveTextContent("单位支持：45.00实际待缴纳：45.00");
+      expect(details.every((cell) => weight(cell) === "400")).toBe(true);
+      expect(output.querySelector(".summary-table tbody .summary-subtotal")).toBeNull();
+    } finally {
+      frame.remove();
+    }
+  });
+
   it("renders settlement columns by iacuc and species with explicit zero amounts", () => {
     const result = {
       statement: {

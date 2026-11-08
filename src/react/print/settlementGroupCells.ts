@@ -27,6 +27,7 @@ export function renderGroupCells(
   showTiered: boolean,
   showAmount: boolean,
   needsWideAmount = false,
+  className = "",
 ) {
   const hasValue =
     summary.hasRecord || summary.count > 0 || summary.free > 0 || summary.tier2Billable > 0 || summary.amount > 0;
@@ -42,7 +43,12 @@ export function renderGroupCells(
     ...(showTiered ? [{ className: "num", value: tierValue }] : []),
     ...(showAmount ? [{ className: "money", value: hasValue ? money(summary.amount) : "" }] : []),
   ];
-  return renderGroupedValueCells(cells, showFree, showTiered, needsWideAmount);
+  return renderGroupedValueCells(
+    className ? cells.map((cell) => ({ ...cell, className: `${cell.className} ${className}` })) : cells,
+    showFree,
+    showTiered,
+    needsWideAmount,
+  );
 }
 
 function renderGroupedHeaderCells(labels: string[], showFree: boolean, showTiered: boolean, needsWideAmount: boolean) {
