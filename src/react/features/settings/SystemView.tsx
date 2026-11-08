@@ -1,4 +1,5 @@
 import { ActionIcon } from "../../components/ui/ActionIcon";
+import { PerformanceStagesCard } from "./components/PerformanceStagesCard";
 import {
   ApiOutlined,
   BgColorsOutlined,
@@ -290,6 +291,7 @@ function RuntimeDashboard({
         <PdfCard performance={performance} />
       </div>
       <RequestBreakdownCard performance={performance} />
+      <PerformanceStagesCard performance={performance} />
       <PerformanceHistoryCard history={performanceHistory} />
     </section>
   );

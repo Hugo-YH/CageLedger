@@ -5,6 +5,7 @@ import unicodedata
 from http import HTTPStatus
 from urllib.parse import quote, urlparse
 
+from server_app.performance import record_stage
 from server_app.web.origin import cors_response_origin
 
 
@@ -29,11 +30,15 @@ def add_default_headers(handler):
 
 
 def send_json(handler, payload, status=HTTPStatus.OK, extra_headers=None):
+    started = time.perf_counter()
     body = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    record_stage("response.encode", (time.perf_counter() - started) * 1000, size_bytes=len(body))
     accepts_gzip = "gzip" in handler.headers.get("Accept-Encoding", "").lower()
     compressed = accepts_gzip and len(body) >= 1024
     if compressed:
+        started = time.perf_counter()
         body = gzip.compress(body, compresslevel=5)
+        record_stage("response.compress", (time.perf_counter() - started) * 1000, size_bytes=len(body))
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))

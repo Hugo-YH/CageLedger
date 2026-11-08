@@ -1,13 +1,18 @@
+import sqlite3
 import unittest
+from contextlib import closing
 
+from server_app.db import ObservedConnection
 from server_app.performance import (
     performance_snapshot,
     record_cache,
     record_database_operation,
     record_request,
+    record_stage,
     request_observability,
     reset_performance_metrics,
 )
+from server_app.repositories.application_context import applications_for_iacucs
 
 
 class PerformanceMetricsTests(unittest.TestCase):
@@ -67,6 +72,52 @@ class PerformanceMetricsTests(unittest.TestCase):
         self.assertEqual(request_observability("/api/users/alice@example.test"), ("api", "/api/users"))
         self.assertEqual(request_observability("/api/public/cage-card/private-qr"), ("api", "/api/public/cage-card"))
         self.assertEqual(request_observability("/assets/index-secret.js"), ("static", "/assets"))
+
+    def test_stages_are_bounded_and_do_not_accept_business_keys(self):
+        for _ in range(600):
+            record_stage("payload.decode", 2, rows=3, size_bytes=4)
+        record_stage("patient@example.invalid", 9000)
+        stages = performance_snapshot()["stages"]
+        self.assertEqual(list(stages), ["payload.decode"])
+        self.assertEqual(
+            stages["payload.decode"],
+            {
+                "operations": 600,
+                "rows": 1800,
+                "bytes": 2400,
+                "sampleCount": 512,
+                "p50Ms": 2.0,
+                "p95Ms": 2.0,
+                "maxMs": 2.0,
+            },
+        )
+
+    def test_fetchall_iteration_and_explicit_cursor_report_rows_separately(self):
+        with closing(sqlite3.connect(":memory:", factory=ObservedConnection)) as conn:
+            conn.execute("CREATE TABLE sample(id INTEGER)")
+            conn.executemany("INSERT INTO sample VALUES (?)", [(i,) for i in range(300)])
+            conn.commit()
+            reset_performance_metrics()
+            self.assertEqual(len(conn.execute("SELECT id FROM sample").fetchall()), 300)
+            self.assertEqual(len(list(conn.execute("SELECT id FROM sample"))), 300)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM sample")
+            self.assertEqual(len(cursor.fetchmany(size=5)), 5)
+            self.assertEqual(cursor.fetchone(), (5,))
+            cursor.close()
+            snapshot = performance_snapshot()
+        self.assertEqual(snapshot["database"]["operations"], 3)
+        self.assertEqual(snapshot["stages"]["database.fetch"]["rows"], 606)
+
+    def test_target_projection_flushes_fetch_tail_when_it_stops_before_exhaustion(self):
+        with closing(sqlite3.connect(":memory:", factory=ObservedConnection)) as conn:
+            conn.execute("CREATE TABLE experiment_applications(payload TEXT)")
+            conn.executemany(
+                "INSERT INTO experiment_applications VALUES (?)", [('{"iacuc":"Z1"}',), ('{"iacuc":"Z2"}',)]
+            )
+            reset_performance_metrics()
+            self.assertEqual(applications_for_iacucs(conn, ["Z1"]), {"Z1": {"iacuc": "Z1"}})
+            self.assertEqual(performance_snapshot()["stages"]["database.fetch"]["rows"], 2)
 
 
 if __name__ == "__main__":

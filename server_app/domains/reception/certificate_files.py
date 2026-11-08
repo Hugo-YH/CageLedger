@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory, TemporaryFile
 from threading import BoundedSemaphore
 
 from server_app.config import RECEPTION_CERTIFICATE_FILES_PATH, RECEPTION_PDFINFO_BIN, RECEPTION_PDFTOPPM_BIN
+from server_app.heavy_work import DOCUMENT_WORK, HeavyWorkBusy
 from server_app.runtime_logging import log_stage
 
 MAX_FILE_BYTES = 30 * 1024 * 1024
@@ -41,6 +42,14 @@ def prepare(name, content):
     name = filename(name)
     if not name.lower().endswith(".pdf") or not content.startswith(b"%PDF-"):
         raise ValueError("请上传有效的PDF合格证原件")
+    try:
+        with DOCUMENT_WORK.slot():
+            return _prepare_with_slot(name, content)
+    except HeavyWorkBusy as exc:
+        raise CertificateUnavailableError(str(exc)) from exc
+
+
+def _prepare_with_slot(name, content):
     if not _RENDER_SLOTS.acquire(blocking=False):
         raise CertificateUnavailableError("合格证PDF处理繁忙，请稍后重试")
     try:
@@ -108,6 +117,16 @@ def prepare(name, content):
 
 @contextmanager
 def rendering():
+    try:
+        with DOCUMENT_WORK.slot():
+            with _rendering_with_slot():
+                yield
+    except HeavyWorkBusy as exc:
+        raise CertificateUnavailableError(str(exc)) from exc
+
+
+@contextmanager
+def _rendering_with_slot():
     if not _RENDER_SLOTS.acquire(blocking=False):
         raise CertificateUnavailableError("合格证PDF处理繁忙，请稍后重试")
     try:

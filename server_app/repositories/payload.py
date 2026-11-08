@@ -2,6 +2,7 @@ import json
 import time
 
 from server_app.cache import cache_generation, cache_get, cache_key, cache_set, log_perf
+from server_app.performance import record_stage
 
 from .audit_storage import payloads_for_rows
 
@@ -23,6 +24,7 @@ def read_payloads(conn, table, order_by):
     log_perf("state.read.query", started, component=table, rows=len(rows))
     started = time.perf_counter()
     result = [json.loads(row["payload"]) for row in rows]
+    record_stage("payload.decode", (time.perf_counter() - started) * 1000, rows=len(result))
     log_perf("state.read.decode", started, component=table, rows=len(rows))
     return result
 
@@ -43,6 +45,7 @@ def paginated_payloads(conn, table, order_by, where_sql="", params=(), limit=200
     else:
         payloads = [row["payload"] for row in rows]
     items = [json.loads(payload) for payload in payloads]
+    record_stage("payload.decode", (time.perf_counter() - started) * 1000, rows=len(items))
     log_perf("list.read.decode", started, component=table, rows=len(items))
     return {
         "items": items,

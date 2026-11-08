@@ -57,6 +57,8 @@ graph TD
 
 ## 服务端数据与本地状态
 
+共享缓存、目标读模型、写后刷新、页面渲染与文档资源预算见[共享性能约定](shared-performance.md)。投影与批量读取位于repository，保持原payload和历史匹配语义；转换执行预算位于 `server_app/heavy_work.py`。
+
 - SQLite 是笼卡、笼位、统计表、结算和报销数据的 source of truth。
 - TanStack Query 管理服务端状态、分页缓存和请求生命周期。
 - `src/react/state/` 管理当前页面与导航显示偏好。

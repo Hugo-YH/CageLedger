@@ -45,6 +45,9 @@ def decode_summary(value):
 def page(conn, filters, where, params, order):
     database = next((row[2] for row in conn.execute("PRAGMA database_list") if row[1] == "main"), "")
     key = cache_key("intake_batches::summary", database=database, filters=filters)
+    cached = cache_get(key, connection=conn) if database else None
+    if cached is not None:
+        return cached
     with cache_build_lock(key, conn):
         return _page(conn, filters, where, params, order, database, key)
 

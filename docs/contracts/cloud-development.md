@@ -25,6 +25,8 @@ node scripts/run_python.mjs scripts/gitea_git.py fetch gitea
 
 Gitea 是日常代码上游，GitHub `origin` 仅保留为平台导入入口。新任务开始先 fetch 并比较 `gitea/<当前分支>` 与 HEAD；工作区干净且仅落后时可 `git merge --ff-only gitea/<当前分支>`。有本地修改、分叉或未知引用时先分析并保留现场，不重置、不盲目覆盖未跟踪文件。
 
+云端每轮修改完成、相关验证通过后，立即提交并推送到 Gitea 对应开发分支，避免未推送代码仅保存在云端磁盘；这是用户已授权的日常备份步骤。按本轮实际影响选择验证，不因提交和推送升级为全量测试或构建。推送前 fetch 并核对待推送提交，不强推、不夹带他人改动；推送失败保留本地提交并明确说明原因。该约定不自动授权构建、标签、Release、Packages、latest 或生产部署。
+
 网络密钥 `CAGELEDGER_GITEA_TOKEN` 在环境设置中绑定 `git.cellnucle.us`。包装器仅为子进程追加 HTTPS 主机限定认证头，保留平台已有 Git 认证和代理，不将值写进文件或命令参数。不要把占位符编码成 Basic 凭据、写入 credential store 或用于 HTTP 地址。推送需任务授权，推送前核对远端状态与待推送提交，不强推。
 
 ## 工具与依赖

@@ -14,6 +14,7 @@ from queue import Empty, PriorityQueue
 from threading import Event, Lock, Thread, current_thread
 
 from server_app.config import PDF_RENDER_MAX_PENDING
+from server_app.heavy_work import DOCUMENT_WORK
 from server_app.runtime_logging import capture_log_context, emit_event, log_context, log_operation
 
 RENDER_TIMEOUT_SECONDS = 120
@@ -32,6 +33,7 @@ class RenderJob:
     completed: Event
     result: bytes | None = None
     error: Exception | None = None
+    queued_at: float = field(default_factory=time.monotonic)
     cancelled: bool = False
     log_fields: dict = field(default_factory=capture_log_context)
 
@@ -164,19 +166,28 @@ class PersistentChromiumRenderer:
                                 continue
                             with self._lock:
                                 self._active = True
-                            if browser is None:
-                                browser = playwright.chromium.launch(
-                                    executable_path=required_chromium_binary(),
-                                    headless=True,
-                                    args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--no-first-run"],
-                                )
-                                page = browser.new_page()
-                                page.emulate_media(media="print")
-                            if job.markup is not None:
-                                page.set_content(job.markup, wait_until="load")
-                                page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
-                                job.result = page.pdf(print_background=True, prefer_css_page_size=True)
-                                self._record_render(time.perf_counter() - started_at)
+                            remaining = max(RENDER_TIMEOUT_SECONDS - (time.monotonic() - job.queued_at), 0)
+                            with DOCUMENT_WORK.slot(timeout=remaining):
+                                if job.cancelled:
+                                    continue
+                                if browser is None:
+                                    browser = playwright.chromium.launch(
+                                        executable_path=required_chromium_binary(),
+                                        headless=True,
+                                        args=[
+                                            "--no-sandbox",
+                                            "--disable-gpu",
+                                            "--disable-dev-shm-usage",
+                                            "--no-first-run",
+                                        ],
+                                    )
+                                    page = browser.new_page()
+                                    page.emulate_media(media="print")
+                                if job.markup is not None:
+                                    page.set_content(job.markup, wait_until="load")
+                                    page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
+                                    job.result = page.pdf(print_background=True, prefer_css_page_size=True)
+                                    self._record_render(time.perf_counter() - started_at)
                         except Exception as exc:  # Browser recovery belongs to the next queued job.
                             with log_context(**job.log_fields):
                                 emit_event("pdf_browser_failed", level=logging.WARNING, error=exc, rate_limit=True)
@@ -268,6 +279,11 @@ def required_chromium_binary():
 
 def command_line_render(markup):
     """Keep source-only installations usable before Playwright is installed."""
+    with DOCUMENT_WORK.slot(timeout=RENDER_TIMEOUT_SECONDS):
+        return _command_line_render(markup)
+
+
+def _command_line_render(markup):
     chromium = required_chromium_binary()
     with tempfile.TemporaryDirectory(prefix="cageledger-pdf-") as directory:
         source = Path(directory) / "document.html"
@@ -331,16 +347,17 @@ def playwright_render(source, output):
     script = Path(__file__).with_name("playwright_renderer.mjs")
     if not script.exists() or not shutil.which("node"):
         return
-    try:
-        subprocess.run(
-            ["node", str(script), str(source), str(output)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=RENDER_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return
+    with DOCUMENT_WORK.slot(timeout=RENDER_TIMEOUT_SECONDS):
+        try:
+            subprocess.run(
+                ["node", str(script), str(source), str(output)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=RENDER_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return
 
 
 def _latency_summary(samples):

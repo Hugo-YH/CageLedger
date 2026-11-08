@@ -23,7 +23,7 @@ import {
   TeamOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Tooltip, Typography, type MenuProps } from "antd";
-import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from "react";
+import { lazy, memo, Suspense, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import type { SessionUser } from "../../api/contracts";
 import { useSystemInfo } from "../../api/administration";
@@ -45,6 +45,7 @@ import {
 import { setDiagnosticPage } from "../../diagnostics/collector";
 import { SyringeOutlined } from "../../components/ui/SyringeOutlined";
 import { ReleaseAnnouncementGate } from "./ReleaseAnnouncementGate";
+import { isViewVisible } from "../../state/workspaceViews";
 
 const QuarantineView = lazy(() =>
   import("../quarantine/QuarantineView").then((module) => ({ default: module.QuarantineView })),
@@ -161,7 +162,8 @@ function WorkspaceInitialView({ user }: { user: SessionUser }) {
 }
 
 function Workspace({ user }: { user: SessionUser }) {
-  const visible = useViewVisibility();
+  const featureVisibility = useContext(SystemFeatureVisibilityContext);
+  const visible = useCallback((view: WorkspaceView) => isViewVisible(view, featureVisibility), [featureVisibility]);
   const ui = useUiState();
   useEffect(() => setDiagnosticPage(ui.activeView), [ui.activeView]);
   const saveScroll = useSaveWorkspaceScroll();
@@ -191,24 +193,25 @@ function Workspace({ user }: { user: SessionUser }) {
     ["logs", "操作日志", "book"],
   ];
 
-  function navigate(view: WorkspaceView) {
-    void guardedNavigate(view);
-  }
-  async function guardedNavigate(view: WorkspaceView) {
-    if (!visible(view)) return;
-    if (view === ui.activeView) {
+  const guardedNavigate = useCallback(
+    async (view: WorkspaceView) => {
+      if (!visible(view)) return;
+      if (view === ui.activeView) {
+        setMobileNavigationOpen(false);
+        return;
+      }
+      if (navigationGuard.current && !(await navigationGuard.current())) return;
+      saveScroll(ui.activeView);
+      if (view !== "feedback") setLastWorkView(view);
+      if (view === "dashboard") preloadDashboard();
+      persistWorkspaceView(view);
+      dispatch({ type: "navigate", view });
+      dispatch({ type: "set-settings", expanded: false });
       setMobileNavigationOpen(false);
-      return;
-    }
-    if (navigationGuard.current && !(await navigationGuard.current())) return;
-    saveScroll(ui.activeView);
-    if (view !== "feedback") setLastWorkView(view);
-    if (view === "dashboard") preloadDashboard();
-    persistWorkspaceView(view);
-    dispatch({ type: "navigate", view });
-    dispatch({ type: "set-settings", expanded: false });
-    setMobileNavigationOpen(false);
-  }
+    },
+    [visible, ui.activeView, navigationGuard, saveScroll, dispatch],
+  );
+  const navigate = useCallback((view: WorkspaceView) => void guardedNavigate(view), [guardedNavigate]);
 
   function openProjectHome() {
     void guardedDocumentNavigation(() => window.location.assign("/"));
@@ -403,11 +406,7 @@ function Workspace({ user }: { user: SessionUser }) {
       </Layout.Sider>
       <Layout className="ant-workspace-layout">
         <Layout.Content className="workspace ant-workspace" data-ui="workspace">
-          <WorkspaceErrorBoundary resetKey={ui.activeView}>
-            <Suspense fallback={<WorkspaceLoading />}>
-              {renderActiveView(ui.activeView, user, navigate, lastWorkView)}
-            </Suspense>
-          </WorkspaceErrorBoundary>
+          <ActiveWorkspaceView view={ui.activeView} user={user} navigate={navigate} feedbackPage={lastWorkView} />
           <footer className="workspace-footer ant-workspace-footer">
             <span>
               CageLedger {APP_VERSION}
@@ -437,6 +436,25 @@ function Workspace({ user }: { user: SessionUser }) {
     </Layout>
   );
 }
+
+// Keep navigation chrome updates outside the live business tree without remounting its drafts.
+const ActiveWorkspaceView = memo(function ActiveWorkspaceView({
+  view,
+  user,
+  navigate,
+  feedbackPage,
+}: {
+  view: WorkspaceView;
+  user: SessionUser;
+  navigate: (view: WorkspaceView) => void;
+  feedbackPage: WorkspaceView;
+}) {
+  return (
+    <WorkspaceErrorBoundary resetKey={view}>
+      <Suspense fallback={<WorkspaceLoading />}>{renderActiveView(view, user, navigate, feedbackPage)}</Suspense>
+    </WorkspaceErrorBoundary>
+  );
+});
 
 function item(key: string, label: string, icon: ReactNode, dataUi?: string): NonNullable<MenuProps["items"]>[number] {
   return { key, label: dataUi ? <span data-ui={dataUi}>{label}</span> : label, icon };

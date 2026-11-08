@@ -11,9 +11,9 @@ import type {
   ResearcherListParams,
   ResearcherListResponse,
 } from "../../contracts/researchers";
-import type { SessionResponse } from "../../contracts/session";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { mutationActor, publishMutationItem } from "./mutationCache";
 
 export function resolveResearcherContacts(names: string[], signal?: AbortSignal) {
   return requestJson<{ items: ResearcherContact[] }>("/api/researchers/contacts/resolve", {
@@ -70,16 +70,9 @@ export function useSaveResearcher() {
         method: "PUT",
         body: JSON.stringify({ item, expectedUpdatedAt }),
       }),
-    onMutate: () => ({ actor: client.getQueryData<SessionResponse>(queryKeys.session)?.user }),
+    onMutate: () => ({ actor: mutationActor(client) }),
     onSuccess: async (response, { id }, context) => {
-      const currentActor = () => client.getQueryData<SessionResponse>(queryKeys.session)?.user;
-      // A completed write may outlive its account. Do not recreate that account's
-      // cleared caches, including when the same user signs out and back in.
-      if (currentActor() !== context?.actor) return;
-      const key = queryKeys.researcher(id);
-      await client.cancelQueries({ queryKey: key, exact: true });
-      if (currentActor() !== context?.actor) return;
-      client.setQueryData(key, response);
+      if (!(await publishMutationItem(client, context?.actor, queryKeys.researcher(id), response))) return;
       // The PUT already returns the complete target. Lists also own department
       // options; invalidate their active and inactive scopes, not this detail.
       await Promise.allSettled([

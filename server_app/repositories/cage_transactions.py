@@ -2,7 +2,7 @@
 
 import json
 
-from server_app.domains.iacuc.rules import normalize_iacuc_number
+from server_app.repositories.application_context import applications_for_iacucs
 
 
 def _ids(values):
@@ -106,16 +106,4 @@ def read_cage_applications(conn, occupancies):
     tiny number projection, then decode the matching payloads in insertion order.
     No shared cache is consumed or published inside the caller's write transaction.
     """
-    wanted = {normalize_iacuc_number(item.get("iacuc", "")) for item in occupancies}
-    wanted.discard("")
-    if not wanted:
-        return {}
-    result = {}
-    for row in conn.execute("SELECT id,json_extract(payload,'$.iacuc') FROM experiment_applications ORDER BY rowid"):
-        code = normalize_iacuc_number(row[1])
-        if code in wanted and code not in result:
-            payload = conn.execute("SELECT payload FROM experiment_applications WHERE id=?", (row[0],)).fetchone()
-            result[code] = json.loads(payload[0])
-            if result.keys() >= wanted:
-                break
-    return result
+    return applications_for_iacucs(conn, [item.get("iacuc", "") for item in occupancies])

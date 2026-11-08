@@ -106,6 +106,9 @@ def assemble_state(conn, *, include_audit_logs=True):
 
 
 def read_cached_state(conn, empty_state_factory):
+    cached = cache_get("assembled_state", connection=conn)
+    if cached is not None:
+        return cached
     with cache_build_lock("assembled_state", conn):
         _cache_generation = cache_generation()
         cached = cache_get("assembled_state", connection=conn)
@@ -121,6 +124,9 @@ def read_cached_state(conn, empty_state_factory):
 
 
 def read_applications_by_iacuc(conn, normalize_iacuc_number):
+    cached = cache_get("applications_by_iacuc", connection=conn)
+    if cached is not None:
+        return cached
     with cache_build_lock("applications_by_iacuc", conn):
         _cache_generation = cache_generation()
         cached = cache_get("applications_by_iacuc", connection=conn)

@@ -92,6 +92,8 @@ def _capture(environment):
             "databaseP95Ms": performance["database"]["p95Ms"],
             "cacheHitRate": performance["cache"]["hitRate"],
             "databaseSizeBytes": environment["database"]["sizeBytes"],
+            "stages": performance.get("stages", {}),
+            "documentWork": performance.get("documentWork"),
         },
     }
     with _connect_history_db() as conn:
@@ -133,4 +135,6 @@ def _history_item(snapshot):
         "cacheHitRate": metrics["cacheHitRate"],
         "pdfActiveJobs": metrics["pdf"]["activeJobs"],
         "databaseSizeBytes": metrics["databaseSizeBytes"],
+        "stages": metrics.get("stages", {}),
+        "documentWork": metrics.get("documentWork"),
     }

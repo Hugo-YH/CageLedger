@@ -90,6 +90,8 @@ export interface PdfLatencyMetrics extends SystemLatencyMetrics {
 }
 
 export interface SystemPerformance {
+  stages?: Record<string, SystemLatencyMetrics & { operations: number; rows: number; bytes: number }>;
+  documentWork?: { capacity: number; active: number; waiting: number; rejected: number };
   uptimeSeconds: number;
   requests: SystemLatencyMetrics & {
     total: number;
@@ -182,6 +184,8 @@ export interface SystemEnvironment {
 }
 
 export interface SystemPerformanceHistoryItem {
+  stages?: SystemPerformance["stages"];
+  documentWork?: SystemPerformance["documentWork"] | null;
   observedAt: string;
   intervalSeconds: number;
   appVersion: string;

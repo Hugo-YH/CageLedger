@@ -10,7 +10,7 @@ from server_app.domains.billing.charging import BILLING_TIER_LIMIT
 from server_app.domains.billing.profiles import billing_profile_for_room
 from server_app.domains.billing.statements import statement_application_snapshot
 from server_app.domains.iacuc.rules import normalize_iacuc_number
-from server_app.domains.state.persistence import read_applications_by_iacuc
+from server_app.repositories.application_context import applications_for_iacucs
 from server_app.services.reimbursement import (
     REIMBURSEMENT_STATUS_COMPLETED,
     REIMBURSEMENT_STATUS_PENDING,
@@ -124,7 +124,7 @@ def join_distinct_text(current, value):
 def reimbursement_detail_context_from_workflow(conn, workflow, statement, ports):
     detail_context = {}
     iacucs = [normalize_iacuc_number(value) for value in statement.get("iacucs", []) if normalize_iacuc_number(value)]
-    applications_by_iacuc = read_applications_by_iacuc(conn)
+    applications_by_iacuc = applications_for_iacucs(conn, iacucs)
     if statement.get("sourceType") == "pi_merged_quantity_sheet":
         sheets = ports.list_quantity_sheets_by_month_pi(conn, statement.get("month"), clean_text(statement.get("pi")))
         rooms = ports.read_room_payloads_for_context(

@@ -12,6 +12,19 @@ _LOCK = threading.Lock()
 _STARTED_AT = time.monotonic()
 _REQUEST_SAMPLES = deque(maxlen=_SAMPLE_LIMIT)
 _DATABASE_SAMPLES = deque(maxlen=_SAMPLE_LIMIT)
+_STAGE_NAMES = frozenset(
+    {
+        "cache.size",
+        "cache.wait",
+        "database.fetch",
+        "payload.decode",
+        "response.encode",
+        "response.compress",
+        "heavy.wait",
+        "pdf.maintenance",
+    }
+)
+_STAGES = {}
 _REQUEST_BREAKDOWN_LIMIT = 24
 _REQUEST_BREAKDOWN_SAMPLE_LIMIT = 128
 _REQUEST_BREAKDOWNS = {}
@@ -73,12 +86,41 @@ def record_database_operation(elapsed_ms, *, slow=False, locked=False):
         _DATABASE_SAMPLES.append(float(elapsed_ms))
 
 
+def record_stage(name, elapsed_ms, *, rows=0, size_bytes=0):
+    """Fixed operational buckets only: no IDs, SQL, paths or business values."""
+    if name not in _STAGE_NAMES:
+        return
+    with _LOCK:
+        bucket = _STAGES.setdefault(
+            name,
+            {
+                "samples": deque(maxlen=_SAMPLE_LIMIT),
+                "operations": 0,
+                "rows": 0,
+                "bytes": 0,
+            },
+        )
+        bucket["samples"].append(max(float(elapsed_ms), 0))
+        bucket["operations"] += 1
+        bucket["rows"] += max(int(rows), 0)
+        bucket["bytes"] += max(int(size_bytes), 0)
+
+
 def performance_snapshot(*, cache_entries=0, cache_capacity=0):
     with _LOCK:
         counters = dict(_COUNTERS)
         request_samples = list(_REQUEST_SAMPLES)
         database_samples = list(_DATABASE_SAMPLES)
         request_breakdown = _request_breakdown_snapshot()
+        stages = {
+            name: {
+                "operations": bucket["operations"],
+                "rows": bucket["rows"],
+                "bytes": bucket["bytes"],
+                **_latency_summary(list(bucket["samples"])),
+            }
+            for name, bucket in sorted(_STAGES.items())
+        }
     cache_lookups = counters["cacheHits"] + counters["cacheMisses"] + counters["cacheExpirations"]
     return {
         "uptimeSeconds": round(time.monotonic() - _STARTED_AT, 1),
@@ -103,6 +145,7 @@ def performance_snapshot(*, cache_entries=0, cache_capacity=0):
             "lockErrors": counters["databaseLockErrors"],
             **_latency_summary(database_samples),
         },
+        "stages": stages,
     }
 
 
@@ -114,6 +157,7 @@ def reset_performance_metrics():
         _REQUEST_SAMPLES.clear()
         _DATABASE_SAMPLES.clear()
         _REQUEST_BREAKDOWNS.clear()
+        _STAGES.clear()
 
 
 def _latency_summary(samples):

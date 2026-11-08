@@ -140,6 +140,62 @@ class CacheConcurrencyTests(unittest.TestCase):
         cache.cache_set("cyclic", item)
         self.assertIs(cache.cache_get("cyclic"), item)
 
+    def test_rejected_transaction_fill_does_not_traverse_the_value(self):
+        with patch.object(cache, "_value_size", side_effect=AssertionError("unneeded traversal")):
+            self.assertEqual(cache.cache_set("writer", {"local": True}, expected_generation=-1), {"local": True})
+        self.assertIsNone(cache.cache_get("writer"))
+
+    def test_invalidation_during_size_measurement_still_rejects_the_fill(self):
+        generation = cache.cache_generation()
+
+        def measure(_):
+            cache.invalidate_data_cache("target")
+            return 100
+
+        with patch.object(cache, "_value_size", side_effect=measure):
+            cache.cache_set("target", "old", expected_generation=generation)
+        self.assertIsNone(cache.cache_get("target"))
+
+    def test_unrelated_writes_preserve_fills_but_history_overflow_is_conservative(self):
+        generation = cache.cache_generation()
+        cache.invalidate_data_cache_prefixes("audit_events::")
+        cache.cache_set("applications_by_iacuc", {"current": True}, expected_generation=generation)
+        self.assertEqual(cache.cache_get("applications_by_iacuc"), {"current": True})
+        for _ in range(520):
+            cache.invalidate_data_cache("unrelated")
+        cache.cache_set("ancient", "old", expected_generation=generation)
+        self.assertIsNone(cache.cache_get("ancient"))
+        self.assertLessEqual(len(cache._INVALIDATIONS), 512)
+
+    def test_hot_reader_skips_its_build_lock_and_unrelated_keys_do_not_wait(self):
+        held, release, completed = threading.Event(), threading.Event(), threading.Event()
+        conn = SimpleNamespace(in_transaction=False)
+        cache.cache_set("assembled_state", {"rooms": []})
+
+        def hold():
+            with cache.cache_build_lock("assembled_state", conn):
+                held.set()
+                release.wait(2)
+
+        def read():
+            with cache.cache_build_lock("different", conn):
+                self.assertEqual(read_cached_state(conn, dict), {"rooms": []})
+            completed.set()
+
+        holder, reader = threading.Thread(target=hold), threading.Thread(target=read)
+        holder.start()
+        try:
+            self.assertTrue(held.wait(1))
+            reader.start()
+            self.assertTrue(completed.wait(1), "hot or unrelated reader waited for another build")
+        finally:
+            release.set()
+            holder.join(2)
+            if reader.ident is not None:
+                reader.join(2)
+        self.assertFalse(holder.is_alive() or reader.is_alive())
+        self.assertFalse(cache._BUILD_LOCKS)
+
 
 if __name__ == "__main__":
     unittest.main()

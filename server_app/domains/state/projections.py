@@ -13,13 +13,13 @@ from server_app.domains.intake import (
     legacy_cage_card_qr_id,
     species_label,
 )
-from server_app.domains.state.entity_rules import empty_state
 from server_app.domains.workflow.constants import (
     WORKFLOW_STATUS_FINANCE,
     WORKFLOW_STATUS_GENERATED,
     WORKFLOW_STATUS_SENT,
     WORKFLOW_STATUS_SIGNED,
 )
+from server_app.repositories.public_cage_card import read_card_context
 from server_app.repositories.state import assemble_state as assemble_state_repository
 from server_app.repositories.state import read_applications_by_iacuc as read_applications_repository
 from server_app.shared import as_int, clean_text, today_iso
@@ -62,8 +62,12 @@ def public_cage_card_payload(conn, qr_id):
     target = clean_text(qr_id).upper()
     if not target:
         raise LookupError("二维码地址无效")
-    state = assemble_state(conn) or empty_state()
-    applications_by_iacuc = read_applications_by_iacuc(conn)
+    state, applications_by_iacuc = read_card_context(conn, target)
+    return public_cage_card_from_state(state, applications_by_iacuc, target)
+
+
+def public_cage_card_from_state(state, applications_by_iacuc, target):
+    """Original public projection and matching order, shared by scoped reads."""
     rooms_by_id = {item.get("id"): item for item in state.get("rooms", [])}
     racks_by_id = {item.get("id"): item for item in state.get("racks", [])}
     slots_by_id = {item.get("id"): item for item in state.get("slots", [])}

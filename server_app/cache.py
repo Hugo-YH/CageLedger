@@ -3,9 +3,10 @@ import json
 import sys
 import threading
 import time
+from collections import deque
 from contextlib import contextmanager
 
-from server_app.performance import performance_snapshot, record_cache
+from server_app.performance import performance_snapshot, record_cache, record_stage
 from server_app.runtime_logging import emit_event
 
 CACHE_TTL_SECONDS = 15
@@ -16,11 +17,13 @@ DATA_CACHE_LOCK = threading.Lock()
 DATA_CACHE = {}
 CACHE_MISS = object()
 _GENERATION = 0
-_BUILD_LOCKS = tuple(threading.RLock() for _ in range(32))
+_INVALIDATIONS = deque(maxlen=512)
+_BUILD_LOCKS = {}
+_BUILD_LOCKS_LOCK = threading.Lock()
 
 
 def cache_generation():
-    """Capture before a read; invalidation retires every in-flight cache fill."""
+    """Capture before reading; publication checks the writer's explicit dependencies."""
     with DATA_CACHE_LOCK:
         return _GENERATION
 
@@ -31,8 +34,22 @@ def cache_build_lock(key, conn):
     if conn.in_transaction:
         yield
     else:
-        with _BUILD_LOCKS[hash(key) % len(_BUILD_LOCKS)]:
-            yield
+        with _BUILD_LOCKS_LOCK:
+            entry = _BUILD_LOCKS.get(key)
+            lock, users = entry if entry is not None else (threading.RLock(), 0)
+            _BUILD_LOCKS[key] = (lock, users + 1)
+        started = time.perf_counter()
+        try:
+            with lock:
+                record_stage("cache.wait", (time.perf_counter() - started) * 1000)
+                yield
+        finally:
+            with _BUILD_LOCKS_LOCK:
+                _, users = _BUILD_LOCKS[key]
+                if users == 1:
+                    del _BUILD_LOCKS[key]
+                else:
+                    _BUILD_LOCKS[key] = (lock, users - 1)
 
 
 def cache_get(key, default=None, *, connection=None):
@@ -55,9 +72,14 @@ def cache_get(key, default=None, *, connection=None):
 
 
 def cache_set(key, value, ttl_seconds=CACHE_TTL_SECONDS, *, expected_generation=None):
-    size = _value_size(value)
     with DATA_CACHE_LOCK:
-        if expected_generation is not None and expected_generation != _GENERATION:
+        if not _can_publish(key, expected_generation):
+            return value
+    started = time.perf_counter()
+    size = _value_size(value)
+    record_stage("cache.size", (time.perf_counter() - started) * 1000, size_bytes=size)
+    with DATA_CACHE_LOCK:
+        if not _can_publish(key, expected_generation):
             return value
         now = time.monotonic()
         expired = [cache_key for cache_key, entry in DATA_CACHE.items() if entry["expiresAt"] <= now]
@@ -77,6 +99,25 @@ def cache_set(key, value, ttl_seconds=CACHE_TTL_SECONDS, *, expected_generation=
             "sizeBytes": size,
         }
     return value
+
+
+def _can_publish(key, generation):
+    """Called under DATA_CACHE_LOCK; bounded history keeps old readers conservative.
+
+    Writers already enumerate the affected exact keys/prefixes for committed
+    entries. Apply that same dependency set to fills, including absent entries.
+    Unrelated writes no longer discard an otherwise current projection.
+    """
+    if generation is None or generation == _GENERATION:
+        return True
+    if generation < 0 or generation > _GENERATION:
+        return False
+    if not _INVALIDATIONS or generation < _INVALIDATIONS[0][0] - 1:
+        return False
+    return not any(
+        sequence > generation and (key in keys or any(key.startswith(prefix) for prefix in prefixes))
+        for sequence, keys, prefixes in _INVALIDATIONS
+    )
 
 
 def _value_size(value):
@@ -104,6 +145,7 @@ def invalidate_data_cache(*keys):
         return
     with DATA_CACHE_LOCK:
         _GENERATION += 1
+        _INVALIDATIONS.append((_GENERATION, tuple(keys), ()))
         for key in keys:
             DATA_CACHE.pop(key, None)
 
@@ -114,6 +156,7 @@ def invalidate_data_cache_prefixes(*prefixes):
         return
     with DATA_CACHE_LOCK:
         _GENERATION += 1
+        _INVALIDATIONS.append((_GENERATION, (), tuple(prefixes)))
         for key in list(DATA_CACHE.keys()):
             if any(key.startswith(prefix) for prefix in prefixes):
                 DATA_CACHE.pop(key, None)

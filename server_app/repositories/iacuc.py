@@ -23,6 +23,9 @@ def list_experiment_application_payloads(conn):
 
 
 def read_iacuc_index(conn, iacuc_index_path, legacy_iacuc_index_path):
+    cached = cache_get("iacuc_index", connection=conn)
+    if cached is not None:
+        return cached
     with cache_build_lock("iacuc_index", conn):
         _cache_generation = cache_generation()
         cached = cache_get("iacuc_index", connection=conn)

@@ -9,6 +9,7 @@ import type {
 } from "./contracts";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { isMutationActorCurrent, mutationActor, publishMutationItem } from "./mutationCache";
 
 export interface LedgerListParams {
   limit: number;
@@ -37,8 +38,24 @@ function queryUrl(path: string, params: LedgerListParams) {
   return `${path}?${query.toString()}`;
 }
 
-function invalidateLedger(client: ReturnType<typeof useQueryClient>) {
-  return client.invalidateQueries({ queryKey: queryKeys.reimbursementLedgerRoot });
+function invalidateLedger(client: ReturnType<typeof useQueryClient>, deferredClaimId = "") {
+  return Promise.allSettled([
+    // The caller owns the final read of this detail, including its refresh-only retry.
+    ...(deferredClaimId
+      ? [
+          client.invalidateQueries({
+            queryKey: queryKeys.reimbursementClaim(deferredClaimId),
+            exact: true,
+            refetchType: "none",
+          }),
+        ]
+      : []),
+    client.invalidateQueries({
+      queryKey: queryKeys.reimbursementLedgerRoot,
+      predicate: (query) =>
+        !(deferredClaimId && query.queryKey[1] === "claim" && query.queryKey[2] === deferredClaimId),
+    }),
+  ]);
 }
 
 export function useSettlementObligations(params: LedgerListParams) {
@@ -98,9 +115,16 @@ export function useSaveReimbursementClaim() {
           body: JSON.stringify(item),
         },
       ),
-    onSuccess: (data) => {
-      client.setQueryData(queryKeys.reimbursementClaim(data.item.id), data);
-      void invalidateLedger(client);
+    onMutate: () => ({ actor: mutationActor(client) }),
+    onSuccess: async (data, _variables, context) => {
+      if (!(await publishMutationItem(client, context?.actor, queryKeys.reimbursementClaim(data.item.id), data)))
+        return;
+      await Promise.allSettled([
+        client.invalidateQueries(
+          { queryKey: queryKeys.reimbursementLedgerRoot, predicate: (query) => query.queryKey[1] !== "claim" },
+          { throwOnError: false },
+        ),
+      ]);
     },
   });
 }
@@ -118,7 +142,7 @@ export function useDeleteReimbursementClaim() {
   });
 }
 
-export function useCreateReimbursementAllocation() {
+export function useCreateReimbursementAllocation(deferClaimRefreshFor = "") {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -139,11 +163,14 @@ export function useCreateReimbursementAllocation() {
           body: JSON.stringify({ fundingLineId, obligationId, amount }),
         },
       ),
-    onSuccess: () => void invalidateLedger(client),
+    onMutate: () => ({ actor: mutationActor(client), deferredClaimId: deferClaimRefreshFor }),
+    onSuccess: (_data, _variables, context) => {
+      if (isMutationActorCurrent(client, context?.actor)) void invalidateLedger(client, context?.deferredClaimId);
+    },
   });
 }
 
-export function useConfirmReimbursementAllocation() {
+export function useConfirmReimbursementAllocation(deferClaimRefreshFor = "") {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
@@ -151,11 +178,14 @@ export function useConfirmReimbursementAllocation() {
         `/api/reimbursement-ledger/allocations/${encodeURIComponent(id)}/confirm`,
         { method: "POST", body: "{}" },
       ),
-    onSuccess: () => void invalidateLedger(client),
+    onMutate: () => ({ actor: mutationActor(client), deferredClaimId: deferClaimRefreshFor }),
+    onSuccess: (_data, _variables, context) => {
+      if (isMutationActorCurrent(client, context?.actor)) void invalidateLedger(client, context?.deferredClaimId);
+    },
   });
 }
 
-export function useReverseReimbursementAllocation() {
+export function useReverseReimbursementAllocation(deferClaimRefreshFor = "") {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
@@ -163,7 +193,10 @@ export function useReverseReimbursementAllocation() {
         `/api/reimbursement-ledger/allocations/${encodeURIComponent(id)}/reverse`,
         { method: "POST", body: JSON.stringify({ reason }) },
       ),
-    onSuccess: () => void invalidateLedger(client),
+    onMutate: () => ({ actor: mutationActor(client), deferredClaimId: deferClaimRefreshFor }),
+    onSuccess: (_data, _variables, context) => {
+      if (isMutationActorCurrent(client, context?.actor)) void invalidateLedger(client, context?.deferredClaimId);
+    },
   });
 }
 

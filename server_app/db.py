@@ -6,8 +6,8 @@ import threading
 import time
 from pathlib import Path
 
-from .config import DB_PATH, SLOW_DATABASE_THRESHOLD_MS
-from .performance import record_database_operation
+from .config import DB_PATH, SLOW_DATABASE_THRESHOLD_MS, SQLITE_CACHE_KIB, SQLITE_MMAP_BYTES
+from .performance import record_database_operation, record_stage
 from .runtime_logging import emit_event
 from .shared.sqlite import ClosingConnection
 from .storage_layout import ensure_storage_layout
@@ -17,15 +17,77 @@ DB_READY = False
 SCHEMA_INITIALIZER = None
 
 
-class ObservedConnection(ClosingConnection):
+class ObservedCursor(sqlite3.Cursor):
+    """Fetch work is separate from execute; iteration is aggregated per batch."""
+
+    _fetch_ms = 0.0
+    _fetch_rows = 0
+
     def execute(self, *args, **kwargs):
-        return self._observe(super().execute, *args, **kwargs)
+        self._flush_fetch()
+        return self.connection._observe(super().execute, *args, **kwargs)
 
     def executemany(self, *args, **kwargs):
-        return self._observe(super().executemany, *args, **kwargs)
+        self._flush_fetch()
+        return self.connection._observe(super().executemany, *args, **kwargs)
 
     def executescript(self, *args, **kwargs):
-        return self._observe(super().executescript, *args, **kwargs)
+        self._flush_fetch()
+        return self.connection._observe(super().executescript, *args, **kwargs)
+
+    def _fetch(self, operation, *args, **kwargs):
+        self._flush_fetch()
+        started = time.perf_counter()
+        rows = operation(*args, **kwargs)
+        count = int(rows is not None) if operation.__name__ == "fetchone" else len(rows)
+        record_stage("database.fetch", (time.perf_counter() - started) * 1000, rows=count)
+        return rows
+
+    def fetchone(self):
+        return self._fetch(super().fetchone)
+
+    def fetchmany(self, *args, **kwargs):
+        return self._fetch(super().fetchmany, *args, **kwargs)
+
+    def fetchall(self):
+        return self._fetch(super().fetchall)
+
+    def __next__(self):
+        started = time.perf_counter()
+        try:
+            row = super().__next__()
+        except StopIteration:
+            self._flush_fetch()
+            raise
+        self._fetch_ms += (time.perf_counter() - started) * 1000
+        self._fetch_rows += 1
+        if self._fetch_rows >= 256:
+            self._flush_fetch()
+        return row
+
+    def _flush_fetch(self):
+        if self._fetch_rows:
+            record_stage("database.fetch", self._fetch_ms, rows=self._fetch_rows)
+            self._fetch_ms = 0.0
+            self._fetch_rows = 0
+
+    def close(self):
+        self._flush_fetch()
+        return super().close()
+
+
+class ObservedConnection(ClosingConnection):
+    def cursor(self, factory=ObservedCursor):
+        return super().cursor(factory)
+
+    def execute(self, *args, **kwargs):
+        return self.cursor().execute(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        return self.cursor().executemany(*args, **kwargs)
+
+    def executescript(self, *args, **kwargs):
+        return self.cursor().executescript(*args, **kwargs)
 
     def commit(self):
         return self._observe(super().commit)
@@ -53,6 +115,8 @@ class ObservedConnection(ClosingConnection):
             if elapsed_ms >= SLOW_DATABASE_THRESHOLD_MS and failure is None:
                 statement = args[0] if args and isinstance(args[0], str) else ""
                 caller = sys._getframe(2)
+                while caller.f_code.co_filename == __file__ and caller.f_back is not None:
+                    caller = caller.f_back
                 emit_event(
                     "database_slow_operation",
                     level=logging.WARNING,
@@ -100,8 +164,8 @@ def connect_db():
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA temp_store=MEMORY")
-        conn.execute("PRAGMA cache_size=-80000")
-        conn.execute("PRAGMA mmap_size=268435456")
+        conn.execute(f"PRAGMA cache_size={-SQLITE_CACHE_KIB}")
+        conn.execute(f"PRAGMA mmap_size={SQLITE_MMAP_BYTES}")
     except BaseException:
         conn.close()
         raise
@@ -130,8 +194,8 @@ def ensure_database_ready():
             conn.execute("PRAGMA busy_timeout=5000")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA temp_store=MEMORY")
-            conn.execute("PRAGMA cache_size=-80000")
-            conn.execute("PRAGMA mmap_size=268435456")
+            conn.execute(f"PRAGMA cache_size={-SQLITE_CACHE_KIB}")
+            conn.execute(f"PRAGMA mmap_size={SQLITE_MMAP_BYTES}")
             SCHEMA_INITIALIZER(conn)
             conn.execute("PRAGMA optimize")
             conn.commit()

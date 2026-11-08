@@ -51,6 +51,9 @@ def dashboard_overview_payload(conn, month: str, rooms=None, *, calculate=None, 
     database = next((row[2] for row in conn.execute("PRAGMA database_list") if row[1] == "main"), "")
     room_ids = sorted(clean_text(room.get("id", "")) for room in rooms) if rooms is not None else None
     cache_key_value = cache_key("dashboard_overview", database=database, month=month, rooms=room_ids)
+    cached = cache_get(cache_key_value, connection=conn) if database else None
+    if cached is not None:
+        return cached
     with cache_build_lock(cache_key_value, conn):
         return _cached_overview(conn, month, rooms, cache_key_value, database, calculate, prepare_calculations)
 

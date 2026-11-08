@@ -12,6 +12,7 @@ import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 import { individualPeople } from "./personNames";
 import { initiateReviewedServiceSettlement, previewSettlement } from "./settlements";
+import { isMutationActorCurrent, mutationActor, publishMutationItem } from "./mutationCache";
 
 export { exportTechnicalServicePdf as exportServicesPdf } from "./settlements";
 
@@ -112,16 +113,31 @@ export function useServiceMutation() {
         },
       );
     },
-    onSuccess: async () => {
-      await Promise.all(
-        [
-          root,
+    onMutate: () => ({ actor: mutationActor(client) }),
+    onSuccess: async (response, action, context) => {
+      if (!isMutationActorCurrent(client, context?.actor)) return;
+      const saved = action.kind === "save" && "item" in response ? response.item : undefined;
+      if (saved) {
+        const published = await publishMutationItem(client, context?.actor, [...root, "sheet-detail", saved.id], {
+          item: saved,
+        });
+        if (!published) return;
+      }
+      await Promise.allSettled([
+        client.invalidateQueries(
+          {
+            queryKey: root,
+            predicate: (query) => !saved || (query.queryKey[1] !== "sheet-detail" && query.queryKey[1] !== "catalog"),
+          },
+          { throwOnError: false },
+        ),
+        ...[
           ["billing-settlement-candidates"],
           ["billing-workflows"],
           ["reimbursement-ledger"],
           ["reimbursement-records"],
-        ].map((queryKey) => client.invalidateQueries({ queryKey })),
-      );
+        ].map((queryKey) => client.invalidateQueries({ queryKey }, { throwOnError: false })),
+      ]);
     },
   });
 }

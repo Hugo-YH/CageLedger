@@ -16,6 +16,7 @@ from threading import Lock, Thread
 
 from server_app.config import PDF_CACHE_MAX_BYTES, PDF_CACHE_PATH, PDF_CACHE_TTL_SECONDS, PDF_EXPORT_MAX_PENDING
 from server_app.pdf.cache_work import ArtifactWork, PdfExportJob, PendingArtifacts, ScheduledTask
+from server_app.performance import record_stage
 from server_app.runtime_logging import bind_log_context, emit_event
 
 PDF_JOB_TTL_SECONDS = 24 * 60 * 60
@@ -57,6 +58,13 @@ class PdfExportCache:
         self._task_sequence = count()
         self._worker: Thread | None = None
         self._last_prune_at = 0.0
+        self._maintenance_lock = Lock()
+        self._publication_lock = Lock()
+        self._accept_existing_artifacts = True
+        self._published_artifacts: set[Path] = set()
+        self._artifact_revision = 0
+        self._artifact_summary = {"entries": 0, "sizeBytes": 0}
+        self._artifact_summary_ready = False
         self._metrics = {
             "hits": 0,
             "misses": 0,
@@ -74,16 +82,24 @@ class PdfExportCache:
                     self._versions[key] = self._versions.get(key, 0) + 1
                 else:
                     self._versions.pop(key, None)
-                self.artifact_path(key).unlink(missing_ok=True)
+                self._unlink_artifact_locked(self.artifact_path(key))
                 self._active_keys.pop(key, None)
             self._retire_ready_locked(affected)
 
     def invalidate_all(self):
-        with self._lock:
-            self._generation += 1
-            self._versions.clear()
-            self._active_keys.clear()
-            self._retire_ready_locked()
+        # Maintenance and publication always take these locks in this order.
+        # Readers can see retired jobs immediately while slow disk cleanup runs.
+        with self._maintenance_lock, self._publication_lock:
+            with self._lock:
+                self._generation += 1
+                self._versions.clear()
+                self._active_keys.clear()
+                self._retire_ready_locked()
+                self._accept_existing_artifacts = False
+                self._published_artifacts.clear()
+                self._artifact_revision += 1
+                self._artifact_summary = {"entries": 0, "sizeBytes": 0}
+                self._artifact_summary_ready = True
             artifacts = self.root / "artifacts"
             if artifacts.exists():
                 for path in artifacts.glob("*.pdf"):
@@ -101,10 +117,10 @@ class PdfExportCache:
         warm_scope: str | None = None,
     ) -> PdfExportJob:
         cached = self.artifact_path(key)
+        self._prune_artifacts()
         with self._lock:
             self._cleanup_jobs_locked(reserve=1)
-            self._prune_artifacts_locked()
-            if cached.exists():
+            if self._artifact_is_current_locked(cached) and cached.exists():
                 self._metrics["hits"] += 1
                 return self._ready_job(owner_id, key, filename, content_type, cached)
             self._metrics["misses"] += 1
@@ -192,9 +208,9 @@ class PdfExportCache:
             self._release_key_lock(key, key_lock)
 
     def snapshot(self):
+        self._prune_artifacts()
         with self._lock:
             self._cleanup_jobs_locked()
-            self._prune_artifacts_locked()
             jobs = list(self._jobs.values())
             counters = dict(self._metrics)
             samples = list(self._latency_samples)
@@ -396,6 +412,8 @@ class PdfExportCache:
         # Open while protected, then read the stable file descriptor outside the
         # lock. An invalidation may unlink the name without breaking this reader.
         with self._lock:
+            if not self._artifact_is_current_locked(path):
+                return None
             try:
                 stream = path.open("rb")
             except FileNotFoundError:
@@ -403,15 +421,29 @@ class PdfExportCache:
         with stream:
             return stream.read()
 
+    def _artifact_is_current_locked(self, path):
+        # After a full invalidation, leftover files from a failed disk cleanup
+        # cannot be accepted until this process publishes the current generation.
+        return self._accept_existing_artifacts or path in self._published_artifacts
+
     def _publish_artifact(self, key, version, path, body):
         temporary = self._stage(path, body)
         try:
             # Only atomic publication is serialized with invalidation; writing
             # potentially large temporary files never holds the metadata lock.
-            with self._lock:
+            with self._publication_lock, self._lock:
                 if (self._generation, self._versions.get(key, 0)) != version:
                     return False
+                try:
+                    old_size = path.stat().st_size if self._artifact_is_current_locked(path) else None
+                except FileNotFoundError:
+                    old_size = None
                 os.replace(temporary, path)
+                self._published_artifacts.add(path)
+                self._artifact_revision += 1
+                if self._artifact_summary_ready:
+                    self._artifact_summary["entries"] += int(old_size is None)
+                    self._artifact_summary["sizeBytes"] += len(body) - (old_size or 0)
                 return True
         finally:
             temporary.unlink(missing_ok=True)
@@ -525,46 +557,77 @@ class PdfExportCache:
             if len(self._latency_samples) > PDF_LATENCY_SAMPLE_LIMIT:
                 del self._latency_samples[:-PDF_LATENCY_SAMPLE_LIMIT]
 
-    def _prune_artifacts_locked(self, *, force=False):
-        now_monotonic = time.monotonic()
-        if not force and now_monotonic - self._last_prune_at < PDF_CACHE_PRUNE_INTERVAL_SECONDS:
+    def _unlink_artifact_locked(self, path):
+        try:
+            size = path.stat().st_size
+        except FileNotFoundError:
+            self._published_artifacts.discard(path)
+            return False
+        path.unlink(missing_ok=True)
+        self._published_artifacts.discard(path)
+        self._artifact_revision += 1
+        if self._artifact_summary_ready:
+            self._artifact_summary["entries"] = max(self._artifact_summary["entries"] - 1, 0)
+            self._artifact_summary["sizeBytes"] = max(self._artifact_summary["sizeBytes"] - size, 0)
+        return True
+
+    def _prune_artifacts(self, *, force=False):
+        # Directory enumeration/stat/sorting never owns the job metadata lock.
+        # A concurrent submit/snapshot uses the last bounded statistics snapshot.
+        if not self._maintenance_lock.acquire(blocking=False):
             return
-        self._last_prune_at = now_monotonic
-        artifacts = self.root / "artifacts"
-        if not artifacts.exists():
-            return
-        now = time.time()
-        files = []
-        for path in artifacts.glob("*.pdf"):
-            try:
-                stat = path.stat()
-            except OSError:
-                continue
-            if self.artifact_ttl_seconds and now - stat.st_mtime > self.artifact_ttl_seconds:
-                path.unlink(missing_ok=True)
-                self._metrics["evictions"] += 1
-                continue
-            files.append((stat.st_mtime, stat.st_size, path))
-        total_bytes = sum(size for _, size, _ in files)
-        if not self.max_bytes or total_bytes <= self.max_bytes:
-            return
-        for _, size, path in sorted(files):
-            path.unlink(missing_ok=True)
-            total_bytes -= size
-            self._metrics["evictions"] += 1
-            if total_bytes <= self.max_bytes:
-                break
+        started = time.perf_counter()
+        try:
+            with self._lock:
+                now_monotonic = time.monotonic()
+                if not force and now_monotonic - self._last_prune_at < PDF_CACHE_PRUNE_INTERVAL_SECONDS:
+                    return
+                self._last_prune_at = now_monotonic
+                revision = self._artifact_revision
+            now = time.time()
+            files = []
+            for path in (self.root / "artifacts").glob("*.pdf"):
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                files.append((stat.st_mtime, path, stat))
+            total_bytes = sum(stat.st_size for _, _, stat in files)
+            remaining, removed = len(files), 0
+            for mtime, path, observed in sorted(files):
+                with self._lock:
+                    expired = not self._artifact_is_current_locked(path) or (
+                        self.artifact_ttl_seconds and now - mtime > self.artifact_ttl_seconds
+                    )
+                    if not expired and (not self.max_bytes or total_bytes <= self.max_bytes):
+                        continue
+                    try:
+                        current = path.stat()
+                    except OSError:
+                        continue
+                    # A new atomic publication at this name must survive a stale scan.
+                    if current != observed:
+                        continue
+                    if self._unlink_artifact_locked(path):
+                        self._metrics["evictions"] += 1
+                        removed += 1
+                        remaining -= 1
+                        total_bytes -= observed.st_size
+            with self._lock:
+                if self._artifact_revision == revision + removed:
+                    self._artifact_summary = {"entries": remaining, "sizeBytes": total_bytes}
+                    self._artifact_summary_ready = True
+                else:
+                    # Incremental updates remain authoritative; reconcile an initial
+                    # or externally changed directory on the next maintenance pass.
+                    self._last_prune_at = 0
+        finally:
+            self._maintenance_lock.release()
+            record_stage("pdf.maintenance", (time.perf_counter() - started) * 1000)
 
     def _artifact_stats(self):
-        entries = 0
-        size_bytes = 0
-        for path in (self.root / "artifacts").glob("*.pdf"):
-            try:
-                size_bytes += path.stat().st_size
-                entries += 1
-            except OSError:
-                continue
-        return {"entries": entries, "sizeBytes": size_bytes}
+        with self._lock:
+            return dict(self._artifact_summary)
 
 
 def _latency_summary(samples):

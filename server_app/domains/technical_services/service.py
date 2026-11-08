@@ -6,7 +6,7 @@ import re
 
 from server_app.domains.administration import audit_event, write_audit_events
 from server_app.domains.iacuc import normalize_iacuc_number
-from server_app.domains.state.persistence import read_applications_by_iacuc
+from server_app.repositories.application_context import applications_for_iacucs
 from server_app.shared import clean_text, now_iso
 from server_app.shared.concurrency import StaleWriteError
 
@@ -70,7 +70,7 @@ def save(conn, actor, payload, identity=None):
             return {"item": json.loads(existing["payload"])}
     month = validate_month(source.get("month"))
     iacuc = normalize_iacuc_number(source.get("iacuc", ""))
-    application = read_applications_by_iacuc(conn).get(iacuc)
+    application = applications_for_iacucs(conn, [iacuc]).get(iacuc)
     if not application or not clean_text(application.get("pi")):
         raise ValueError("请匹配有效IACUC及项目负责人")
     facility = source.get("facility")

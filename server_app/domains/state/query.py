@@ -7,6 +7,7 @@ from server_app.db import connect_db
 from server_app.domains.iacuc import normalize_iacuc_number
 from server_app.domains.state.occupancy import occupancy_with_snapshots
 from server_app.domains.state.projections import month_range, summarize_infrastructure
+from server_app.repositories.bootstrap_summary import read_summary_state
 from server_app.repositories.state import (
     read_occupancy_payloads_for_billing,
     read_payloads_by_ids,
@@ -38,7 +39,7 @@ def read_bootstrap_state(conn, actor, read_cached_state, scope="summary", room_i
             log_perf("bootstrap", started_at, scope=scope, cached=1, rooms=len(cached.get("rooms", [])))
             return cached
     stage = time.perf_counter()
-    state = read_cached_state(conn)
+    state = read_summary_state(conn) if scope == "summary" else read_cached_state(conn)
     log_perf("bootstrap.read_state", stage)
     stage = time.perf_counter()
     state = filter_state_for_actor(state, actor)

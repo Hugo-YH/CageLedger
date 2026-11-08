@@ -5,10 +5,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from threading import BoundedSemaphore, RLock
 
 from server_app.cache import cache_generation, cache_get, cache_key, cache_set
+from server_app.heavy_work import DOCUMENT_WORK, HeavyWorkBusy
 from server_app.runtime_logging import log_operation
 
 from .documents import generate as generate_docx
@@ -105,7 +107,16 @@ def convert_docx(content):
 
 
 def _convert_docx(content, binary):
-    if not _RENDER_SLOT.acquire(timeout=TIMEOUT_SECONDS):
+    deadline = time.monotonic() + TIMEOUT_SECONDS
+    try:
+        with DOCUMENT_WORK.slot(timeout=TIMEOUT_SECONDS):
+            return _convert_with_slot(content, binary, deadline)
+    except HeavyWorkBusy as exc:
+        raise PdfRenderError(str(exc)) from exc
+
+
+def _convert_with_slot(content, binary, deadline):
+    if not _RENDER_SLOT.acquire(timeout=max(deadline - time.monotonic(), 0)):
         raise PdfRenderError("检疫 PDF 生成繁忙，请稍后重试")
     try:
         with tempfile.TemporaryDirectory(prefix="cageledger-quarantine-pdf-") as temporary:
