@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.31.7",
+    build: "276",
+    releasedAt: "2026-11-08",
+    title: "打印模板优化",
+    items: [
+      "调整标准笼卡批次号与伦理编号字号，后缀为十位数字时保持同一行显示",
+      "饲养费核算汇总表仅加粗左侧汇总的单项合计、月总计标题和总金额，各伦理的合计及单位支持、实际待缴纳文字与金额使用普通字重",
+      "缩小月总计标题格、加宽金额格并放大总金额，方便实验人员快速确认应付费用；预览、直接打印与导出 PDF 同步调整",
+    ],
+  },
+  {
     version: "1.31.6",
     build: "275",
     releasedAt: "2026-11-08",
