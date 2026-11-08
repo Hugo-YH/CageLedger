@@ -124,7 +124,7 @@ def settlement_page_markup(
     )
     summary_label = "本月待缴纳饲养费<br>总计（元）" if page_index == 0 else "本页汇总"
     leading_summary = (
-        f'<td colspan="7" class="row-label row-label-summary">{summary_label}</td><td colspan="6" class="money summary-total-money">{total_payable:.2f}</td>'
+        f'<td colspan="3" class="row-label row-label-summary">{summary_label}</td><td colspan="10" class="money summary-total-money">{total_payable:.2f}</td>'
         if page["leading"]
         else f'<td class="row-label row-label-summary">{summary_label}</td>'
     )

@@ -39,9 +39,16 @@ describe("print templates", () => {
       expect(individual.some((cell) => cell.textContent === "45.00")).toBe(true);
       expect(individual.every((cell) => weight(cell) === "400")).toBe(true);
       const monthly = totals.rows[1];
-      expect(weight(monthly.querySelector(".row-label-summary")!)).toBe("700");
-      expect(monthly.querySelector(".summary-total-money")).toHaveTextContent("90.00");
-      expect(weight(monthly.querySelector(".summary-total-money")!)).toBe("800");
+      const monthlyLabel = monthly.querySelector<HTMLTableCellElement>(".row-label-summary")!;
+      const monthlyAmount = monthly.querySelector<HTMLTableCellElement>(".summary-total-money")!;
+      expect(weight(monthlyLabel)).toBe("700");
+      expect(monthlyAmount).toHaveTextContent("90.00");
+      expect(weight(monthlyAmount)).toBe("800");
+      expect(monthlyLabel.colSpan + monthlyAmount.colSpan).toBe(13);
+      expect(monthlyAmount.colSpan).toBeGreaterThan(monthlyLabel.colSpan);
+      expect(parseFloat(frame.contentWindow!.getComputedStyle(monthlyAmount).fontSize)).toBeGreaterThan(
+        parseFloat(frame.contentWindow!.getComputedStyle(monthlyLabel).fontSize),
+      );
       const details = Array.from(monthly.querySelectorAll(".meta-summary"));
       expect(details[0]).toHaveTextContent("单位支持：45.00实际待缴纳：45.00");
       expect(details.every((cell) => weight(cell) === "400")).toBe(true);
@@ -576,7 +583,7 @@ describe("print templates", () => {
       '<td>2026-06-01</td><td colspan="6" class="num">21</td><td colspan="6" class="money">94.50</td>',
     );
     expect(pages[1]).toContain(
-      '<td colspan="7" class="row-label row-label-summary row-label-summary-wide">本月待缴纳饲养费<br />总计（元）</td><td colspan="6" class="money summary-total-money">94.50</td>',
+      '<td colspan="3" class="row-label row-label-summary row-label-summary-wide">本月待缴纳饲养费<br />总计（元）</td><td colspan="10" class="money summary-total-money">94.50</td>',
     );
     expect(pages[2]).not.toContain('<th colspan="12">汇总</th>');
     expect(pages[2]).toContain("本页汇总");

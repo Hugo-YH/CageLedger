@@ -149,10 +149,10 @@ export function settlementStatementMarkup(result: BillingStatementResponse) {
         .join("");
       const summaryLabel = pageIndex === 0 ? "本月待缴纳饲养费<br />总计（元）" : "本页汇总";
       // The payable amount stays visible even when the summary has no free or tiered subcolumns.
-      const leadingSummaryLabelSpan = GROUP_GRID_UNITS / 2;
-      const leadingSummaryAmountSpan = GROUP_GRID_UNITS / 2;
+      const leadingSummaryLabelSpan = 3;
+      const leadingSummaryAmountSpan = 1 + GROUP_GRID_UNITS - leadingSummaryLabelSpan;
       const summaryLeadingMarkup = page.showLeadingTotals
-        ? `<td colspan="${1 + leadingSummaryLabelSpan}" class="row-label row-label-summary row-label-summary-wide">${summaryLabel}</td><td colspan="${leadingSummaryAmountSpan}" class="money summary-total-money">${money(totalPayable)}</td>`
+        ? `<td colspan="${leadingSummaryLabelSpan}" class="row-label row-label-summary row-label-summary-wide">${summaryLabel}</td><td colspan="${leadingSummaryAmountSpan}" class="money summary-total-money">${money(totalPayable)}</td>`
         : `<td class="row-label row-label-summary">${summaryLabel}</td>`;
       const summaryRow = `<tr>${summaryLeadingMarkup}${resolvedSlots
         .map((slot) =>

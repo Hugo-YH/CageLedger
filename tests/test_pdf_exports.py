@@ -31,9 +31,10 @@ class SettlementFooterParser(HTMLParser):
         elif tag == "tr" and self.section == "tfoot":
             self.rows.append([])
         elif tag == "td":
-            classes = set(dict(attrs).get("class", "").split())
+            attributes = dict(attrs)
+            classes = set(attributes.get("class", "").split())
             if self.section == "tfoot":
-                self.cell = {"classes": classes, "text": ""}
+                self.cell = {"classes": classes, "text": "", "colspan": int(attributes.get("colspan", "1"))}
                 self.rows[-1].append(self.cell)
             elif self.section == "tbody":
                 self.body_classes.append(classes)
@@ -73,7 +74,7 @@ class PdfExportTests(unittest.TestCase):
         footer.feed(html)
         self.assertEqual(len(footer.rows), 2)
         subtotal, monthly = footer.rows
-        self.assertEqual(subtotal[0], {"classes": {"row-label"}, "text": "单项合计"})
+        self.assertEqual(subtotal[0], {"classes": {"row-label"}, "text": "单项合计", "colspan": 1})
         summary = [cell for cell in subtotal if "summary-subtotal" in cell["classes"]]
         self.assertEqual([cell["text"] for cell in summary], ["20", "10", "45.00"])
         iacucs = [
@@ -85,7 +86,10 @@ class PdfExportTests(unittest.TestCase):
         self.assertTrue(all(cell["classes"] in ({"num"}, {"money"}) for cell in iacucs))
         self.assertEqual(monthly[0]["classes"], {"row-label", "row-label-summary"})
         self.assertEqual(monthly[0]["text"], "本月待缴纳饲养费总计（元）")
-        self.assertEqual(monthly[1], {"classes": {"money", "summary-total-money"}, "text": "90.00"})
+        self.assertEqual(monthly[0]["colspan"], 3)
+        self.assertEqual(monthly[1], {"classes": {"money", "summary-total-money"}, "text": "90.00", "colspan": 10})
+        self.assertEqual(sum(cell["colspan"] for cell in monthly[:2]), 13)
+        self.assertGreater(monthly[1]["colspan"], monthly[0]["colspan"])
         details = [cell for cell in monthly if cell["classes"] == {"meta-summary"}]
         self.assertEqual(
             [cell["text"] for cell in details],
