@@ -143,7 +143,7 @@ function renderStandardCard(
         .trim()
         .toUpperCase();
   return `<section class="standard-card"><table><colgroup><col style="width:14mm"><col style="width:6mm"><col style="width:5mm"><col style="width:25mm"><col style="width:16mm"><col style="width:8mm"><col style="width:7mm"><col style="width:9.5mm"><col style="width:9.5mm"></colgroup>
-<tr style="height:4.86mm"><td class="label" colspan="2">批次号</td><td class="value value-compact" style="line-height:.85" colspan="2">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td><td class="label">供应商</td><td class="value" colspan="4">${blank ? "" : escapeHtml(abbreviateSupplier(batch.supplier))}</td></tr>
+<tr style="height:4.86mm"><td class="label" colspan="2">批次号</td><td class="value value-compact standard-batch" style="line-height:.85" colspan="2">${blank ? "" : highlightBatchIacuc(batch.batchNo, batch.iacuc)}</td><td class="label">供应商</td><td class="value" colspan="4">${blank ? "" : escapeHtml(abbreviateSupplier(batch.supplier))}</td></tr>
 <tr style="height:4.86mm"><td class="label" colspan="2">项目负责人</td><td class="${standardPersonValueClass(pi)}" colspan="2">${escapeHtml(pi)}</td><td class="label">动物品系</td><td class="value" colspan="4">${blank ? "" : escapeHtml(batch.strainStandard || batch.strainRaw)}</td></tr>
 <tr style="height:4.86mm"><td class="label label-long" colspan="2">实验负责人/助手</td><td class="${standardPersonValueClass(owner)}" colspan="2">${escapeHtml(owner)}</td><td class="label">动物规格</td><td class="value" colspan="4">${blank ? "" : escapeHtml(batch.specification)}</td></tr>
 <tr style="height:4.86mm"><td class="label" colspan="2">联系电话</td><td class="${phoneClass}" colspan="2">${escapeHtml(phone)}</td><td class="label">接收日期</td><td class="value" colspan="4">${blank ? "" : escapeHtml(formatDate(batch.intakeDate))}</td></tr>
@@ -241,6 +241,8 @@ body{margin:0;background:#fff;font-family:"Source Han Sans SC","Noto Sans CJK SC
 .standard-card .value{font-size:2.32mm;font-weight:500;text-align:center}
 .standard-card .value-compact{font-size:1.98mm;line-height:.98}
 .batch-iacuc-highlight{font-size:2.7mm;color:#b91c1c;font-weight:800}
+.standard-card .standard-batch{font-size:1.85mm}
+.standard-card .standard-batch .batch-iacuc-highlight{font-size:2.4mm}
 .standard-card .row-head{text-align:center;font-weight:800;font-size:2.35mm;white-space:nowrap}
 .standard-card .room{text-align:center;color:#7f0000;font-size:9.25mm;font-weight:900}
 .standard-card .cycle{font-size:1.86mm;font-weight:800;text-align:center;letter-spacing:-.06mm;white-space:nowrap}
