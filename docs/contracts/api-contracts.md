@@ -44,6 +44,12 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 IACUC 状态在数据库有索引记录时只查询数量和最近导入时间，不读取应用 payload；文件方式的旧安装保留原回退与缓存。运行日志通过固定阶段标签关联连接、查询、解码、权限过滤、设施汇总和检疫关联耗时，不记录SQL、筛选值或业务内容。
 
+## 当前界面与兼容接口
+
+当前入口按 [current-baseline.md](current-baseline.md) 核对。单据跟踪由 `WorkflowCenterView` 挂载 `BillingWorkflowPanel`，通过 `/api/billing-workflows/*` 完成交回登记及补录；旧应收、报销单、核销中心和历史台账四页签不再挂载。`/api/reimbursement-ledger/*` 及原台账读写继续兼容，历史 Excel 导入仍由数据管理使用，领域服务及资金保护继续保留。支持状态、静态调用模块和组件测试均不等同于当前菜单入口；不能据前端不可达删除 API、payload 或迁移。
+
+内部 `statement_archived` 表示已登记且未归档，`statement_locked` 才表示已锁定且已归档；历史状态继续只按原兼容规则读取。当前阶段和授权以 workflow service、权限投影及实际 UI 为准，不按英文常量名称推断产品文案。
+
 ## 多人负责人展示与筛选
 
 `pi`（项目负责人）和 `owner`（实验负责人）的原始文本继续保存在原字段中。界面按 `、 / \ ; ； , ， | ｜ ／ ＼` 及换行、制表符拆分、去两侧空白和重复项，使用顿号展示；普通空格、中点和连字符不拆分姓名，不按相近文字合并人员。输入控件失焦显示顿号，聚焦可核对原文；仅聚焦、失焦或编辑其他字段不改写原始负责人。
@@ -421,7 +427,7 @@ PDF 用户导出优先于后台预热任务，未命中缓存的同一文档只�
 | `GET`  | `/api/reimbursement-ledger/legacy-records`              | 分页                              | `{ items, page }` |
 | `POST` | `/api/reimbursement-ledger/legacy-records/{id}/migrate` | 空                                | `{ item }`        |
 
-> 当前“单据跟踪”以 `/api/billing-workflows` 为主（发起 → 登记归档 → 补录），上述多对多核销台账接口与旧报销单/核销分摊保留为兼容入口，界面已不再使用。
+> 当前“单据跟踪”以 `/api/billing-workflows` 为主（发起 → 交回登记 → 补录；锁定后才归档），上述多对多核销台账接口与旧报销单/核销分摊保留为兼容入口，界面已不再使用。
 
 结算应收固化费用产生项目负责人、IACUC、结算版本和待核销金额。报销单以单号为业务键，经费明细保存经费本号、经费负责人和报销金额；同单明细使用同一位经费负责人。已确认核销同时受经费明细余额和结算应收余额约束。历史 `/api/reimbursement-records` 保持兼容和只读迁入入口。
 

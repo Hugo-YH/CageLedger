@@ -1,5 +1,7 @@
 # CageLedger 前端状态契约
 
+页面是否现役先按 [当前实现与兼容边界](current-baseline.md) 核对。目录、typed hook 和兼容 re-export 的存在不等于有当前 UI 调用；未接入的历史业务组件由 `frontend-lifecycle.json` 明确登记，旧组件测试保留但不作为当前页面覆盖。
+
 本契约约束 React 前端的状态归属、查询缓存和持久化。当前实现以 TanStack Query、页面局部状态和 `UiProvider` 为核心。
 
 页面布局、工具提示、弹窗、异步反馈和可访问性交互规则见 [UI 交互系统](ui-interaction-system.md)。

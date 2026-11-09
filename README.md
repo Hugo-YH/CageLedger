@@ -13,11 +13,11 @@
 | 笼位管理   | 饲养间、笼架、笼位、待进驻任务、动态笼位图和占用历史                             |
 | 动物巡检   | 巡检目录、参考图、巡检记录、异常登记、处置和复查                                 |
 | 饲养费管理 | 月度数量统计表、逐日计费、转入转出镜像记录、自定义收费、项目负责人合表和减免分配 |
-| 结算与报销 | 结算单 PDF／Excel、流程发起与单据跟踪、报销登记、核销分摊和月度汇总              |
+| 结算管理   | 两类费用独立出单、PDF／Excel、单据跟踪、交回登记、报销单补录与月度汇总           |
 | 帮助与反馈 | 站内反馈、截图与 Markdown、Gitea 处理进展同步、管理员导入历史工单                |
 | 系统管理   | IACUC 索引、账号和房间授权、备份恢复、操作日志与运行状态                         |
 
-当前正式结算入口是数量统计表。动态笼位图核算仍处于调试阶段，暂未作为正式结算入口；结算流程和报销台账分别记录单据进展与缴费情况。
+当前正式饲养费结算来源是数量统计表；技术服务费按明细独立核算。两类费用共用结算列表和单据跟踪，登记后仍未归档，锁定后才显示已归档。动态笼位图计费与旧报销／核销接口仍保留兼容，当前界面没有旧“核销中心”等四页签。维护前先核对 [当前实现与兼容边界](docs/contracts/current-baseline.md)。
 
 预约消息 AI 识别需配置 DeepSeek；未配置时可使用本地识别。反馈先在系统留档，配置 Gitea 凭据后同步工单；处理状态由 Gitea 维护，历史工单由管理员选择导入。
 
@@ -39,7 +39,7 @@ docker run -d --name cageledger --restart unless-stopped \
   ddns.cellnucle.us:3333/hugo/cageledger:latest
 ```
 
-`cageledger-data` 保存数据库与附件。正式部署可将 `latest` 替换为[发布页](https://git.cellnucle.us/hugo/cageledger/releases)中的版本号，例如 `1.6.0`。Compose、群晖 NAS、离线镜像与升级步骤见[部署与运行](wiki/部署与运行.md)；备份范围见[备份与维护](wiki/备份与维护.md)。
+`cageledger-data` 保存数据库与附件。正式部署可将 `latest` 替换为[发布页](https://git.cellnucle.us/hugo/cageledger/releases)中的版本号，例如 `1.31.7`。Compose、群晖 NAS、离线镜像与升级步骤见[部署与运行](wiki/部署与运行.md)；备份范围见[备份与维护](wiki/备份与维护.md)。
 
 ## 技术栈
 
@@ -73,31 +73,31 @@ npm run dev
 
 开发服务同时启动 Vite、Python API 和 VitePress。端口可通过 `CAGELEDGER_DEV_PORT`、`CAGELEDGER_DEV_API_PORT`、`CAGELEDGER_DOCS_PORT` 调整。
 
-初始管理员由 `CAGELEDGER_ADMIN_USERNAME`、`CAGELEDGER_ADMIN_PASSWORD` 配置；未配置时为 `admin / admin123`。这些变量用于首次初始化，已有账号不会因修改变量而重置。
+开发和隔离测试首次初始化可使用 `admin / admin123`。生产模式首次创建管理员须显式设置 `CAGELEDGER_ADMIN_USERNAME` 和至少 12 位随机 `CAGELEDGER_ADMIN_PASSWORD`；已有账号不会因修改变量而重置。
 
 本地生成 PDF 需安装 Chromium、LibreOffice Writer 和中文字体，或配置对应可执行文件路径；Docker 镜像已包含运行组件。环境设置、浏览器测试和开发规范见[参与开发](CONTRIBUTING.md)。
 
 ## 常用命令
 
-| 命令                            | 用途                                                               |
-| ------------------------------- | ------------------------------------------------------------------ |
-| `npm run dev`                   | 开发页面、API 和文档站                                             |
-| `npm start`                     | 构建后启动本地生产服务                                             |
-| `npm run build`                 | 构建业务页面和 VitePress 文档                                      |
-| `npm run verify:quality`        | 仅静态质量检查，不运行测试或生产构建                               |
-| `npm run check`                 | 格式、lint、类型、前后端测试与项目契约检查                         |
-| `npm run test:e2e`              | Chromium 业务回归，默认使用隔离数据库                              |
-| `npm run test:e2e:compat`       | Firefox／WebKit 桌面兼容性检查                                     |
-| `npm run verify:full`           | 统一检查、生产构建和三浏览器回归                                   |
-| `npm run package:offline`       | 生成包含 `web-dist/` 的离线源码包                                  |
-| `npm run package:managed`       | 前端/文档构建一次，复用生成源码包与 ARM64 镜像包                   |
-| `npm run publish:cloud`         | 将已核验的源码包和 ARM64 镜像包上传到 Gitea 私有仓库的开发构建草稿 |
-| `npm run package:container`     | 构建 ARM64 镜像及离线镜像包，不上传                                |
-| `npm run package:offline:image` | 导出 ARM64 离线镜像与校验文件                                      |
+| 命令                                       | 用途                                                    |
+| ------------------------------------------ | ------------------------------------------------------- |
+| `npm run dev`                              | 开发页面、API 和文档站                                  |
+| `npm start`                                | 构建后启动本地生产服务                                  |
+| `npm run build`                            | 构建业务页面和 VitePress 文档                           |
+| `npm run verify:quality`                   | 仅静态质量检查，不运行测试或生产构建                    |
+| `npm run check`                            | 格式、lint、类型、前后端测试与项目契约检查              |
+| `npm run test:e2e`                         | Chromium 业务回归，默认使用隔离数据库                   |
+| `npm run test:e2e:compat`                  | Firefox／WebKit 桌面兼容性检查                          |
+| `npm run verify:full`                      | 统一检查、生产构建和三浏览器回归                        |
+| `npm run package:offline`                  | 生成包含 `web-dist/` 的离线源码包                       |
+| `npm run package:managed`                  | 前端/文档构建一次，复用生成源码包与 ARM64 镜像包        |
+| `npm run publish:cloud -- --offline-image` | 显式上传 ARM64 离线镜像附件到私有开发草稿，不上传源码包 |
+| `npm run package:container`                | 构建 ARM64 镜像及离线镜像包，不上传                     |
+| `npm run package:offline:image`            | 导出 ARM64 离线镜像与校验文件                           |
 
 本地生产服务在 `5173` 同时提供页面、文档和 `/api`。离线源码包在目标机器运行时无需 Node.js，仍需 Python 3.13 和运行依赖。
 
-项目 Python 命令默认使用 `.venv`；可通过 `CAGELEDGER_PYTHON_BIN` 指定其他 Python 3.13 可执行文件。验证范围见[测试策略](docs/contracts/testing-strategy.md)。正式发布从 `main` 执行 `npm run release:local -- --version X.Y.Z --push`，具体流程见[发布与 CI-CD](wiki/发布与CI-CD.md)。
+项目 Python 命令默认使用 `.venv`；可通过 `CAGELEDGER_PYTHON_BIN` 指定其他 Python 3.13 可执行文件。验证范围见[测试策略](docs/contracts/testing-strategy.md)。云端正式发布在版本、验证、打包、标签推送和 Packages 核验完成后执行 `npm run release:cloud -- --publish`；该命令不自动完成准备步骤。Mac 专用 `release:local` 作为手动备用，具体流程见[发布与 CI-CD](wiki/发布与CI-CD.md)。
 
 ## 文档
 

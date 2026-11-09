@@ -62,6 +62,10 @@ npm run test:python:target -- tests.test_release_host_guard --dry-run
 
 `npm test`、`npm run test:python` 不带目标仍表示明确运行该层全量，用于确实需要的场景；不作为代理默认开发动作。`npm run check:steps` 是受管控制器的内部串行步骤，禁止直接调用来绕过主机保护。直接执行 Vitest/Playwright 或批量 unittest 也不构成资源保护的替代；轻量脚本单测可直接指定模块进行诊断，但不能同时启动其他重任务。
 
+## 覆盖与实际入口
+
+按 [当前实现与兼容边界](current-baseline.md) 先确认生产入口。孤立渲染旧组件、mock 一个未被现役 View 使用的 hook，不能作为当前用户流程的缺陷或通过证据；兼容 API 的测试只证明相应接口行为。`npm run check:frontend-lifecycle` 静态核对生产依赖与历史保留清单；其解析器行为用 `node --test scripts/tests/frontend_lifecycle.test.mjs` 轻量验证，不替代角色、开关、HTTP 或浏览器验证。
+
 ## 测试用例的价值与数量
 
 测试数量和覆盖率不是完成指标，不设每个改动必须新增几条测试的配额。新增或维护用例时，说明独特的行为/风险、最轻且足够的验证层、数据隔离和维护归属：
@@ -189,7 +193,7 @@ npm run check
 - 笼位：授权房间、预留、正式入驻、设为空和 Animal Record ID 延续。
 - 数量统计表：多类型录入、日期、转入转出镜像、保存、预览和导出。
 - 结算：按 PI 合表、IACUC 有效期、逐日减免、全额减免、PDF 和流程发起。
-- 单据跟踪：结算流程筛选、登记归档、补录报销单和撤回/撤销。
+- 单据跟踪：结算流程筛选、交回登记、锁定归档、补录报销单和撤回/撤销。
 - 权限：管理员与房间管理员分别验证前端入口和 API 状态码。
 - 系统状态：管理员性能快照与历史记录、PDF 队列与缓存指标、手动刷新、普通账号不请求指标、空样本、四档视口与 Axe。
 - 性能改动：缓存、索引、SQLite 查询、PDF 渲染、批量操作或首屏加载改动前后，读取相同时间窗口的 `/api/system/performance-history`，记录版本、HTTP/SQLite P95、慢请求、锁错误和结论；同时运行 `npm run benchmark`。历史数据只能用于管理员趋势与验收，采样不得进入请求链路，也不得包含用户、请求参数或 SQL。

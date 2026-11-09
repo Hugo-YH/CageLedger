@@ -175,6 +175,7 @@ export default defineConfig({
             { text: "环境变量", link: "/operations/environment" },
             { text: "账号与权限", link: "/operations/accounts-and-permissions" },
             { text: "数据管理与 IACUC 索引", link: "/operations/data-and-iacuc" },
+            { text: "供应商简称映射", link: "/operations/supplier-aliases" },
             { text: "备份与维护", link: "/operations/backup-and-maintenance" },
             { text: "故障排查", link: "/operations/troubleshooting" },
           ],
@@ -184,6 +185,7 @@ export default defineConfig({
         {
           text: "开发维护",
           items: [
+            { text: "当前版本与兼容边界", link: "/development/current-baseline" },
             { text: "项目结构", link: "/development/project-structure" },
             { text: "本地开发", link: "/development/local-development" },
             { text: "前端架构", link: "/development/frontend-architecture" },

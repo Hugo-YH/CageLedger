@@ -21,6 +21,10 @@
 - 结算、减免、权限、数据库迁移等关键判断由主代理负责；主代理检查实际 diff、验收覆盖与必要的测试证据后交付。同一问题连续两轮修复仍失败，或发现业务歧义与越界依赖时，交回主代理处理。
 - 检查与打包复用现有脚本；未改动且已通过的检查不重复运行。发布授权仍遵守现有边界。具体维护规则见 `docs/contracts/agent-instructions.md`。
 
+## 当前实现核对
+
+当前版本、页面入口与兼容代码的核对从 [current-baseline.md](docs/contracts/current-baseline.md) 开始。代码审查先追踪导航／快捷入口、实际 View、hook 和 HTTP 调用链；文件存在、测试引用或兼容导出不能证明当前页面可达。报告区分现役流程、兼容 API 与未接入的历史组件，不能把孤立组件测试的结果扩大为当前用户流程。
+
 ## 项目入口
 
 React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表使用 TanStack Virtual。Python 标准库 HTTP 服务与 SQLite 提供后端，生产页面和 `/api` 由同一服务提供。
@@ -47,11 +51,11 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 - Animal Record ID 是笼卡实例的持久唯一标识，后续实验、繁殖、取材记录继续沿用该标识。
 - `项目来源` 是财务字段 `funding` 的 source of truth。
 - “已取材”和“设为空”保留独立业务语义。
-- 数量统计表和动态笼位图是并存的结算数据入口。
+- 数量统计表是当前正式饲养费结算来源；动态笼位图计费代码及历史视图仍保留，默认菜单不开放为正式结算入口。现役笼位管理不受此限制。
 - 数量统计表转入转出需要同步目标伦理、镜像记录和结算结果。
 - 项目负责人减免按 PI 总额度、IACUC 有效期、优先减免设置和逐日笼数动态分配。
 - 结算单按月、按项目负责人汇总；IACUC 和设施保留为明细维度。
-- 结算流程与报销台账并行：流程记录单据状态，台账记录应缴、已缴和累计未缴。
+- 当前报销登记与补录在“结算管理 → 单据跟踪”完成；流程阶段与锁定归档分别表达。旧报销台账、应收和核销 API 及历史数据保留，不能据此推断当前工作台仍有旧四页签。
 - 房间管理员的设施写权限按授权房间控制；数量统计表跨房间录入、结算导出和发起流程按现行业务授权执行。
 - 涉及结算、权限、转移和状态推进的修改同时验证前端、API、SQLite 和审计日志。
 
@@ -75,7 +79,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 Codex 云端负责日常开发、验收、按影响范围的测试和 ARM64 构建，继续推送 Gitea Packages；Gitea 托管代码、Packages 和 Release。生产目标为 DS223（aarch64），只构建 `linux/arm64`，历史 AMD64 制品保留。离线源码包以后由 Gitea 本地构建，Codex 不上传；本地临时源码包仍可用于来源核验。运行环境由 `runtime-image.lock.json` 固定到不可变摘要，受管构建直接复用已验证的依赖层；依赖输入变化时明确失败，只有显式 `npm run runtime:refresh` 才刷新和发布新的内容寻址运行时镜像，不移动业务版本或 `latest`。保留缓存，不能用每次重新安装 apt/pip 代替锁定依赖。
 
-正式云端发布默认 `npm run release:cloud -- --publish`：先完成相关验收与 ARM64 构建/冒烟，推送代码及附注标签，再推送并核验 Packages 的同版本镜像/索引；Release 只附小型来源与摘要清单和拉取指引。需要离线交付时显式加 `--offline-image` 才上传镜像分片并完整回读 SHA256；开发草稿入口 `publish:cloud` 同样必须显式选此开关。默认发布不再上传约 600 MiB 的离线整包，不用 Release 附件替代 Packages。只复用来源、摘要及身份一致的凭据，不覆盖既有版本、标签或其他发布模式的 receipt。发布成功后才能显式更新 `latest`。代码、测试与产物对应同一发布源码，普通修改和推代码不自动打包或发布。生产部署与环境发布分别按用户授权执行。
+正式云端发布先完成版本与更新记录、相关验收、同一提交的 ARM64 构建/冒烟、代码及附注标签推送和 Packages 核验，再运行 `npm run release:cloud -- --publish`。该命令校验已有标签、产物及 Packages 凭据并发表 Release，不自动执行前述准备步骤；Release 只附小型来源与摘要清单和拉取指引。需要离线交付时显式加 `--offline-image` 才上传镜像分片并完整回读 SHA256；开发草稿入口 `publish:cloud` 同样必须显式选此开关。默认发布不再上传约 600 MiB 的离线整包，不用 Release 附件替代 Packages。只复用来源、摘要及身份一致的凭据，不覆盖既有版本、标签或其他发布模式的 receipt。发布成功后才能显式更新 `latest`。代码、测试与产物对应同一发布源码，普通修改和推代码不自动打包或发布。生产部署与环境发布分别按用户授权执行。
 
 使用现有 checkout 和独立 Gitea remote；云端流程见 [cloud-development.md](docs/contracts/cloud-development.md)。Mac mini Runner 仅作手动备用，配置见 [macos-gitea-runner.md](docs/contracts/macos-gitea-runner.md)。`release:local` 保留 Mac 平台专用转换器信任及完整正式发布配置，不能据此声称该管线已全部迁移到 Linux。测试范围按风险选择，受管云端保持宿主锁、cgroup 资源保护、单组浏览器/单 worker、隔离数据和退出核对；同一输入已通过的检查不重复运行。发布默认不签名，按需显式启用，不修改个人 Git 签名配置。
 

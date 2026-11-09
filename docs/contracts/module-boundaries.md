@@ -2,6 +2,10 @@
 
 本契约描述 React 迁移完成后的代码结构。新增功能沿现有边界扩展，迁移过程记录保留在 `docs/archives/cageledger-react-performance/`。
 
+## 现役与历史实现
+
+文件目录描述代码职责，不等于当前产品菜单。先按 [当前实现与兼容边界](current-baseline.md) 追踪真实入口；`frontend-lifecycle.json` 登记未接入的历史前端实现，`npm run check:frontend-lifecycle` 检查其与生产依赖图是否一致。`WorkflowCenterView` 当前仅挂载 `BillingWorkflowPanel`；旧四页签及其测试继续保留，不作为当前页面流程。共用 `LedgerListShared` 仍有现役调用。后端兼容接口、导入和历史数据按各自调用链维护，不随旧 UI 撤下而删除。
+
 ## 依赖方向
 
 ```mermaid
@@ -106,7 +110,7 @@ graph TD
 ## 热点拆分后的职责落点
 
 - 巡检service保留用例编排，`inspection_repository.py`负责行读写与投影，`inspection_rules.py`负责可见性、权限和校验；原service函数入口保持。
-- 报销台账的核销命令、附件和共用校验分别位于`allocation_commands.py`、`claim_attachments.py`、`claim_rules.py`；service继续持有单据、应收与历史迁移编排。
+- 保留的报销／核销兼容领域（不是当前独立页面）的核销命令、附件和共用校验分别位于`allocation_commands.py`、`claim_attachments.py`、`claim_rules.py`；service继续持有单据、应收与历史迁移编排。
 - 候选快照按groups/model/queries/storage划分，流程repository按queries/projections/writes划分；原`billing_candidates.py`和`billing_workflows.py`保留兼容导出。
 - GET适配按领域进入`read_*_actions.py`，`ReadActionsMixin`显式组合原动作接口。API清单静态解析其唯一实际owner，仍拒绝缺失或重复动作。
 - `base_schema.py`按原顺序调用五个领域DDL helper，迁移后处理、提交和默认管理员初始化仍由外层编排，不在helper内增加事务边界。

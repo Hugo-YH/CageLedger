@@ -1,3 +1,7 @@
+/**
+ * 历史独立报销单页签；当前单据跟踪由 BillingWorkflowPanel 提供。
+ * 保留边界见 docs/contracts/frontend-lifecycle.json 与 docs/contracts/current-baseline.md。
+ */
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";

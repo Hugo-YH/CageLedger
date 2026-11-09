@@ -1,3 +1,7 @@
+/**
+ * 历史文字补充弹窗；当前录入使用 IntakeReviewDialog，不从此组件推断现役交互。
+ * 保留边界见 docs/contracts/frontend-lifecycle.json 与 docs/contracts/current-baseline.md。
+ */
 import { Alert, Card, Flex, Image, Table, Tag, Typography, type TableProps } from "antd";
 
 import type { IntakeRecognitionMergeCandidate, IntakeRecognitionMergePreview } from "../../../../contracts/intake";

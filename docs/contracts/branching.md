@@ -1,65 +1,37 @@
 # 分支策略
 
-本文件定义 CageLedger 的长期分支模型、合并方向和发布流程，作为日常开发与发布的统一约定。
+开发使用 `main`、`beta`、`rc` 三个长期分支。当前版本修复和小功能在同步后的 `main` 完成；下一大版本使用 `beta`，预发布整合使用 `rc`，不为常规任务新建临时开发分支。
 
-仓库开发只使用 `main`、`beta`、`rc` 三个分支。当前版本的日常修复和小功能直接在默认分支 `main` 上完成，不创建 `codex/*`、`feature/*` 等临时开发分支。
-
-云平台初始提供的 `work` 仅作为导入分支：先核对 HEAD 和已有修改，再进入上述长期分支；不通过 reset 丢弃工作。平台 GitHub origin 可保留，Gitea 使用显式 `gitea` remote，操作见 [云端开发](cloud-development.md)。
+云平台的 `work` 只是初始导入分支，核对已有工作后进入目标分支，不 reset 或丢弃改动。云端上游显式使用 Gitea 的 `gitea` remote；平台 GitHub `origin` 保留，不能把旧文档中的 `origin/main` 直接当成云端日常上游。操作见 [cloud-development.md](cloud-development.md)。
 
 ## 分支角色
 
-| 分支   | 角色                                           | 合并方向                           | 生命周期               |
-| ------ | ---------------------------------------------- | ---------------------------------- | ---------------------- |
-| `main` | 默认分支；当前大版本的问题修复与新增小功能     | 直接接收日常开发提交；接收 rc 整合 | 长期                   |
-| `beta` | 下一大版本的功能开发线（UI、性能、新特性）     | 定期合并 `main`                    | 大版本上线后归档或重建 |
-| `rc`   | 预发布整合线；合并 `main` 与 `beta` 的全部内容 | 发布 `vX.Y.Z-rcN` 后快进至 `main`  | 每轮保留候选标签       |
+| 分支   | 角色                                     | 合并方向                       |
+| ------ | ---------------------------------------- | ------------------------------ |
+| `main` | 当前版本的日常修复、小功能与正式版本源码 | 接收常规提交及已验证的 RC 整合 |
+| `beta` | 下一大版本开发                           | 定期合入 `gitea/main`          |
+| `rc`   | 合并 main 与 beta 的预发布整合           | 完成候选验证后由 main 接收     |
 
-## 合并方向
+`main` 是正式版本的唯一发布出口；普通 main 提交不等于已发布版本。版本及更新检查以正式 Release 和不可变版本标签为准。
+
+## 合并与验证
 
 ```text
-main ──────────────► rc ──────────────► main（正式发布 vX.Y.Z）
+main ──────────────► rc ──────────────► main
   │                  ▲
-  │                  │
   └──► beta ─────────┘
-       （定期合并 main）
 ```
 
-### 约定
+- 新任务先 fetch 并比较当前分支；干净且仅落后时可快进。有修改、分叉或未知引用时保留现场，先分析。
+- beta 定期合入 `gitea/main`；rc 发布候选前合入 `gitea/main` 与 `gitea/beta`，冲突在接收分支解决，不另写重复修复。
+- RC 接收前验证最终整合状态；显式完整候选验证使用 `npm run verify:full`。日常修复按 [测试策略](testing-strategy.md) 选择相关检查，不因提交自动升级全量。
+- main 接收 RC 时使用已核实的 `gitea/rc` 快进，不覆盖本地改动。正式发布后下一轮从新正式基线继续整合，分叉不强推。
+- 不 rebase 已共享历史，不以 cherry-pick 代替长期分支的常规合并。清理旧分支前核对其提交已进入默认分支并推送。
 
-- `main` 是唯一正式发布出口，正式版本号以 `main` 上的 `v*` tag 为准。
-- 日常开发先同步对应分支，完成针对性验证后直接提交和推送；推送到 `main` 不代表已经发布，发布前完整验证仍由 Codex 云端执行。
-- `beta` 专注下一大版本功能，不直接发布正式版本。
-- `rc` 是 `main + beta` 的整合线，只做整合与验证，不开发新功能。
-- `beta` 每次在 `main` 发版后执行 `git merge origin/main`，先自行消化生产修复，避免与 `main` 长期分叉。
-- `rc` 每次发布 `vX.Y.Z-rcN` 前执行 `git merge origin/main` 与 `git merge origin/beta`，再运行 `npm run verify:full`。
-- 合并冲突在接收方分支解决；涉及结算、权限、导出等共享文件时保留双方语义并跑全量验证。
-- 正式发布前 `main` 以 `git merge --ff-only origin/rc` 接收已验证 RC；发布脚本确认 `origin/rc` 是 `main` 的祖先后才允许创建正式 tag。
-- 正式发布完成后 `beta` 快进到 `main` 作为下一轮开发基线；当前 `rc` 保留在最后一个候选 tag，下一轮从新的正式基线重新整合。
+## 发布入口的区别
 
-## 发布流程
+云端 `release:cloud` 当前接受 main 上的正式 `X.Y.Z`，要求已有最终源码、匹配的本地及远端附注标签、已核验 ARM64 产物和 Packages 凭据。它不创建版本提交、不打标签、不运行测试或打包，也不接受 Mac 的 `--bump` 参数。准备及调用顺序见 [云端交付](cloud-development.md) 和 [发布工程](release-engineering.md)。
 
-### 正式版（main）
+Mac 手动备用的 `release:local` 使用其独立检出的官方 Gitea `origin`，保留 `check_stable_release_ready.sh`／`check_rc_merged.sh` 的分支祖先与合并检查，以及预发布版本和 `--bump` 的原行为。不得为使该配置运行而改写云端导入 remote，也不能把 Mac 预发布能力当作云端正式 Release 命令的能力。
 
-1. 在 `main` 上更新 release notes。
-2. 运行 `npm run release:local -- --version X.Y.Z --push`。
-
-### 预发布版（rc）
-
-1. 在 `rc` 上执行 `git fetch origin`。
-2. 执行 `git merge origin/main` 与 `git merge origin/beta`，解决冲突。
-3. 更新 release notes 并设置版本 `X.Y.Z-rcN`。
-4. 运行 `npm run verify:full` 全量验证。
-5. 运行发布脚本（同正式版命令），发布 `vX.Y.Z-rcN`。
-
-## 修复迁移
-
-- `main` 上的生产修复保持小而独立，一个 bug 一个提交，避免夹带无关重构。
-- `rc` 遇到与 `main` 相同的问题时，优先通过合并 `main` 引入修复，不在 `rc` 上另写一份。
-- 合并频率建议 1-3 天一次，或每次 `main` 发版后立即合并，冲突范围随间隔线性增长。
-- 清理历史临时分支前，先确认它的全部提交均已进入默认分支并成功推送，再删除分支引用；不通过强制覆盖或丢弃提交完成整理。
-
-## 禁止事项
-
-- 不在 `beta` 或 `rc` 上直接发布正式版本号。
-- 不用 cherry-pick 替代定期 merge；merge 保留唯一来源，Git 自动去重已合并提交。
-- 不 rebase 已共享的历史（`beta` 发布 tag 和 `rc` 历史依赖 merge 结构）。
+提交推送、标签、Packages、Release、latest 和生产部署各有授权边界；历史计划中的“未推送”或旧授权不覆盖当前用户指令。日常修改验证后及时提交推送的约定继续生效，普通代码备份不自动触发发布。

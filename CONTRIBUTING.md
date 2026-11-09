@@ -1,6 +1,6 @@
 # 参与 CageLedger 开发
 
-本文说明开发环境、代码边界、质量检查和提交要求。日常开发、验收和定向测试以 [Codex 云端开发](docs/contracts/cloud-development.md) 为入口；明确交付任务的软件包也由云端构建，代码及 ARM64 产物推送到 Gitea。[Mac mini Runner](docs/contracts/macos-gitea-runner.md) 仅作可选手动备用。业务口径以 `AGENTS.md` 和 `docs/contracts/` 为准。
+本文说明开发环境、代码边界、质量检查和提交要求。日常开发、验收和定向测试以 [Codex 云端开发](docs/contracts/cloud-development.md) 为入口；明确交付任务的软件包也由云端构建，代码及 ARM64 产物推送到 Gitea。[Mac mini Runner](docs/contracts/macos-gitea-runner.md) 仅作可选手动备用。当前入口与历史兼容的判断先读 [current-baseline.md](docs/contracts/current-baseline.md)，业务约束见 `AGENTS.md` 和对应领域契约。
 
 ## 环境
 
@@ -17,7 +17,7 @@ python3.13 -m venv .venv
 npm run dev
 ```
 
-此次 beta 在 Node 22.23.3 / npm 11.21.1 下完成默认策略的干净安装；npm 10.9.9 的默认 `ci` 对既有 React peer 图仍报锁文件缺项。`antd-mobile` 间接使用的 `@react-spring/web` 声明尚未覆盖 React 19，严格 peer 检查仍失败；实际交互回归通过不能替代上游兼容声明。不要用自动降级移动组件或新增 `--force` 绕过。现有 Dockerfile 使用 `--legacy-peer-deps`，与本地默认安装策略的差异仍须在单独的依赖兼容任务中收敛。
+现有依赖基线已在 Node 22.23.3 / npm 11.21.1 下验证默认策略的干净安装；npm 10.9.9 的默认 `ci` 对既有 React peer 图仍报锁文件缺项。`antd-mobile` 间接使用的 `@react-spring/web` 声明尚未覆盖 React 19，严格 peer 检查仍失败；实际交互回归通过不能替代上游兼容声明。不要用自动降级移动组件或新增 `--force` 绕过。现有 Dockerfile 使用 `--legacy-peer-deps`，与本地默认安装策略的差异仍须在单独的依赖兼容任务中收敛。
 
 开发页面为 `http://localhost:5173`，Vite 将 `/api` 代理到 `http://127.0.0.1:5174`。
 
@@ -43,6 +43,10 @@ Vite开发服务拒绝通过静态文件或raw模块读取本工程的`data/`目
 - 一个提交处理一个可说明的改动组。机械格式化、行为修改和文档更新尽量分开。
 - 提交前查看 `git status` 和 `git diff`，保留工作区中已有的其他改动。
 - 运行库、构建产物、浏览器报告和本地 Secret 不进入 Git。
+
+## 当前模块与历史实现
+
+`npm run check:frontend-lifecycle` 从生产入口核对业务模块状态；保留清单在 `docs/contracts/frontend-lifecycle.json`。当前工作区未挂载的旧报销四页签与旧预约补充弹窗不能作为现役用户流程；后端兼容 API、导入和历史数据仍按实际调用维护，不直接删除。
 
 ## 代码边界
 
@@ -117,13 +121,8 @@ Codex 云端负责日常开发、验收、按影响范围的测试和交付任�
 
 ## 发布
 
-明确交付任务使用 `npm run package:managed` 受管打包，串行生成离线源码包和 ARM64 离线镜像；普通开发修改不自动打包。测试、构建与上传必须对应同一源码状态和来源 revision，旧版本产物不覆盖，NAS 不自动部署。普通开发产物可保存到 Gitea 私有仓库的开发构建草稿附件，不等同于正式 Release。单项入口为 `package:offline`、`package:container`。以下为保留的 Mac mini 受管发布流程；其平台专用转换器校验仍然有效，不作为云端普通构建的前置条件。
+云端正式交付在最终源码相关验收、版本提交推送、ARM64 构建与冒烟、附注标签推送和 Packages 核验后，运行 `npm run release:cloud -- --publish`。它校验已有准备结果并发表 Release，不自动完成版本修改、测试、打包、提交、打标签或推送。
 
-1. 在 `wiki/更新日志.md` 增加版本、日期和面向使用者的说明，再运行 `npm run release:notes:sync`。
-2. 正式版本在 `main` 上发布，预发布经 `beta → rc → main` 推进。
-3. 运行 `npm run release:local -- --version X.Y.Z --push`。
-4. 检查 commit、`vX.Y.Z` tag、Gitea Release 和容器镜像。
+普通开发修改和提交不自动打包。默认 Release 只附来源与镜像摘要和拉取指引；显式 `--offline-image` 才上传完整离线镜像，不上传源码包；latest 和生产部署分别处理。操作见 [云端交付](docs/contracts/cloud-development.md) 与 [发布说明](wiki/发布与CI-CD.md)。
 
-版本号由 `package.json` 管理，`scripts/set_version.mjs` 同步其他文件。已有 tag 保持不可变。
-
-发布前可运行 `npm run release:doctor -- --online` 汇总环境问题。Git 默认不签名，显式 `--sign` 启用；开发目录工具缓存、状态查询与故障恢复见 [发布工程](docs/contracts/release-engineering.md)。
+Mac mini 的 `release:local`、`doctor` 和 `status` 仍是手动备用配置，保留平台专用转换器信任和完整验证，不作为云端日常开发的前置条件。恢复、签名与状态目录见 [发布工程](docs/contracts/release-engineering.md)。

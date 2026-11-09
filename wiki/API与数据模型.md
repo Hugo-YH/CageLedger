@@ -153,7 +153,7 @@ node scripts/run_python.mjs scripts/compact_billing_snapshots.py --database /pat
 | `POST`                   | `/api/reimbursement-ledger/allocations/{id}/confirm` | 确认核销                           |
 | `POST`                   | `/api/reimbursement-ledger/allocations/{id}/reverse` | 撤销核销                           |
 
-> 当前“单据跟踪”以 `/api/billing-workflows` 为主（发起 → 登记归档 → 补录）；`/api/reimbursement-ledger` 与旧报销单/核销分摊接口保留为兼容入口，界面已不再使用。
+> 当前“单据跟踪”以 `/api/billing-workflows` 为主（发起 → 交回登记 → 补录；锁定后才归档）；`/api/reimbursement-ledger` 与旧报销单/核销分摊接口保留为兼容入口，界面已不再使用。
 
 ### 管理
 
@@ -196,7 +196,7 @@ npm run verify:database -- --database /absolute/path/offline-backup.sqlite --bas
 
 ### 系统功能入口显示
 
-系统管理员通过“系统设置 → 系统功能”维护七组入口显示开关。`GET /api/system/features` 允许已登录账号读取，默认全开；`PUT` 仅管理员可写，提交完整开关与 `expectedUpdatedAt`，并发冲突409。独立的 `system_feature_settings` 表保存配置，旧的全量数据接口不会清除此配置。更新和 `system_features.updated` 审计在同一事务，记录账号及完整前后设置；无实际变化不重复审计。
+系统管理员通过“系统设置 → 系统功能”维护笼卡、接收、检疫、笼位、动物、饲养费、技术服务费和结算管理八组入口显示开关。`GET /api/system/features` 允许已登录账号读取，默认全开；`PUT` 仅管理员可写，提交完整开关与 `expectedUpdatedAt`，并发冲突409。独立的 `system_feature_settings` 表保存配置，旧的全量数据接口不会清除此配置。更新和 `system_features.updated` 审计在同一事务，记录账号及完整前后设置；无实际变化不重复审计。
 
 这些设置只驱动入口可见性，原业务接口和权限不改变，已有数据、账单及历史统计保留。参数详见仓库 `docs/contracts/api-contracts.md` 和[API接口清单](/development/api-inventory)。
 

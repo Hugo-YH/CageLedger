@@ -48,6 +48,10 @@
 - schema 迁移幂等，旧库启动后自动补齐。
 - 新列表接口提供服务端分页、筛选和稳定排序。
 
+## 前端模块生命周期
+
+`npm run check:frontend-lifecycle` 从 HTML 生产入口解析运行时依赖、动态 import、Worker URL 及纯类型引用，检查 `docs/contracts/frontend-lifecycle.json` 的历史实现登记。未登记的不可达业务模块、重新接入但仍标历史的模块和生产代码依赖测试文件会使检查失败。静态可达不证明菜单可见，具体角色、开关与交互仍按实际入口验证；不得用此检查自动删除兼容 API。检查行为的轻量回归为 `node --test scripts/tests/frontend_lifecycle.test.mjs`。
+
 ## 文件规模门禁
 
 文件行数用于发现职责膨胀，按模块类型设置目标阈值。超过目标阈值会产生警告，超过目标阈值的 120% 会阻断 CI。

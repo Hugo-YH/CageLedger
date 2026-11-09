@@ -1,3 +1,7 @@
+/**
+ * 历史独立报销单编辑器；当前交回登记与补录使用工作流弹窗。
+ * 保留边界见 docs/contracts/frontend-lifecycle.json 与 docs/contracts/current-baseline.md。
+ */
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { ActionIcon } from "../../../components/ui/ActionIcon";

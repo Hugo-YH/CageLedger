@@ -3,7 +3,7 @@
   <text x="40" y="48" fill="#213437" font-family="Arial, sans-serif" font-size="24" font-weight="700">月度结算流程</text>
   <g font-family="Arial, sans-serif" font-size="16" text-anchor="middle">
     <rect x="40" y="92" width="150" height="74" rx="14" fill="#E8F2EF"/>
-    <text x="115" y="136" fill="#213437">在养中</text>
+    <text x="115" y="136" fill="#213437">数量表／服务明细</text>
     <rect x="222" y="92" width="150" height="74" rx="14" fill="#DDEDE8"/>
     <text x="297" y="136" fill="#213437">已生成结算单</text>
     <rect x="404" y="92" width="150" height="74" rx="14" fill="#D2E7E1"/>

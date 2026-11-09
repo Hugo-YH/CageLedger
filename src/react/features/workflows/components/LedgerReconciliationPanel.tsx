@@ -1,3 +1,7 @@
+/**
+ * 历史核销中心页签，当前 WorkflowCenterView 未挂载；组件测试不代表生产可达。
+ * 保留边界见 docs/contracts/frontend-lifecycle.json 与 docs/contracts/current-baseline.md。
+ */
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
 import { useEffect, useMemo, useRef, useState } from "react";

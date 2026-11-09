@@ -1,3 +1,7 @@
+/**
+ * 历史台账迁入页签，当前工作区未挂载；对应后端兼容入口继续保留。
+ * 保留边界见 docs/contracts/frontend-lifecycle.json 与 docs/contracts/current-baseline.md。
+ */
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { useState } from "react";

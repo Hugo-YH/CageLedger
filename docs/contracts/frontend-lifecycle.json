@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "scope": "src/react/features/",
+  "modules": [
+    {
+      "path": "src/react/features/intake/components/IntakeRecognitionMergeDialog.tsx",
+      "status": "retained-legacy",
+      "reason": "旧版文字补充核对弹窗；生产录入已使用统一预约核对弹窗，仅保留原组件及回归。",
+      "replacement": "src/react/features/intake/components/IntakeReviewDialog.tsx",
+      "compatibilityBoundary": "保留旧核对响应类型及补充兼容入口；该组件不是当前预约录入入口。"
+    },
+    {
+      "path": "src/react/features/workflows/components/LedgerClaimsPanel.tsx",
+      "status": "retained-legacy",
+      "reason": "旧版独立报销单页签，已不在当前工作区挂载。",
+      "replacement": "src/react/features/workflows/components/BillingWorkflowPanel.tsx",
+      "compatibilityBoundary": "旧报销单 API、历史数据及经费明细继续保留；当前交回登记使用流程报销单字段。"
+    },
+    {
+      "path": "src/react/features/workflows/components/LedgerLegacyPanel.tsx",
+      "status": "retained-legacy",
+      "reason": "旧版历史台账迁入页签，已不在当前工作区挂载。",
+      "replacement": "src/react/features/workflows/components/BillingWorkflowPanel.tsx",
+      "compatibilityBoundary": "历史台账和迁入 API 仍注册，不随旧前端入口移除而删除。"
+    },
+    {
+      "path": "src/react/features/workflows/components/LedgerObligationsPanel.tsx",
+      "status": "retained-legacy",
+      "reason": "旧版结算应收页签，已不在当前工作区挂载。",
+      "replacement": "src/react/features/workflows/components/BillingWorkflowPanel.tsx",
+      "compatibilityBoundary": "应收读取和来源同步仍是后端兼容业务；不能据旧组件推断当前页面入口。"
+    },
+    {
+      "path": "src/react/features/workflows/components/LedgerReconciliationPanel.tsx",
+      "status": "retained-legacy",
+      "reason": "旧版核销中心页签，当前单据跟踪不挂载该组件，组件测试不代表生产可达。",
+      "replacement": "src/react/features/workflows/WorkflowCenterView.tsx",
+      "compatibilityBoundary": "核销 API、分摊及历史追溯保留；当前单据跟踪只挂载 BillingWorkflowPanel。"
+    },
+    {
+      "path": "src/react/features/workflows/components/ReimbursementClaimDialog.tsx",
+      "status": "retained-legacy",
+      "reason": "旧版独立报销单编辑器，当前工作区没有打开此弹窗的调用。",
+      "replacement": "src/react/features/workflows/components/WorkflowRegistrationModal.tsx",
+      "compatibilityBoundary": "保留旧报销单 API 与组件回归；当前交回登记及补录分别由工作流弹窗处理。"
+    },
+    {
+      "path": "src/react/features/workflows/components/ReimbursementLedger.tsx",
+      "status": "compatibility-facade",
+      "reason": "旧四页签的 re-export 入口，当前应用没有导入，保留原模块路径。",
+      "replacement": "src/react/features/workflows/WorkflowCenterView.tsx",
+      "compatibilityBoundary": "导出的四个旧组件与对应兼容接口不表示当前菜单重新提供这些页签。"
+    },
+    {
+      "path": "src/react/features/workflows/components/ledgerListModel.ts",
+      "status": "retained-legacy",
+      "reason": "仅旧报销单、结算应收及核销页签使用的列表标签与金额列工具。",
+      "replacement": "src/react/features/workflows/components/BillingWorkflowTable.tsx",
+      "compatibilityBoundary": "保留旧列表字段口径；LedgerListShared 仍有现役调用，不能一并当作遗留删除。"
+    }
+  ]
+}

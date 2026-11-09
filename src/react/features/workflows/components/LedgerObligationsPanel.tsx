@@ -1,3 +1,7 @@
+/**
+ * 历史结算应收页签；当前单据跟踪由 BillingWorkflowPanel 提供。
+ * 保留边界见 docs/contracts/frontend-lifecycle.json 与 docs/contracts/current-baseline.md。
+ */
 import { useState } from "react";
 import { Empty, Space, Tag } from "antd";
 import type { TableProps } from "antd";

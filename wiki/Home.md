@@ -12,6 +12,7 @@
 | 填写数量统计表、生成结算和月度汇总 | [数量统计表](/guide/quantity-sheets) → [饲养费核算](/guide/billing)                         |
 | 交回登记、归档与补录报销单         | [结算与报销](/guide/settlement-and-reimbursement)                                           |
 | 部署、备份或排查运行问题           | [部署与运行](/operations/deployment) → [故障排查](/operations/troubleshooting)              |
+| 判断当前入口、兼容 API 和遗留组件  | [当前版本与兼容边界](/development/current-baseline)                                         |
 | 维护代码、接口和发布制品           | [本地开发](/development/local-development) → [测试与质量](/development/testing-and-quality) |
 
 ## 按角色阅读
