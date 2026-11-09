@@ -60,7 +60,7 @@
 
 - 使用、运维、开发分别由导航页承接；快速开始面向已有账号的首次操作，服务器安装由部署页维护，避免把开发环境要求放进日常业务步骤。
 - 文档站保持 VitePress 结构，复用生成的品牌 Token；阅读字号和行距按长文场景设置。布局与样式只在 `wiki/.vitepress/theme/` 维护，不为文档修改工作台样式。
-- 截图使用受管隔离环境与真实业务 API，数据必须虚构。采集只写测试证据，成功并人工检查后才通过 `scripts/documentation/publish-screenshots.mjs` 显式推广。
+- 截图使用受管隔离环境与真实业务 API，数据必须虚构。采集使用显式文件目标 `documentation-capture.capture.ts`，不由普通回归自动收集；只写测试证据，成功并人工检查后才通过 `scripts/documentation/publish-screenshots.mjs` 显式推广。
 - 截图原图和版本、日期、基准提交、视口及摘要清单位于 `wiki/public/screenshots/`；步骤、图注、替代文本与图片一起更新。不能把加载画面、错误状态或伪造界面作为正常操作示例。
 - 原创 SVG 源定义位于 `scripts/documentation/generate-diagrams.mjs`，发布在 `wiki/public/diagrams/`。图示说明主线，权限、事务与例外以正文和代码为准，不以线性箭头省略业务状态边界。
 - 图通过 `DocFigure` 提供说明、alt、原图入口和延迟加载；长表格在独立可聚焦区域内滚动，深色与窄屏保留阅读能力。结构性调整覆盖桌面、窄屏、横屏、深色主题与键盘焦点。

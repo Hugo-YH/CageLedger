@@ -13,7 +13,7 @@
 采集命令：
 
 ```bash
-npm run test:e2e -- tests/e2e/documentation-capture.spec.ts
+npm run test:e2e -- tests/e2e/documentation-capture.capture.ts
 node scripts/documentation/publish-screenshots.mjs <capture-manifest.json> <results.json>
 ```
 

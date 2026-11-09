@@ -85,7 +85,12 @@ test("capture current UI with isolated fictional documentation data", async ({ p
         initiate: true,
       });
   }
-  for (const [index, day] of ["01", "04", "07"].entries()) {
+  const receiptDates = [0, 2, 4].map((daysAgo) => {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - daysAgo);
+    return date.toISOString().slice(0, 10);
+  });
+  for (const [index, receiptDate] of receiptDates.entries()) {
     const id = `intake-docs-${index}`;
     await post("/api/intake-batches", {
       item: {
@@ -96,7 +101,7 @@ test("capture current UI with isolated fictional documentation data", async ({ p
         intakePurpose: "direct_sampling",
         pi: "示例课题组甲",
         owner: "示例实验人员",
-        intakeDate: `${month}-${day}`,
+        intakeDate: receiptDate,
         status: "pending_receipt",
         quantity: 8 + index * 4,
         species: "mouse",
@@ -105,7 +110,7 @@ test("capture current UI with isolated fictional documentation data", async ({ p
         receipts: [],
       },
     });
-    await post("/api/intake-batches/confirm-receipt", { ids: [id], actualReceiptDates: { [id]: `${month}-${day}` } });
+    await post("/api/intake-batches/confirm-receipt", { ids: [id], actualReceiptDates: { [id]: receiptDate } });
   }
   await page.reload();
   const screenshots: { file: string; view: string }[] = [];
