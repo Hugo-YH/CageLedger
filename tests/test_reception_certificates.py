@@ -16,6 +16,7 @@ from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from openpyxl import load_workbook
+from PIL import Image
 
 from server_app.domains.reception import certificate_ai as ai
 from server_app.domains.reception import certificate_files as files
@@ -278,7 +279,7 @@ class ReceptionCertificateTests(unittest.TestCase):
             if command[0] == "pdfinfo":
                 kwargs["stdout"].write(b"Pages: 2\nEncrypted: no\n")
             else:
-                Path(command[-1] + ".png").write_bytes(PNG)
+                Image.new("RGB", (2, 3), (12, 34, 56)).save(command[-1] + ".ppm")
             return Mock(returncode=0)
 
         with (
@@ -286,9 +287,15 @@ class ReceptionCertificateTests(unittest.TestCase):
             patch.object(files.subprocess, "run", side_effect=render) as run,
         ):
             metadata, preview = files.prepare("../folder/证件.pdf", PDF)
-        self.assertEqual((metadata["name"], metadata["page_count"], preview), ("证件.pdf", 2, PNG))
+        self.assertEqual((metadata["name"], metadata["page_count"]), ("证件.pdf", 2))
+        with Image.open(BytesIO(preview)) as image:
+            self.assertEqual(image.size, (2, 3))
+            self.assertEqual(image.getpixel((0, 0)), (12, 34, 56))
         self.assertEqual(metadata["sha256"], hashlib.sha256(PDF).hexdigest())
-        self.assertEqual([call.kwargs["timeout"] for call in run.call_args_list], [15, 30])
+        self.assertEqual(
+            [call.kwargs["timeout"] for call in run.call_args_list],
+            [15, files.RECEPTION_CERTIFICATE_PAGE_TIMEOUT_SECONDS],
+        )
         for info in (b"Pages: 0\n", b"Pages: 101\n", b"Pages: 1\nEncrypted: yes\n", b"corrupt"):
 
             def invalid_info(_command, *, info=info, **kwargs):
@@ -500,6 +507,22 @@ class ReceptionCertificateTests(unittest.TestCase):
         self.assertEqual(self.count("reception.certificate_recognition_failed"), 1)
         self.assertEqual(self.payload(), before)
 
+    def test_page_timeout_keeps_original_and_business_data_without_sending_partial_pages_to_ai(self):
+        attachment = self.upload()
+        before = self.payload()
+        self.page_prepare.side_effect = files.CertificateUnavailableError("PDF第2页转图超时，未提交不完整识别")
+        identity = uuid4().hex
+        with patch.object(ai, "recognize") as provider:
+            failed = self.recognize(attachment["id"], identity)
+            self.assertEqual(self.recognize(attachment["id"], identity), failed)
+        provider.assert_not_called()
+        self.assertEqual(failed["status"], "failed")
+        self.assertIn("第2页转图超时", failed["error"])
+        self.assertEqual(files.read(attachment["id"]), PDF)
+        self.assertEqual(self.payload(), before)
+        self.assertIsNone(repo.registration(self.conn, self.batch["id"]))
+        self.assertEqual(self.count("reception.certificate_recognition_failed"), 1)
+
     def test_multi_page_source_selection_and_mode_binding_are_audited_without_registration(self):
         attachment = self.upload()
         selection = {"totalPages": 2, "selectedPages": [1, 2], "skippedPhotoPages": [], "mode": "auto"}
@@ -587,6 +610,13 @@ class ReceptionCertificateTests(unittest.TestCase):
             self.assertEqual(self.recognize(attachment["id"], request_id)["status"], "running")
             with self.assertRaises(files.CertificateUnavailableError):
                 self.recognize(attachment["id"])
+            provider.assert_not_called()
+            self.assertEqual(repo.run(self.conn, run_id)["status"], "running")
+            with patch.object(certificates, "datetime") as clock:
+                clock.now.return_value = at + timedelta(seconds=pages.MAX_RENDER_SECONDS - 1)
+                clock.fromisoformat.side_effect = datetime.fromisoformat
+                with self.assertRaises(files.CertificateUnavailableError):
+                    self.recognize(attachment["id"])
             provider.assert_not_called()
             self.assertEqual(repo.run(self.conn, run_id)["status"], "running")
             with patch.object(certificates, "datetime") as clock:

@@ -3,26 +3,29 @@
 import json
 import shutil
 import subprocess
+import tempfile
 import unittest
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import Mock, patch
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from server_app.domains.reception import certificate_ai as ai
 from server_app.domains.reception import certificate_files as files
 from server_app.domains.reception import certificate_pages as pages
 
 
-def pdf(dimensions):
+def pdf(dimensions, *, painted=False):
     objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b""]
     kids = []
     for width, height in dimensions:
         page_id = len(objects) + 1
         kids.append(f"{page_id} 0 R")
+        content = b"1 0 0 rg 20 20 200 200 re f\n0 0 1 rg 40 40 40 40 re f\n" if painted else b""
         objects += [
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] /Resources << >> /Contents {page_id + 1} 0 R >>".encode(),
-            b"<< /Length 0 >>\nstream\n\nendstream",
+            f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"\nendstream",
         ]
     objects[1] = f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(kids)} >>".encode()
     result = b"%PDF-1.4\n"
@@ -75,11 +78,108 @@ class CertificatePagesTests(unittest.TestCase):
         self.assertEqual(len(images), 2)
         diagnostics = [record.diagnostics for record in logs.records]
         self.assertEqual(
-            [item["stage"] for item in diagnostics], ["pdf_parse", "preview_render", "pdf_parse", "page_render"]
+            [item["stage"] for item in diagnostics if item["operation"] != "reception_certificate_render"],
+            ["pdf_parse", "preview_render", "pdf_parse", "page_render"],
+        )
+        raster_logs = [item for item in diagnostics if item["operation"] == "reception_certificate_render"]
+        self.assertEqual([item["pageNumber"] for item in raster_logs], [1, 1, 2, 2])
+        self.assertTrue(
+            all(0 < item["timeoutSeconds"] <= pages.RECEPTION_CERTIFICATE_PAGE_TIMEOUT_SECONDS for item in raster_logs)
         )
         self.assertTrue(all(item["durationMs"] >= 0 for item in diagnostics))
         self.assertNotIn("private-certificate", json.dumps(diagnostics))
         self.assertNotIn("PDF-1.4", json.dumps(diagnostics))
+
+    @unittest.skipUnless(shutil.which("pdftoppm"), "Poppler required")
+    def test_fast_png_keeps_the_full_color_raster_identical_to_poppler_png(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original = root / "source.pdf"
+            original.write_bytes(pdf([(595, 842)], painted=True))
+            baseline = root / "baseline"
+            subprocess.run(
+                [
+                    "pdftoppm",
+                    "-f",
+                    "1",
+                    "-l",
+                    "1",
+                    "-singlefile",
+                    "-scale-to",
+                    "3000",
+                    "-png",
+                    str(original),
+                    str(baseline),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+                check=True,
+            )
+            actual = files.render_page(original, root / "fast", 1, env=None)
+            with Image.open(baseline.with_suffix(".png")) as expected, Image.open(BytesIO(actual)) as result:
+                self.assertEqual(result.size, expected.size)
+                self.assertEqual(result.mode, "RGB")
+                self.assertIsNone(ImageChops.difference(result, expected.convert("RGB")).getbbox())
+                self.assertNotEqual(result.getextrema(), ((255, 255),) * 3)
+            self.assertFalse((root / "fast.ppm").exists())
+
+    def test_per_page_failure_reports_page_and_cleans_temporary_raster(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "page-2"
+
+            def timeout(command, **kwargs):
+                target.with_suffix(".ppm").write_bytes(b"partial")
+                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+            with (
+                patch.object(files, "tool", return_value="pdftoppm"),
+                patch.object(files.subprocess, "run", side_effect=timeout),
+                self.assertLogs("cageledger.runtime", level="WARNING") as logs,
+                self.assertRaisesRegex(files.CertificateUnavailableError, "第2页转图超时"),
+            ):
+                files.render_page(root / "source.pdf", target, 2, env=None, timeout=7)
+            self.assertEqual(logs.records[0].diagnostics["pageNumber"], 2)
+            self.assertEqual(logs.records[0].diagnostics["timeoutSeconds"], 7)
+            self.assertFalse(target.with_suffix(".ppm").exists())
+
+    def test_document_budget_limits_each_page_and_never_returns_partial_images(self):
+        with (
+            patch.object(pages, "_info", return_value=[(1, 595, 842), (2, 595, 842), (3, 595, 842)]),
+            patch.object(pages, "MAX_RENDER_SECONDS", 12),
+            patch.object(pages.time, "monotonic", side_effect=[0, 5, 13]),
+            patch.object(files, "render_page", return_value=png()) as render,
+            self.assertRaisesRegex(files.CertificateUnavailableError, "逐页处理超时"),
+        ):
+            pages.prepare(pdf([]), 3, png())
+        self.assertEqual(render.call_count, 1)
+        self.assertEqual(render.call_args.kwargs["timeout"], 7)
+        self.assertEqual(render.call_args.args[2], 2)
+
+    def test_encoding_uses_the_page_deadline_and_rejects_images_over_the_byte_limit(self):
+        source = Image.new("RGB", (180, 240))
+        source.putdata([(x % 256, y % 256, (x + y) % 256) for y in range(240) for x in range(180)])
+
+        def raster(command, **_kwargs):
+            source.save(command[-1] + ".ppm")
+            return Mock(returncode=0)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "page"
+            with (
+                patch.object(files, "tool", return_value="pdftoppm"),
+                patch.object(files.subprocess, "run", side_effect=raster),
+            ):
+                with patch.object(files, "MAX_IMAGE_BYTES", 1), self.assertRaisesRegex(ValueError, "超过15MiB"):
+                    files.render_page(target.with_suffix(".pdf"), target, 2, env=None)
+                self.assertFalse(target.with_suffix(".ppm").exists())
+                with (
+                    patch.object(files.time, "monotonic", side_effect=[0, 2]),
+                    self.assertRaisesRegex(files.CertificateUnavailableError, "第2页转图超时"),
+                ):
+                    files.render_page(target.with_suffix(".pdf"), target, 2, env=None, timeout=1)
+                self.assertFalse(target.with_suffix(".ppm").exists())
 
     @unittest.skipUnless(shutil.which("pdfinfo") and shutil.which("pdftoppm"), "Poppler required")
     def test_real_renderer_keeps_second_certificate_and_later_paper_page(self):

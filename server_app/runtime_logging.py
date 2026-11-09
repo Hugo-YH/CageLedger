@@ -47,6 +47,8 @@ _FIELDS = frozenset(
         "category",
         "slow",
         "rowCount",
+        "pageNumber",
+        "timeoutSeconds",
         "count",
         "changedIacucCount",
         "updatedRecordCount",
