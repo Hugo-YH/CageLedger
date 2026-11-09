@@ -137,6 +137,11 @@ for (const [incomingImage, originalImage] of [
       await expect(dialog.getByRole("img", { name: "原预约图片：原预约.png", exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath("unified-reservation-review.png"), animations: "disabled" });
     if (incomingImage && originalImage) {
+      const footer = dialog.locator(".modal-shell-actions");
+      const editSaved = footer.getByRole("button", { name: "编辑已保存的预约", exact: true });
+      await footer.getByRole("button", { name: "返回本次录入", exact: true }).focus();
+      await page.keyboard.press("Tab");
+      await expect(editSaved).toBeFocused();
       for (const viewport of [
         { width: 1440, height: 900 },
         { width: 1180, height: 820 },
@@ -148,19 +153,64 @@ for (const [incomingImage, originalImage] of [
         const geometry = await dialog.evaluate((element) => {
           const box = element.getBoundingClientRect();
           const body = element.querySelector<HTMLElement>(".modal-shell-body")!;
+          const materials = element.querySelector<HTMLElement>('[aria-label="预约来源材料"]')!;
+          const row = materials.querySelector<HTMLElement>(".ant-row")!;
+          const columns = [...row.children].map((column) => {
+            const bounds = column.getBoundingClientRect();
+            const style = getComputedStyle(column);
+            return {
+              left: bounds.left,
+              top: bounds.top,
+              width: bounds.width,
+              flex: style.flex,
+              minWidth: style.minWidth,
+            };
+          });
+          const actions = element.querySelector<HTMLElement>(".modal-shell-actions")!;
           return {
             left: box.left,
             right: box.right,
             viewport: innerWidth,
             bodyOverflow: body.scrollWidth > body.clientWidth + 1,
             pageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+            sources: { display: getComputedStyle(row).display, wrap: getComputedStyle(row).flexWrap, columns },
+            bodyOverflowY: getComputedStyle(body).overflowY,
+            footer: { display: getComputedStyle(actions).display, position: getComputedStyle(actions).position },
           };
         });
         expect(geometry.left).toBeGreaterThanOrEqual(0);
         expect(geometry.right).toBeLessThanOrEqual(geometry.viewport + 1);
         expect(geometry.bodyOverflow).toBe(false);
         expect(geometry.pageOverflow).toBe(false);
+        expect(geometry.sources.display).toBe("flex");
+        expect(geometry.sources.columns).toHaveLength(2);
+        const [savedSource, incomingSource] = geometry.sources.columns;
+        if (viewport.width >= 768) {
+          expect(Math.abs(savedSource.top - incomingSource.top)).toBeLessThanOrEqual(1);
+          expect(incomingSource.left).toBeGreaterThan(savedSource.left);
+        } else {
+          expect(incomingSource.top).toBeGreaterThan(savedSource.top);
+          expect(Math.abs(savedSource.left - incomingSource.left)).toBeLessThanOrEqual(1);
+        }
+        expect(geometry.bodyOverflowY).toBe("auto");
+        expect(geometry.footer).toEqual({ display: "flex", position: "sticky" });
+        await expect(editSaved).toBeFocused();
+        await expect(editSaved).toBeInViewport();
+        await expect(footer.getByRole("button", { name: "返回本次录入", exact: true })).toBeInViewport();
         await expect(dialog.getByRole("button", { name: "已登记，结束本次录入", exact: true })).toBeInViewport();
+        await info.attach(`review-layout-${viewport.width}x${viewport.height}`, {
+          body: JSON.stringify(
+            {
+              viewport,
+              geometry,
+              layoutOwner: "Ant Row/Col; src/styles/features/modal.css",
+              keyboardFocus: "edit-saved",
+            },
+            null,
+            2,
+          ),
+          contentType: "application/json",
+        });
         await page.screenshot({
           path: info.outputPath(`unified-review-${viewport.width}x${viewport.height}.png`),
           animations: "disabled",
@@ -176,11 +226,11 @@ for (const [incomingImage, originalImage] of [
   });
 }
 
-test("a conflicting animal quantity returns to the same review on save and allows editing the original in place", async ({
+test("a text-only appointment with conflicting quantity returns to the same review and allows editing the original", async ({
   page,
 }) => {
   await setup(page);
-  const item = await original(page, true);
+  const item = await original(page, false);
   const incomingText = text(item).replace("数量：24", "数量：99");
   await page.getByLabel("预约消息", { exact: true }).fill(incomingText);
   await ai(page, item, false, { quantity: 99 });
@@ -190,16 +240,85 @@ test("a conflicting animal quantity returns to the same review on save and allow
     dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "动物数量", exact: true }) }),
   ).toContainText("99");
   await expect(dialog.getByRole("button", { name: "确认补充原预约", exact: true })).toHaveCount(0);
-  await dialog.getByRole("button", { name: "返回修改本次草稿", exact: true }).click();
+  await dialog.getByRole("button", { name: "返回本次录入", exact: true }).click();
   await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(incomingText);
   await page.getByRole("button", { name: "保存待接收批次", exact: true }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "确认为另一预约，另行保存", exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "在当前页面编辑原预约", exact: true }).click();
+  await dialog.getByRole("button", { name: "编辑已保存的预约", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(item.rawMessage);
   await expect(page.getByRole("heading", { name: "编辑接收笼卡", exact: true })).toBeVisible();
   expect((await saved(page, item.id)).updatedAt).toBe(item.updatedAt);
+});
+
+test("later local text without sex supplements the saved image appointment while retaining image values", async ({
+  page,
+}, info) => {
+  await setup(page);
+  const room = await page.request.post("/api/rooms", {
+    data: { item: { id: "room-review-8103", name: "8103", facility: "zhujiang" } },
+  });
+  expect(room.ok(), await room.text()).toBe(true);
+  await page.reload();
+  const item = await original(page, true, {
+    purchaseOrderNo: "C2026110540168",
+    orderNo: "",
+    batchNo: "（Z2024020）2026110301",
+    iacuc: "Z2024020",
+    supplier: "广东药康",
+    specification: "6-8w",
+    sex: "雄性",
+    quantity: 15,
+    finalCardCount: 3,
+    roomName: "8103",
+    intakeDate: "2026-11-11",
+    endDate: "2026-12-12",
+    husbandryDays: 31,
+    husbandryMonths: null,
+  });
+  const incomingText =
+    "锐竞采购申请单号为C2026110540168，饲养需求批次号为(Z2024020) 2026110301\n" +
+    "供应商：广东药康\n品系：C57BL/6J\n数量：15只(3笼）\n饲养房间：8103\n进驻日期：2026年11月11日";
+  await page.getByLabel("预约消息", { exact: true }).fill(incomingText);
+  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  const dialog = review(page);
+  await expect(dialog.getByRole("button", { name: "确认补充原预约", exact: true })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: "已登记，结束本次录入", exact: true })).toHaveCount(0);
+  const sexRow = dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "性别", exact: true }) });
+  await expect(sexRow.getByRole("cell").nth(2)).toHaveText("雌性/雄性");
+  await expect(sexRow.getByRole("cell").nth(3)).toHaveText("雄性");
+  await expect(
+    dialog
+      .getByRole("row")
+      .filter({ has: page.getByRole("cell", { name: "规格", exact: true }) })
+      .getByRole("cell")
+      .nth(3),
+  ).toHaveText("6-8w");
+  expect(await saved(page, item.id)).toEqual(item);
+  await page.screenshot({ path: info.outputPath("saved-image-text-supplement.png"), animations: "disabled" });
+  await dialog.getByRole("button", { name: "返回本次录入", exact: true }).click();
+  await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(incomingText);
+  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  await dialog.getByRole("button", { name: "确认补充原预约", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const updated = await saved(page, item.id);
+  for (const field of [
+    "id",
+    "quantity",
+    "sex",
+    "specification",
+    "roomName",
+    "intakeDate",
+    "endDate",
+    "husbandryDays",
+    "cards",
+    "status",
+  ] as const)
+    expect(updated[field], field).toEqual(item[field]);
+  expect(updated.recognition!.images).toEqual(item.recognition!.images);
+  expect(updated.recognition!.recognitionRounds!.at(-1)!.rawMessage).toBe(incomingText);
+  expect(updated.rawMessage).toContain(incomingText);
 });
 
 test("explicit supplementation rechecks a concurrent version and retains the original images and identity", async ({

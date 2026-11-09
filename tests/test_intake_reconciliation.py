@@ -119,8 +119,115 @@ class IntakeReconciliationTests(TestCase):
         )
         self.assertEqual(equivalent["outcome"], "registered")
 
+    def test_saved_image_appointment_accepts_later_text_without_sex_or_specification(self):
+        original = self.original(
+            image=True,
+            purchaseOrderNo="C2026110540168",
+            batchNo="（Z2024020）2026110301",
+            iacuc="Z2024020",
+            strainRaw="C57BL/6J",
+            strainStandard="C57BL/6J",
+            quantity=15,
+            sex="雄性",
+            roomName="8103",
+            intakeDate="2026-11-11",
+            endDate="2026-12-12",
+            husbandryDays=31,
+        )
+        raw = (
+            "锐竞采购申请单号为C2026110540168，饲养需求批次号为(Z2024020) 2026110301\n"
+            "供应商：广东药康\n品系：C57BL/6J\n数量：15只(3笼）\n饲养房间：8103\n进驻日期：2026年11月11日"
+        )
+        incoming = self.incoming_item(
+            original,
+            rawMessage=raw,
+            sex="雌性/雄性",
+            specification="",
+            endDate="",
+            husbandryDays=None,
+            husbandryMonths=None,
+        )
+        before = self.snapshot()
+        result = self.preview(incoming)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(result["outcome"], "supplement")
+        candidate = result["items"][0]
+        self.assertTrue(candidate["canMerge"])
+        self.assertFalse(candidate["canAcknowledge"])
+        self.assertEqual(candidate["mergeStrategy"], "saved_image_first")
+        self.assertEqual(next(row["status"] for row in candidate["comparisons"] if row["field"] == "sex"), "different")
+        candidate["mergedItem"]["sex"] = "雌性"
+        saved = self.supplement(candidate, incoming)
+        for field in (
+            "id",
+            "quantity",
+            "sex",
+            "strainStandard",
+            "specification",
+            "roomName",
+            "intakeDate",
+            "endDate",
+            "husbandryDays",
+            "status",
+            "cards",
+        ):
+            self.assertEqual(saved.get(field), original.get(field), field)
+        self.assertEqual(saved["recognition"]["images"], original["recognition"]["images"])
+        self.assertEqual(saved["recognition"]["imageIds"], original["recognition"]["imageIds"])
+        self.assertEqual(saved["recognition"]["recognitionRounds"][0]["rawMessage"], raw)
+        self.assertEqual(saved["recognition"]["recognitionRounds"][0]["imageIds"], [])
+        self.assertIn(raw, saved["rawMessage"])
+        with self.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM intake_batches").fetchone()[0], 1)
+            event_id = conn.execute(
+                "SELECT id FROM audit_events WHERE action='intake_batch.recognition_merged'"
+            ).fetchone()[0]
+            self.assertEqual(json.loads(read_payload(conn, event_id))["after"]["rawMessage"], raw)
+
+    def test_saved_image_values_survive_differing_text_while_missing_date_is_filled(self):
+        original = self.original(
+            image=True, sex="雄性", intakeDate="", husbandryMonths=2, husbandryDays=None, endDate=""
+        )
+        incoming = self.incoming_item(
+            original,
+            rawMessage="数量：99只\n品系：C57BL/6J\n规格：8-10周龄",
+            quantity=99,
+            strainRaw="C57BL/6J",
+            strainStandard="C57BL/6J",
+            specification="8-10w",
+            sex="雌性",
+            intakeDate="2026-11-06",
+        )
+        candidate = self.preview(incoming)["items"][0]
+        self.assertTrue(candidate["canMerge"])
+        saved = self.supplement(candidate, incoming)
+        for field in ("quantity", "strainRaw", "strainStandard", "specification", "sex"):
+            self.assertEqual(saved[field], original[field], field)
+        self.assertEqual(
+            (saved["intakeDate"], saved["endDate"], saved["husbandryDays"]), ("2026-11-06", "2027-01-06", 61)
+        )
+
+    def test_saved_image_priority_keeps_identity_and_incoming_image_conflicts_blocked(self):
+        original = self.original(image=True, purchaseOrderNo="C2026110540168", orderNo="DC202611054016801")
+        for fields in (
+            {"iacuc": "OTHER"},
+            {"batchNo": "OTHER"},
+            {"orderNo": "DC202611054016802"},
+            {"intakePurpose": "direct_sampling"},
+        ):
+            with self.subTest(fields=fields):
+                candidate = self.preview(self.incoming_item(original, rawMessage="补充预约文字", **fields))["items"][0]
+                self.assertFalse(candidate["canMerge"])
+                self.assertFalse(candidate["canAcknowledge"])
+        images = [image_input("blue")]
+        incoming = self.incoming_item(original, images, sex="雄性", rawMessage="补充新图")
+        # Different images do not establish which source should override an existing appointment.
+        with self.connect() as conn:
+            upsert_intake_batch(conn, {**original, "sex": "雌性"})
+        self.assertFalse(self.preview(incoming, images)["items"][0]["canMerge"])
+
     def test_current_source_conflicts_survive_purchase_priority_and_text_comparison(self):
-        original = self.original()
+        original = self.original(image=True)
         incoming = self.incoming_item(original)
         incoming["recognition"] = {
             "sources": [
@@ -254,17 +361,19 @@ class IntakeReconciliationTests(TestCase):
         self.assertEqual(next(row["source"] for row in changes if row["field"] == "intakeDate"), "text")
 
     def test_received_and_partial_records_can_be_acknowledged_but_not_supplemented(self):
-        original = self.original()
+        original = self.original(image=True, sex="雄性")
         for fields in ({"status": "received"}, {"receipts": [{"id": "partial", "cardCount": 0}]}):
             with self.connect() as conn:
                 upsert_intake_batch(conn, {**original, **fields})
             result = self.preview(self.incoming_item(original, rawMessage="新文字"))["items"][0]
             self.assertTrue(result["canAcknowledge"])
             self.assertFalse(result["canMerge"])
+            differing = self.preview(self.incoming_item(original, rawMessage="补充文字", sex="雌性/雄性"))["items"][0]
+            self.assertFalse(differing["canMerge"])
 
     def test_tokens_bind_version_full_match_set_input_and_image_identity(self):
-        original = self.original()
-        incoming = self.incoming_item(original, rawMessage="补充来源")
+        original = self.original(image=True, sex="雌性")
+        incoming = self.incoming_item(original, rawMessage="补充来源", sex="雌性/雄性")
         candidate = self.preview(incoming)["items"][0]
         before = self.snapshot()
         with self.assertRaises(StaleWriteError):

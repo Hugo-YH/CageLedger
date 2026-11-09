@@ -18,15 +18,31 @@ def _identifier_row(row):
     return {"purchaseOrderNo": row["purchase_order_no"], "orderNo": row["order_no"], "batchNo": row["batch_no"]}
 
 
+def _saved_image_first(existing, incoming, images):
+    """Only a saved image appointment can retain its values over later text."""
+    evidence = incoming.get("recognition") or {}
+    return bool(
+        (existing.get("recognition") or {}).get("images")
+        and incoming.get("rawMessage")
+        and not images
+        and not evidence.get("inputImages")
+        and not evidence.get("sources")
+    )
+
+
 def _candidate(existing, incoming, matches, unique_id, images, issues):
     relation = rules.identifier_relation(existing, incoming)
     rows = rules.comparisons(existing, incoming)
     classification, fields = match_classification(existing, incoming)
     differences = [row for row in rows if row["status"] == "different"]
+    image_first = _saved_image_first(existing, incoming, images)
+    blocking = [
+        row for row in differences if not image_first or row["field"] in (*rules.IDENTIFIERS, "iacuc", "intakePurpose")
+    ]
     uncertain = [row for row in rows if row["field"] in rules.CORE and row["status"] == "unknown"]
     core_same = all(row["status"] == "same" for row in rows if row["field"] in rules.CORE)
     known = existing["id"] == unique_id and relation["distinct"]
-    merged, changes = rules.supplement(existing, incoming) if known and not differences and not issues else (None, [])
+    merged, changes = rules.supplement(existing, incoming) if known and not blocking and not issues else (None, [])
     old_hashes = {entry.get("sha256") for entry in (existing.get("recognition") or {}).get("images", [])}
     new_material = bool({entry["sha256"] for entry in image_inputs(images)} - old_hashes)
     text = incoming.get("rawMessage", "")
@@ -38,18 +54,20 @@ def _candidate(existing, incoming, matches, unique_id, images, issues):
         status, reason = "related", "编号仅部分关联或有多个同等候选，请核对完整订单及饲养需求，不能自动合并。"
         if relation["conflicts"] and any(field in fields for field in ("batchNo", "orderNo")):
             status, reason = "conflict", "命中的订单或饲养需求对应其他编号，请核对是否错配或分批。"
-    elif differences:
+    elif blocking:
         status, reason = "conflict", "编号相同，但已有信息与本次内容存在差异，请核对双方依据。"
     elif uncertain:
         status, reason = "insufficient", "部分动物信息不能可靠规范化，请核对原值。"
+    elif image_first and differences:
+        status, reason = "supplement", "原预约已有留档图片；差异项保留原预约值，文字仅补齐空缺并留档，请核对合并结果。"
     elif core_same and relation["complete"]:
         status, reason = "registered", "这条预约已登记；可确认后结束本次录入，无需再保存一条。"
     else:
         status, reason = "supplement", "找到对应预约，但仍有缺失信息，请核对后决定是否补充。"
     can_merge = bool(
-        known and not differences and not uncertain and not issues and not protected and (changes or new_material)
+        known and not blocking and not uncertain and not issues and not protected and (changes or new_material)
     )
-    if protected and known and not differences and not issues:
+    if protected and known and not blocking and not issues:
         reason += " 原记录已接收或有接收记录，仅供核对，不能在此补充。"
     digest = json.dumps([2, existing, incoming, matches, image_inputs(images)], sort_keys=True, ensure_ascii=False)
     return {
@@ -60,6 +78,7 @@ def _candidate(existing, incoming, matches, unique_id, images, issues):
         "comparisons": rows,
         "canAcknowledge": bool(known and relation["complete"] and core_same and not differences and not issues),
         "canMerge": can_merge,
+        **({"mergeStrategy": "saved_image_first"} if can_merge and image_first else {}),
         "reason": reason,
         "mergedItem": merged if can_merge else None,
         "changes": changes,

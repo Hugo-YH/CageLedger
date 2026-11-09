@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Card, Collapse, Flex, Image, Table, Tag, Typography, type TableProps } from "antd";
+import { Alert, Card, Col, Collapse, Flex, Image, Row, Table, Tag, Typography, type TableProps } from "antd";
 
 import type {
   IntakeBatch,
@@ -59,19 +59,37 @@ function valueText(value: unknown, field: string) {
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 type Comparison = IntakeReviewCandidate["comparisons"][number];
-const columns: TableProps<Comparison>["columns"] = [
-  { title: "字段", dataIndex: "field", width: 120, render: (field: string) => LABELS[field] || field },
-  { title: "原预约", dataIndex: "before", render: (value, row) => valueText(value, row.field) },
-  { title: "本次识别", dataIndex: "incoming", render: (value, row) => valueText(value, row.field) },
-  {
-    title: "核对结果",
-    dataIndex: "status",
-    width: 120,
-    render: (status: Comparison["status"]) => (
-      <Tag color={status === "different" ? "error" : status === "same" ? "success" : undefined}>{STATUS[status]}</Tag>
-    ),
-  },
-];
+function comparisonColumns(candidate: IntakeReviewCandidate): TableProps<Comparison>["columns"] {
+  const merged = candidate.canMerge ? candidate.mergedItem : null;
+  return [
+    { title: "字段", dataIndex: "field", width: 120, render: (field: string) => LABELS[field] || field },
+    { title: "原预约", dataIndex: "before", render: (value, row) => valueText(value, row.field) },
+    { title: "本次识别", dataIndex: "incoming", render: (value, row) => valueText(value, row.field) },
+    ...(merged
+      ? [
+          {
+            title: "合并后",
+            key: "after",
+            render: (_value: unknown, row: Comparison) =>
+              valueText(
+                row.field === "strainStandard"
+                  ? merged.strainStandard || merged.strainRaw
+                  : merged[row.field as keyof IntakeBatch],
+                row.field,
+              ),
+          },
+        ]
+      : []),
+    {
+      title: "核对结果",
+      dataIndex: "status",
+      width: 120,
+      render: (status: Comparison["status"]) => (
+        <Tag color={status === "different" ? "error" : status === "same" ? "success" : undefined}>{STATUS[status]}</Tag>
+      ),
+    },
+  ];
+}
 function initialSelection(preview: IntakeReviewPreview) {
   if (preview.items.length === 1) return preview.items[0].item.id;
   const clear = preview.items.filter((item) => item.canAcknowledge || item.canMerge);
@@ -146,6 +164,40 @@ function OriginalEvidence({ item }: { item: IntakeBatch }) {
   );
 }
 
+function IncomingEvidence({ item, images }: { item: IntakeBatch; images: IntakeRecognitionImageInput[] }) {
+  return (
+    <Collapse
+      items={[
+        {
+          key: "incoming",
+          label: "本次原文与图片",
+          children: (
+            <Flex vertical gap={8}>
+              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
+                {item.rawMessage || "无原文"}
+              </Typography.Paragraph>
+              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
+                {item.recognition?.extractedText || ""}
+              </Typography.Paragraph>
+              {item.recognition ? <IntakeRecognitionReview evidence={item.recognition} /> : null}
+              {item.recognition?.sources?.length ? (
+                <RecognitionSources sources={item.recognition.sources} imageNames={images.map((image) => image.name)} />
+              ) : null}
+              <Image.PreviewGroup>
+                <Flex gap={8} wrap>
+                  {images.map((image, index) => (
+                    <Image key={index} width={140} src={image.dataUrl} alt={`本次图片：${image.name}`} />
+                  ))}
+                </Flex>
+              </Image.PreviewGroup>
+            </Flex>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
 export function IntakeReviewDialog({
   preview,
   incoming,
@@ -185,7 +237,7 @@ export function IntakeReviewDialog({
       <div className="modal-shell-head">
         <div>
           <h2>核对已有预约</h2>
-          <p>核对原记录与本次来源；结束本次录入不会改动原预约。</p>
+          <p>对比已保存的预约和本次录入；关闭后保留本次录入，补充需确认。</p>
         </div>
         <ActionButton disabled={pending} onClick={close}>
           关闭
@@ -219,38 +271,30 @@ export function IntakeReviewDialog({
               }
             />
           ) : null}
-          <Collapse
-            items={[
-              {
-                key: "incoming",
-                label: "本次原文与图片",
-                children: (
+          <section aria-label="预约来源材料">
+            <Card size="small" title="来源材料">
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={12}>
                   <Flex vertical gap={8}>
-                    <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                      {incoming.rawMessage || "无原文"}
-                    </Typography.Paragraph>
-                    <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                      {incoming.recognition?.extractedText || ""}
-                    </Typography.Paragraph>
-                    {incoming.recognition ? <IntakeRecognitionReview evidence={incoming.recognition} /> : null}
-                    {incoming.recognition?.sources?.length ? (
-                      <RecognitionSources
-                        sources={incoming.recognition.sources}
-                        imageNames={images.map((image) => image.name)}
-                      />
-                    ) : null}
-                    <Image.PreviewGroup>
-                      <Flex gap={8} wrap>
-                        {images.map((image, index) => (
-                          <Image key={index} width={140} src={image.dataUrl} alt={`本次图片：${image.name}`} />
-                        ))}
-                      </Flex>
-                    </Image.PreviewGroup>
+                    <Typography.Text strong>已保存的预约</Typography.Text>
+                    {selected ? (
+                      <OriginalEvidence key={selected.item.id} item={selected.item} />
+                    ) : (
+                      <Typography.Text type="secondary">
+                        {preview.items.length ? "请选择要核对的已保存预约。" : "暂无匹配的已保存预约。"}
+                      </Typography.Text>
+                    )}
                   </Flex>
-                ),
-              },
-            ]}
-          />
+                </Col>
+                <Col xs={24} md={12}>
+                  <Flex vertical gap={8}>
+                    <Typography.Text strong>本次录入</Typography.Text>
+                    <IncomingEvidence item={incoming} images={images} />
+                  </Flex>
+                </Col>
+              </Row>
+            </Card>
+          </section>
           {preview.items.map((candidate) => (
             <Card
               key={candidate.item.id}
@@ -272,18 +316,22 @@ export function IntakeReviewDialog({
                 <Typography.Text>{candidate.reason}</Typography.Text>
                 {selectedId === candidate.item.id ? (
                   <>
+                    {candidate.mergeStrategy === "saved_image_first" && candidate.canMerge ? (
+                      <Alert
+                        showIcon
+                        type="warning"
+                        title="以原预约图片信息为主，文字补充空缺"
+                        description="数量、品系、规格等已有信息按原预约保留；本次文字仅补充空缺，并作为新依据留档。请核对“合并后”一列再确认。"
+                      />
+                    ) : null}
                     <Table
-                      columns={columns}
+                      columns={comparisonColumns(candidate)}
                       dataSource={candidate.comparisons}
                       rowKey="field"
                       pagination={false}
-                      scroll={{ x: 700 }}
+                      scroll={{ x: candidate.canMerge && candidate.mergedItem ? 850 : 700 }}
                       size="small"
                     />
-                    <OriginalEvidence item={candidate.item} />
-                    <ActionButton disabled={pending} onClick={() => onEdit(candidate.item.id)}>
-                      在当前页面编辑原预约
-                    </ActionButton>
                   </>
                 ) : null}
               </Flex>
@@ -299,10 +347,19 @@ export function IntakeReviewDialog({
           ) : null}
         </Flex>
       </div>
-      <div className="modal-shell-actions">
+      <div className="modal-shell-actions" role="group" aria-label="预约核对操作">
         <ActionButton disabled={pending} onClick={close}>
-          返回修改本次草稿
+          返回本次录入
         </ActionButton>
+        {selected ? (
+          <ActionButton
+            disabled={pending}
+            title="打开先前保存的预约；保存后会更新该记录。"
+            onClick={() => onEdit(selected.item.id)}
+          >
+            编辑已保存的预约
+          </ActionButton>
+        ) : null}
         {error || blocked ? (
           <ActionButton disabled={pending} onClick={onRefresh}>
             重新核对

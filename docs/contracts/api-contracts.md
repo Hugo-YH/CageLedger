@@ -304,6 +304,8 @@ Gitea 条件读取缓存仅属于单个串行 Client 的仓库／凭据实例，
 
 `POST /api/intake-batches/recognition-preview` 的 `reviewVersion:2` 接收任意图文顺序的 `item`、可选自身 `excludeId` 和本轮 `recognitionImageRefs`，无需文字或旧原图。响应保留 `{items,total}`，增加 `outcome`（unmatched／registered／supplement／conflict／related／insufficient）、`sourceIssues` 和规范后的 `incoming`；候选提供原记录、逐字段 `comparisons`（same／different／missing／supplement／unknown）、`canAcknowledge`、`canMerge`、`mergedItem` 和确认令牌。编号索引只召回相关记录，明确需求号或完整订单号的唯一相容命中才可补充；同C不同DC不能当作同单。数量、标准品系和保守规范化规格参与比较，缺失或无法解析不是一致；本轮来源差异不会被采购优先的最终表单掩盖。原图引用须属于当前账号并通过SHA校验；未参与本轮识别的图片提示核对，暂存过期返回410及原错误码。省略 `reviewVersion` 保留旧文字补充响应和规则。
 
+原预约已有留档图片且本轮仅有文字时，唯一相容命中的候选可返回 `mergeStrategy:"saved_image_first"`。编号、IACUC、接收用途、本轮来源或无法规范化信息仍按原规则校验；其他差异保留在 `comparisons` 中，不阻止按原预约已有值保留、文字仅补空缺和留档。此类差异返回 `outcome:supplement`、`canMerge:true`，不提供一致性确认；前端以服务端 `mergedItem` 展示合并后值。仅共享采购号、不同完整订单/需求、多候选、已接收及本轮新图的限制保持；不把图片追加到文字预约的覆盖策略扩展到此分支。
+
 一致记录默认只读确认结束，不发写入。显式补充使用批次PUT的 `recognitionMerge:{reviewVersion:2,incoming,confirmationToken}`，携带本轮原图引用及原 `expectedUpdatedAt`；服务端在原写事务重新核对全部候选、版本和输入，仅补空缺、追加新材料，不信任客户端 `mergedItem`。原ID、笼卡及二维码、状态、接收和旧图片来源映射保留；已接收或有接收记录仅供查看，不能补充。新轮依据保存到 `recognition.recognitionRounds`，每轮独立保留 `at/rawMessage/appliedFields/imageIds/evidence`，不重绑旧顶层 `imageIds`；原件按SHA复用，改名不重复留档。普通新界面保存携带 `reviewVersion:2`，发现重复时409的原details增加完整 `review`，回到同一核对区；明确另建仍按原重复确认及审计处理。
 
 日期列筛选保持 `filter-options` 的 `{items:[{value,label,count}]}` 与 `columnFilters` 原始值数组契约。前端年/月/日仅为显示分组，时间列的一日节点保留并提交该日所有原始时间戳，不能以截断后的日期代替精确值。日期/月候选查询返回当前范围完整候选，不使用普通文本列的500项上限；原权限、其他列筛选及排除本列条件的聚合口径不变。候选包含空白时，`intakeDate`、`month`、`updatedAt` 的数组筛选允许显式 `""`，非日期列的空值清洗规则不变。

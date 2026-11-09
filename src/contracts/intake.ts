@@ -322,6 +322,7 @@ export type IntakeReviewOutcome = "unmatched" | "registered" | "supplement" | "c
 
 export interface IntakeReviewCandidate extends IntakeRecognitionMergeCandidate {
   reviewStatus: Exclude<IntakeReviewOutcome, "unmatched">;
+  mergeStrategy?: "saved_image_first";
   canAcknowledge: boolean;
   comparisons: Array<{
     field: string;
