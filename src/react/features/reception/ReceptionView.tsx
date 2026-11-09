@@ -47,7 +47,6 @@ const emptyFilterValues: string[] = [];
 const columnDefinitions: Array<{ key: ReceptionSortKey; label: string; width: number }> = [
   { key: "receiptDate", label: "接收日期", width: 150 },
   { key: "purchaseOrderNo", label: "采购单号", width: 160 },
-  { key: "orderNo", label: "订单编号", width: 180 },
   { key: "batchNo", label: "批次编号", width: 160 },
   { key: "iacuc", label: "IACUC编号", width: 160 },
   { key: "pi", label: "项目负责人", width: 120 },

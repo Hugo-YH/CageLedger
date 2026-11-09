@@ -151,7 +151,7 @@ it("shows the list without directories, previews frozen versions, and keeps sele
   await screen.findByText(record.batchNo);
   expect(screen.getByText("权威项目负责人")).toBeInTheDocument();
   expect(screen.getByText(record.purchaseOrderNo)).toBeInTheDocument();
-  expect(screen.getByText(record.orderNo!)).toBeInTheDocument();
+  expect(screen.queryByText(record.orderNo!)).not.toBeInTheDocument();
   expect(screen.getByTitle(record.supplier)).toHaveTextContent("江苏集萃");
   expect(requestJson).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("button", { name: "导出Excel" })).toBeDisabled();
@@ -237,9 +237,8 @@ it.each([
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent ?? "");
     expect(headers.some((text) => text.includes("预约性别"))).toBe(false);
     expect(headers.some((text) => text.includes("预约规格"))).toBe(false);
-    expect(headers).toEqual(
-      expect.arrayContaining([expect.stringContaining("采购单号"), expect.stringContaining("订单编号")]),
-    );
+    expect(headers).toEqual(expect.arrayContaining([expect.stringContaining("采购单号")]));
+    expect(headers.some((text) => text.includes("订单编号"))).toBe(false);
     expect(screen.getByText(label)).toBeInTheDocument();
     const row = screen.getByText(record.batchNo).closest("tr")!;
     expect(within(row).getByRole("button", { name: action })).toBeEnabled();
