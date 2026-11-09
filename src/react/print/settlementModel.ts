@@ -113,12 +113,13 @@ export function collectColumns(statement: BillingStatement, lines: BillingStatem
   });
   const duplicateCounts = new Map<string, number>();
   sorted.forEach((column) => {
-    const baseLabel = column.iacuc;
-    duplicateCounts.set(baseLabel, (duplicateCounts.get(baseLabel) || 0) + 1);
+    // The species heading already distinguishes the same IACUC across animals.
+    const labelKey = JSON.stringify([column.speciesLabel, column.iacuc]);
+    duplicateCounts.set(labelKey, (duplicateCounts.get(labelKey) || 0) + 1);
   });
   return sorted.map((column) => {
     const baseLabel = column.iacuc;
-    const hasDuplicate = (duplicateCounts.get(baseLabel) || 0) > 1;
+    const hasDuplicate = (duplicateCounts.get(JSON.stringify([column.speciesLabel, baseLabel])) || 0) > 1;
     const suffix = hasDuplicate ? ` / ¥${money(column.unitPrice)}` : "";
     return {
       ...column,

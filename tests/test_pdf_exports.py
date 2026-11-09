@@ -14,7 +14,7 @@ from server_app.pdf import (
     render_billing_statement_pdf,
     render_quantity_sheet_pdf,
 )
-from server_app.pdf.documents import billing_statement_html, quantity_sheet_html
+from server_app.pdf.documents import billing_statement_html, quantity_sheet_html, statement_columns
 
 
 class SettlementFooterParser(HTMLParser):
@@ -332,6 +332,111 @@ class PdfExportTests(unittest.TestCase):
         self.assertIn(".summary-table tr>:last-child{border-right:1px solid #000}", html)
         self.assertIn("1）小鼠 4.5元/笼/日、2）大鼠 8.5元/笼/日、3）猴 23.5元/只/日", html)
         self.assertNotIn("笼位数＞160", html)
+
+    def test_same_iacuc_across_species_keeps_plain_headers_and_billing_details(self):
+        statement = {
+            "id": "same-iacuc-across-species",
+            "month": "2026-11",
+            "pi": "张教授",
+            "sourceType": "pi_merged_quantity_sheet",
+            "billingUnit": "mixed",
+            "iacucs": ["ZS2026010"],
+        }
+        lines = [
+            {
+                "date": "2026-11-01",
+                "cageCount": 6,
+                "animalCount": 3,
+                "amount": 42,
+                "iacucBreakdown": [
+                    {
+                        "iacuc": "ZS2026010",
+                        "species": "mouse",
+                        "billingUnit": "cage_day",
+                        "unitPrice": 4.5,
+                        "cageCount": 6,
+                        "payableAmount": 27,
+                    },
+                    {
+                        "iacuc": "ZS2026010",
+                        "species": "rabbit",
+                        "billingUnit": "animal_day",
+                        "unitPrice": 5,
+                        "animalCount": 3,
+                        "payableAmount": 15,
+                    },
+                ],
+            }
+        ]
+
+        columns = statement_columns(statement, lines)
+        self.assertEqual(
+            [(column["species"], column["label"], column["unit"], column["unitPrice"]) for column in columns],
+            [("小鼠", "ZS2026010", "cage_day", 4.5), ("兔", "ZS2026010", "animal_day", 5)],
+        )
+        html = billing_statement_html(statement, lines)
+        headers = html.split("<thead>", 1)[1].split("</thead>", 1)[0]
+        self.assertEqual(headers.count('<th colspan="12">ZS2026010</th>'), 2)
+        self.assertNotIn("/ ¥", headers)
+        self.assertIn('colspan="24">小鼠', headers)
+        self.assertIn('colspan="12">兔', headers)
+        self.assertIn("1）小鼠 4.5元/笼/日、2）兔 5元/只/日", html)
+
+        footer = SettlementFooterParser()
+        footer.feed(html)
+        iacuc_cells = [
+            cell
+            for cell in footer.rows[0][1:]
+            if "summary-subtotal" not in cell["classes"] and "group-empty-cell" not in cell["classes"]
+        ]
+        self.assertEqual([cell["text"] for cell in iacuc_cells], ["6", "27.00", "3", "15.00"])
+        self.assertEqual(footer.rows[1][1]["text"], "42.00")
+
+    def test_same_species_iacuc_keeps_rate_suffixes_for_distinct_billing_columns(self):
+        statement = {
+            "id": "same-species-iacuc-rates",
+            "month": "2026-11",
+            "pi": "张教授",
+            "sourceType": "pi_merged_quantity_sheet",
+            "billingUnit": "cage_day",
+            "iacucs": ["ZS2026010"],
+        }
+        lines = [
+            {
+                "date": "2026-11-01",
+                "cageCount": 5,
+                "amount": 24,
+                "iacucBreakdown": [
+                    {
+                        "iacuc": "ZS2026010",
+                        "species": "mouse",
+                        "billingUnit": "cage_day",
+                        "unitPrice": price,
+                        "cageCount": count,
+                        "payableAmount": amount,
+                    }
+                    for price, count, amount in [(4.5, 2, 9), (5, 3, 15)]
+                ],
+            }
+        ]
+
+        columns = statement_columns(statement, lines)
+        self.assertEqual([column["label"] for column in columns], ["ZS2026010 / ¥4.50", "ZS2026010 / ¥5.00"])
+        html = billing_statement_html(statement, lines)
+        headers = html.split("<thead>", 1)[1].split("</thead>", 1)[0]
+        for label in ("ZS2026010 / ¥4.50", "ZS2026010 / ¥5.00"):
+            self.assertIn(f'<th colspan="12">{label}</th>', headers)
+        self.assertIn("小鼠 4.5元/笼/日；5元/笼/日", html)
+
+        footer = SettlementFooterParser()
+        footer.feed(html)
+        iacuc_cells = [
+            cell
+            for cell in footer.rows[0][1:]
+            if "summary-subtotal" not in cell["classes"] and "group-empty-cell" not in cell["classes"]
+        ]
+        self.assertEqual([cell["text"] for cell in iacuc_cells], ["2", "9.00", "3", "15.00"])
+        self.assertEqual(footer.rows[1][1]["text"], "24.00")
 
     def test_custom_billing_details_are_rendered_in_quantity_and_settlement_notes(self):
         sheet = {

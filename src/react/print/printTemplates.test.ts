@@ -3,6 +3,7 @@ import type { BillingStatementLine, BillingStatementResponse } from "../api/cont
 import settlementParityFixture from "./fixtures/settlement-parity.json";
 import { settlementStatementHtml } from "./settlement";
 import { settlementNotesMarkup } from "./settlementNotes";
+import { collectColumns } from "./settlementModel";
 
 describe("print templates", () => {
   it("keeps the browser settlement template aligned with the server parity fixture", () => {
@@ -111,8 +112,8 @@ describe("print templates", () => {
       ],
     } as BillingStatementResponse;
     const html = settlementStatementHtml(result, false);
-    expect(html).toContain("Z1 / ¥4.50（全额减免）");
-    expect(html).toContain("Z1 / ¥13.00");
+    expect(html).toContain("Z1（全额减免）");
+    expect(html).not.toContain("Z1 / ¥");
     expect(html).toContain("Z2");
     expect(html).toContain("48.00");
     expect(html).toContain('<td colspan="4" class="money">0.00</td>');
@@ -126,6 +127,45 @@ describe("print templates", () => {
     expect(html).toContain(".summary-table .col-date{width:8.4%;min-width:8.4%;max-width:8.4%}");
     expect(html).toContain(".summary-table .col-group{width:1.526667%}");
     expect(html).toContain("@page{size:A4;margin:10mm}");
+  });
+
+  it("uses species headings to distinguish one IACUC while retaining rates and amounts", () => {
+    const result = structuredClone(settlementParityFixture) as BillingStatementResponse;
+    result.statement.iacucs = ["ZS2026010"];
+    result.statement.totalAmount = 65;
+    result.statement.totalAnimalDays = 4;
+    const line = result.lines[0];
+    line.amount = line.cumulative = 65;
+    line.animalCount = 4;
+    line.iacucBreakdown!.forEach((item) => (item.iacuc = "ZS2026010"));
+    const rabbit = line.iacucBreakdown![1];
+    rabbit.unitPrice = 5;
+    rabbit.animalCount = 4;
+    rabbit.payableAmount = 20;
+
+    const output = new DOMParser().parseFromString(settlementStatementHtml(result, false), "text/html");
+    const header = output.querySelector(".summary-table thead")!;
+    const labels = Array.from(header.querySelectorAll("tr:nth-child(2) th"))
+      .map((cell) => cell.textContent)
+      .filter((text) => text?.startsWith("ZS2026010"));
+    expect(labels).toEqual(["ZS2026010", "ZS2026010"]);
+    expect(header.textContent).toContain("小鼠");
+    expect(header.textContent).toContain("兔");
+    expect(output.querySelector(".note-line")?.textContent).toContain("小鼠 4.5元/笼/日");
+    expect(output.querySelector(".note-line")?.textContent).toContain("兔 5元/只/日");
+    expect(output.querySelector(".summary-total-money")?.textContent).toBe("65.00");
+    expect(
+      Array.from(output.querySelectorAll(".meta-summary:not(.meta-summary-empty)")).map((cell) => cell.textContent),
+    ).toEqual(["单位支持：45.00实际待缴纳：45.00", "单位支持：0.00实际待缴纳：20.00"]);
+  });
+
+  it("still distinguishes multiple rates for the same species and IACUC", () => {
+    const result = structuredClone(settlementParityFixture) as BillingStatementResponse;
+    const mouse = result.lines[0].iacucBreakdown![0];
+    result.lines[0].iacucBreakdown = [mouse, { ...mouse, unitPrice: 5 }];
+    const columns = collectColumns(result.statement, result.lines);
+    expect(columns.map((column) => column.label)).toEqual(["Z-PARITY-MOUSE / ¥4.50", "Z-PARITY-MOUSE / ¥5.00"]);
+    expect(new Set(columns.map((column) => column.key)).size).toBe(2);
   });
 
   it("renders custom billing in settlement notes without a dedicated document page", () => {

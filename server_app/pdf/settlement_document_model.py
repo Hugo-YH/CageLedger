@@ -43,10 +43,11 @@ def statement_columns(statement, lines):
     labels = {}
     for item in sorted_columns:
         base = _statement_column_label(item)
-        labels[base] = labels.get(base, 0) + 1
+        identity = (item["species"], base)
+        labels[identity] = labels.get(identity, 0) + 1
     for item in sorted_columns:
         base = _statement_column_label(item)
-        suffix = f" / ¥{item['unitPrice']:.2f}" if labels[base] > 1 else ""
+        suffix = f" / ¥{item['unitPrice']:.2f}" if labels[(item["species"], base)] > 1 else ""
         item["label"] = f"{base}{suffix}"
     return sorted_columns
 
