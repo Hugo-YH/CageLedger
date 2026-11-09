@@ -1,4 +1,4 @@
-import { Alert, Flex, Radio, Table, Tag, Typography, type TableProps } from "antd";
+import { Alert, Flex, Radio, Table, Tag, Tooltip, Typography, type TableProps } from "antd";
 
 import type {
   IntakeBatch,
@@ -54,7 +54,7 @@ function PeriodCalculation({ calculation }: { calculation: IntakeReviewCalculati
   const { basis, periodSource, startDate, endDate, days, months } = calculation;
   const dateDifference = `${endDate} − ${startDate} = ${days} 天`;
   if (basis === "date_range") {
-    return <Typography.Text type="secondary">由日期区间计算：{dateDifference}</Typography.Text>;
+    return <span>由日期区间计算：{dateDifference}</span>;
   }
   const duration = basis === "fixed_days" ? `${days} 天` : months == null ? "自然月周期" : `${months} 个自然月`;
   const source = periodSource === "saved" ? "保留 " : periodSource === "incoming" ? "本次识别 " : "";
@@ -62,10 +62,8 @@ function PeriodCalculation({ calculation }: { calculation: IntakeReviewCalculati
   const endLabel = periodSource === "saved" ? "新结束日" : "结束日";
   return (
     <Flex vertical gap={2}>
-      <Typography.Text type="secondary">
-        {`${startLabel} ${startDate} + ${source}${duration} = ${endLabel} ${endDate}`}
-      </Typography.Text>
-      <Typography.Text type="secondary">按结束日与接收日的日期差：{dateDifference}</Typography.Text>
+      <span>{`${startLabel} ${startDate} + ${source}${duration} = ${endLabel} ${endDate}`}</span>
+      <span>按结束日与接收日的日期差：{dateDifference}</span>
     </Flex>
   );
 }
@@ -75,18 +73,30 @@ function mergedFieldValue(merged: IntakeBatch, field: string) {
 }
 
 function MergedValue({ row, merged }: { row: Comparison; merged: IntakeBatch }) {
-  const after = mergedFieldValue(merged, row.field);
-  const linked = row.calculation && (row.status === "calculated" || row.status === "retained");
+  return <Typography.Text>{valueText(mergedFieldValue(merged, row.field), row.field)}</Typography.Text>;
+}
+
+function ComparisonStatus({ row, merged }: { row: Comparison; merged: IntakeBatch | null | undefined }) {
+  const tag = (
+    <Tag color={tagColors.intakeReview[row.status]} tabIndex={row.calculation ? 0 : undefined}>
+      {STATUS[row.status]}
+    </Tag>
+  );
+  if (!row.calculation) return tag;
   return (
-    <Flex vertical gap={4}>
-      <Typography.Text>{valueText(after, row.field)}</Typography.Text>
-      {linked ? (
-        <Typography.Text type="secondary">
-          {`原值 ${valueText(row.before, row.field)} → 合并后 ${valueText(after, row.field)}`}
-        </Typography.Text>
-      ) : null}
-      {row.calculation ? <PeriodCalculation calculation={row.calculation} /> : null}
-    </Flex>
+    <Tooltip
+      trigger={["hover", "focus"]}
+      title={
+        <Flex vertical gap={4}>
+          {merged ? (
+            <span>{`原值 ${valueText(row.before, row.field)} → 合并后 ${valueText(mergedFieldValue(merged, row.field), row.field)}`}</span>
+          ) : null}
+          <PeriodCalculation calculation={row.calculation} />
+        </Flex>
+      }
+    >
+      {tag}
+    </Tooltip>
   );
 }
 
@@ -171,7 +181,7 @@ export function IntakeReviewComparisons({
             onResolve(row.field, target.value);
           }}
         >
-          <Tag color={tagColors.intakeReview[row.status]}>{STATUS[row.status]}</Tag>
+          <ComparisonStatus row={row} merged={merged} />
           {onResolve && candidate.resolutionFields?.includes(row.field) ? (
             <Radio.Group
               role="radiogroup"

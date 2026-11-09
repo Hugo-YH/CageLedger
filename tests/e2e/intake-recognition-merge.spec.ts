@@ -346,12 +346,16 @@ test("late arrival shows the retained period and extended end before saving", as
   const dialog = review(page);
   const endRow = dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "结束日期", exact: true }) });
   const daysRow = dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "饲养天数", exact: true }) });
-  await expect(endRow).toContainText("原值 2027-01-04 → 合并后 2027-01-11");
-  await expect(endRow).toContainText("2026-11-11 + 保留 61 天 = 新结束日 2027-01-11");
+  await expect(endRow.getByRole("cell").nth(3)).toHaveText("2027-01-11");
   await expect(endRow).toContainText("联动计算");
-  await expect(daysRow).toContainText("原值 61 → 合并后 61");
+  await expect(daysRow.getByRole("cell").nth(3)).toHaveText("61");
   await expect(daysRow).toContainText("保留原值");
   await expect(daysRow).not.toContainText("本次缺失");
+  await endRow.getByText("联动计算", { exact: true }).hover();
+  await expect(page.getByRole("tooltip")).toBeVisible();
+  await expect(page.getByRole("tooltip")).toContainText("2026-11-11 + 保留 61 天 = 新结束日 2027-01-11");
+  await dialog.getByRole("heading", { name: "核对已有预约", exact: true }).hover();
+  await expect(page.getByRole("tooltip")).toBeHidden();
   expect(await saved(page, item.id)).toEqual(item);
   await page.screenshot({ path: info.outputPath("arrival-period-calculation.png"), animations: "disabled" });
   await dialog.getByRole("button", { name: "确认补充原预约", exact: true }).click();
@@ -398,8 +402,7 @@ test("field choices resolve a text conflict and save the recalculated period in 
   const confirm = dialog.getByRole("button", { name: "确认补充原预约", exact: true });
   await expect(confirm).toBeEnabled();
   const end = dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "结束日期", exact: true }) });
-  await expect(end).toContainText("原值 2027-01-04 → 合并后 2027-01-11");
-  await expect(end).toContainText("保留 61 天");
+  await expect(end.getByRole("cell").nth(3)).toHaveText("2027-01-11");
   await expect(
     dialog.getByRole("radiogroup", { name: "性别取值", exact: true }).getByRole("radio", { name: "雄性", exact: true }),
   ).toBeChecked();
@@ -448,7 +451,7 @@ test("end date options show the merged value and accept explicit endpoint select
   await expect(endChoice.getByRole("radio", { name: "2027-01-11", exact: true })).toBeChecked();
   const endRow = dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "结束日期", exact: true }) });
   const daysRow = dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "饲养天数", exact: true }) });
-  await expect(endRow).toContainText("原值 2027-01-04 → 合并后 2027-01-11");
+  await expect(endRow.getByRole("cell").nth(3)).toHaveText("2027-01-11");
   const choiceRequests: unknown[] = [];
   page.on("request", (request) => {
     if (request.method() === "POST" && new URL(request.url()).pathname === "/api/intake-batches/recognition-preview")
@@ -464,9 +467,8 @@ test("end date options show the merged value and accept explicit endpoint select
   await expect(endChoice.getByRole("radio", { name: "2027-01-11", exact: true })).toBeEnabled();
   expect(choiceRequests).toEqual([{ endDate: "incoming" }]);
   await endChoice.getByText("2027-01-04", { exact: true }).click();
-  await expect(endRow).toContainText("原值 2027-01-04 → 合并后 2027-01-04");
-  await expect(daysRow).toContainText("原值 61 → 合并后 54");
-  await expect(daysRow).toContainText("由日期区间计算：2027-01-04 − 2026-11-11 = 54 天");
+  await expect(endRow.getByRole("cell").nth(3)).toHaveText("2027-01-04");
+  await expect(daysRow.getByRole("cell").nth(3)).toHaveText("54");
   expect(choiceRequests).toEqual([{ endDate: "incoming" }, { endDate: "saved" }]);
   await dialog.getByRole("button", { name: "确认补充原预约", exact: true }).click();
   await expect(dialog).toBeHidden();

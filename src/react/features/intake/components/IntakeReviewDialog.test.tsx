@@ -197,7 +197,7 @@ it("previews retained image values and text additions before explicitly suppleme
   fireEvent.click(screen.getByRole("button", { name: "确认补充原预约" }));
   expect(actions.onConfirm).toHaveBeenCalledExactlyOnceWith("original");
 });
-it("shows the retained 61-day period and the linked end date before confirming a new intake date", () => {
+it("keeps calculated results concise and reveals the retained 61-day basis on focus before confirming", async () => {
   const preview = response();
   const calculation: IntakeReviewCalculation = {
     basis: "fixed_days",
@@ -233,20 +233,36 @@ it("shows the retained 61-day period and the linked end date before confirming a
   };
   const actions = setup(preview);
   const end = within(screen.getByRole("row", { name: /^结束日期 / }));
-  expect(end.getByText("原值 2027-01-04 → 合并后 2027-01-11")).toBeInTheDocument();
-  expect(end.getByText("新接收日 2026-11-11 + 保留 61 天 = 新结束日 2027-01-11")).toBeInTheDocument();
-  expect(end.getByText("联动计算")).toBeInTheDocument();
+  expect(end.getAllByRole("cell")[3]).toHaveTextContent(/^2027-01-11$/);
+  const endStatus = end.getByText("联动计算");
+  expect(endStatus).toHaveAttribute("tabindex", "0");
   expect(end.queryByText("本次缺失")).not.toBeInTheDocument();
   const days = within(screen.getByRole("row", { name: /^饲养天数 / }));
-  expect(days.getByText("保留原值")).toBeInTheDocument();
-  expect(days.getByText("原值 61 → 合并后 61")).toBeInTheDocument();
+  expect(days.getAllByRole("cell")[3]).toHaveTextContent(/^61$/);
   expect(days.queryByText("本次缺失")).not.toBeInTheDocument();
+  expect(screen.queryByText(/原值 .*→/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  fireEvent.focus(endStatus);
+  // JSDOM cannot position the popup; the browser regression checks visibility.
+  const endDetails = within(await screen.findByRole("tooltip"));
+  expect(endDetails.getByText("原值 2027-01-04 → 合并后 2027-01-11")).toBeInTheDocument();
+  expect(endDetails.getByText("新接收日 2026-11-11 + 保留 61 天 = 新结束日 2027-01-11")).toBeInTheDocument();
+  fireEvent.blur(endStatus);
+  await waitFor(() => expect(endStatus).not.toHaveAttribute("aria-describedby"));
+  const retainedStatus = days.getByText("保留原值");
+  fireEvent.focus(retainedStatus);
+  await waitFor(() => expect(retainedStatus).toHaveAttribute("aria-describedby"));
+  // rc-util intentionally shares "test-id" in tests, so find this popup by content.
+  const retainedMessage = await screen.findByText("原值 61 → 合并后 61");
+  const retainedDetails = within(retainedMessage.closest<HTMLElement>('[role="tooltip"]')!);
+  expect(retainedDetails.getByText("原值 61 → 合并后 61")).toBeInTheDocument();
+  expect(retainedDetails.getByText("按结束日与接收日的日期差：2027-01-11 − 2026-11-11 = 61 天")).toBeInTheDocument();
   expect(within(screen.getByRole("row", { name: /^接收日期 / })).queryByText(/原值 .*→/)).not.toBeInTheDocument();
   expect(actions.onConfirm).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "确认补充原预约" }));
   expect(actions.onConfirm).toHaveBeenCalledExactlyOnceWith("original");
 });
-it("explains a retained calendar month and the resulting 28-day interval from January 31", () => {
+it("reveals the retained calendar month and resulting 28-day interval from January 31 on hover", async () => {
   const preview = response();
   const calculation: IntakeReviewCalculation = {
     basis: "calendar_months",
@@ -278,14 +294,20 @@ it("explains a retained calendar month and the resulting 28-day interval from Ja
   };
   setup(preview);
   const days = within(screen.getByRole("row", { name: /^饲养天数 / }));
-  expect(days.getByText("原值 31 → 合并后 28")).toBeInTheDocument();
-  expect(days.getByText("新接收日 2027-01-31 + 保留 1 个自然月 = 新结束日 2027-02-28")).toBeInTheDocument();
-  expect(days.getByText("按结束日与接收日的日期差：2027-02-28 − 2027-01-31 = 28 天")).toBeInTheDocument();
-  expect(days.getByText("联动计算")).toBeInTheDocument();
+  expect(days.getAllByRole("cell")[3]).toHaveTextContent(/^28$/);
+  expect(within(screen.getByRole("row", { name: /^结束日期 / })).getAllByRole("cell")[3]).toHaveTextContent(
+    /^2027-02-28$/,
+  );
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  fireEvent.mouseEnter(days.getByText("联动计算"));
+  const details = within(await screen.findByRole("tooltip"));
+  expect(details.getByText("原值 31 → 合并后 28")).toBeInTheDocument();
+  expect(details.getByText("新接收日 2027-01-31 + 保留 1 个自然月 = 新结束日 2027-02-28")).toBeInTheDocument();
+  expect(details.getByText("按结束日与接收日的日期差：2027-02-28 − 2027-01-31 = 28 天")).toBeInTheDocument();
   expect(days.queryByText("本次缺失")).not.toBeInTheDocument();
   expect(within(screen.getByRole("row", { name: /^饲养月数 / })).getByText("保留原值")).toBeInTheDocument();
 });
-it("identifies days derived from the merged date range rather than presenting a missing duration", () => {
+it("reveals the merged date range basis on focus without expanding the days cell", async () => {
   const preview = response();
   const calculation: IntakeReviewCalculation = {
     basis: "date_range",
@@ -308,11 +330,14 @@ it("identifies days derived from the merged date range rather than presenting a 
   };
   setup(preview);
   const days = within(screen.getByRole("row", { name: /^饲养天数 / }));
-  expect(days.getByText("由日期区间计算：2026-11-28 − 2026-11-11 = 17 天")).toBeInTheDocument();
-  expect(days.getByText("联动计算")).toBeInTheDocument();
+  expect(days.getAllByRole("cell")[3]).toHaveTextContent(/^17$/);
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  fireEvent.focus(days.getByText("联动计算"));
+  const details = within(await screen.findByRole("tooltip"));
+  expect(details.getByText("由日期区间计算：2026-11-28 − 2026-11-11 = 17 天")).toBeInTheDocument();
   expect(days.queryByText("本次缺失")).not.toBeInTheDocument();
 });
-it("previews incoming image values and their period before explicitly updating a saved text appointment", () => {
+it("previews incoming image results and reveals their period basis before explicitly updating a saved text appointment", async () => {
   const preview = response();
   const original = { ...preview.items[0].item, quantity: 30, intakeDate: "2026-11-11", husbandryDays: null };
   const picture = { ...incoming, rawMessage: "", quantity: 15, husbandryDays: 17, endDate: "2026-11-28" };
@@ -357,11 +382,12 @@ it("previews incoming image values and their period before explicitly updating a
     "15",
     "不一致",
   ]);
-  expect(
-    within(screen.getByRole("row", { name: /^饲养天数 / })).getByText(
-      "接收日 2026-11-11 + 本次识别 17 天 = 结束日 2026-11-28",
-    ),
-  ).toBeInTheDocument();
+  const days = within(screen.getByRole("row", { name: /^饲养天数 / }));
+  expect(days.getAllByRole("cell")[3]).toHaveTextContent(/^17$/);
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  fireEvent.mouseEnter(days.getByText("联动计算"));
+  const details = within(await screen.findByRole("tooltip"));
+  expect(details.getByText("接收日 2026-11-11 + 本次识别 17 天 = 结束日 2026-11-28")).toBeInTheDocument();
   expect(actions.onConfirm).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "已登记，结束本次录入" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "确认补充原预约" }));
