@@ -3,6 +3,18 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.31.9",
+    build: "278",
+    releasedAt: "2026-11-09",
+    title: "接收与合格证处理",
+    items: [
+      "接收列表隐藏订单编号列，保留采购单号、批次编号等当前常用信息及原订单数据",
+      "合格证 PDF 按需逐页转图，复用首页预览并采用更快的无损 PNG 编码，缩短预览与识别等待；保留原件、页码、清晰度、文件大小及失败保护",
+      "合格证单页和整轮处理超时可配置，补充栅格化与图片编码阶段日志，便于定位较大扫描件的处理耗时",
+      "同一伦理编号出现在不同动物品种时，表头使用伦理编号；同一品种存在多个收费标准时继续显示单价以区分，预览与导出 PDF 同步调整",
+    ],
+  },
+  {
     version: "1.31.8",
     build: "277",
     releasedAt: "2026-11-09",
