@@ -1,0 +1,43 @@
+{
+  "version": "1.31.7",
+  "revision": "b3831d42cce9cce2741af23cc3953903a122b30c",
+  "capturedAt": "2026-11-09T05:27:09.510Z",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "dataset": "isolated fictional API records; no production data",
+  "note": "Release acknowledgement only is suppressed by the standard e2e fixture; business requests use the real API.",
+  "screenshots": [
+    {
+      "file": "dashboard.png",
+      "view": "总览",
+      "sha256": "2813a2cfaccbdbc2ca14c9ee00dfe91430b9afc9d0c1f695e454654990ac5869"
+    },
+    {
+      "file": "intake.png",
+      "view": "笼卡管理 → 预约消息识别",
+      "sha256": "0a12b491f6143112cf18a3b009a9a3db059f34598ee37cb2cdabb6d00e3c8551"
+    },
+    {
+      "file": "quantity-sheets.png",
+      "view": "饲养费管理 → 已保存数量统计表",
+      "sha256": "41dbdf40dc9ab98bbd5c95f12f3811f4aa59e10708346b9f6a83ce4dc0a4d314"
+    },
+    {
+      "file": "settlements.png",
+      "view": "结算管理 → 结算列表",
+      "sha256": "bad23bf41ec245dc6f5a0d52d56298cebe302872eb2f985ad9d276faa1100a67"
+    },
+    {
+      "file": "workflow.png",
+      "view": "结算管理 → 单据跟踪",
+      "sha256": "825d16896f47dcb77ad8c4cf2b191b543848e0de56497b1a8da0e7f060c94ab3"
+    },
+    {
+      "file": "quarantine-batch.png",
+      "view": "检疫管理 → 检疫批次 → 新建检疫批次",
+      "sha256": "811f76d014984cc7f60d51f7d33cec59cdad85eb20bfeb2bb3c8af3da3d867ed"
+    }
+  ]
+}

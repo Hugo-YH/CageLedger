@@ -1,5 +1,9 @@
 export const pageRoutes = {
   "Home.md": "index.md",
+  "指南导航.md": "guide/index.md",
+  "运维导航.md": "operations/index.md",
+  "开发导航.md": "development/index.md",
+  "图文与引用规范.md": "development/documentation-media.md",
   "产品概览.md": "guide/overview.md",
   "快速开始.md": "guide/getting-started.md",
   "业务流程.md": "guide/business-flow.md",

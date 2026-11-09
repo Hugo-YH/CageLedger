@@ -16,11 +16,14 @@
 
 ## 指南
 
+- [指南导航](/guide/index.md)
+
 - [产品概览](/guide/overview.md)
 - [快速开始](/guide/getting-started.md)
 - [业务流程](/guide/business-flow.md)
 - [工作台导航](/guide/navigation.md)
 - [笼卡管理](/guide/cage-cards.md)
+- [检疫管理](/guide/quarantine.md)
 - [笼位与房间管理](/guide/rooms-and-cages.md)
 - [动物巡检](/guide/animal-inspection.md)
 - [数量统计表](/guide/quantity-sheets.md)
@@ -30,9 +33,13 @@
 - [结算与报销](/guide/settlement-and-reimbursement.md)
 - [用户操作手册](/guide/user-manual.md)
 - [常见问题](/guide/faq.md)
+- [帮助与反馈](/guide/feedback.md)
 
 ## 运维
 
+- [运维导航](/operations/index.md)
+
+- [HTTPS 与证书](/operations/https-and-certificate.md)
 - [部署与运行](/operations/deployment.md)
 - [系统配置](/operations/configuration.md)
 - [环境变量](/operations/environment.md)
@@ -44,12 +51,16 @@
 
 ## 开发
 
+- [开发导航](/development/index.md)
+- [文档图文与引用](/development/documentation-media.md)
+
 - [本地开发](/development/local-development.md)
 - [当前版本与兼容边界](/development/current-baseline.md)
 - [项目结构](/development/project-structure.md)
 - [前端架构](/development/frontend-architecture.md)
 - [后端架构](/development/backend-architecture.md)
 - [API 与数据模型](/development/api-and-data-model.md)
+- [API 接口清单](/development/api-inventory.md)
 - [UI 组件标准](/development/ui-component-standard.md)
 - [测试与质量](/development/testing-and-quality.md)
 - [开发规范](/development/contributing.md)

@@ -1,10 +1,15 @@
 import DefaultTheme from "vitepress/theme";
 import { h } from "vue";
+import DocFigure from "./DocFigure.vue";
+import type { Theme } from "vitepress";
 import DocContributors from "./DocContributors.vue";
 import "./styles.css";
 
 export default {
   extends: DefaultTheme,
+  enhanceApp({ app }) {
+    app.component("DocFigure", DocFigure);
+  },
   Layout: () =>
     h(DefaultTheme.Layout, null, {
       "nav-bar-content-after": () =>
@@ -21,4 +26,4 @@ export default {
         ),
       "doc-footer-before": () => h(DocContributors),
     }),
-};
+} satisfies Theme;

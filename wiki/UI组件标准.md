@@ -37,3 +37,7 @@
 主题唯一来源为 `src/theme/visual-system.mjs`。应用直接消费，CSS 与文档站变量由 `node scripts/generate_theme.mjs` 派生。桌面正文 14px/22px、控件 32px；手机输入文字 16px、控件 40px、按钮触控目标至少 44px。页面标题 24px/32px，分区标题 16px/24px。普通表单最大 1200px、桌面两列、手机一列。关键动作保持可见，明确标记的低频操作进入“更多”。报告与打印使用专属版式。
 
 完整约定见 `docs/contracts/ui-component-standard.md`、`docs/contracts/ui-color-system.md` 与 `docs/contracts/ui-interaction-system.md`。
+
+## 文档站的设计边界
+
+业务工作台使用 Ant Design，文档站使用 VitePress；两者共用生成的品牌 Token。文档采用适合长文的行距、内容宽度、标题层次与可滚动表格，图示保留标题、替代文本和图注。文档排版和外部设计依据见[图文与引用规范](/development/documentation-media)。

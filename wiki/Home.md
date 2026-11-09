@@ -1,41 +1,55 @@
-# CageLedger 文档
+---
+layout: home
+hero:
+  name: CageLedger
+  text: 从日常操作到工程维护
+  tagline: 按任务找到入口，按流程理解业务，按契约维护系统。
+  actions:
+    - theme: brand
+      text: 开始使用
+      link: /guide/
+    - theme: alt
+      text: 部署与运维
+      link: /operations/
+    - theme: alt
+      text: 开发与维护
+      link: /development/
+features:
+  - title: 接收与饲养
+    details: 从预约核对、笼卡打印到检疫、入驻与动物巡检。
+    link: /guide/business-flow
+    linkText: 查看业务流程
+  - title: 费用与单据
+    details: 录入数量统计表与服务明细，分别出单，跟踪登记与归档。
+    link: /guide/settlement-and-reimbursement
+    linkText: 查看结算指南
+  - title: 可靠运行
+    details: 核对部署配置、账号权限、备份范围与恢复步骤。
+    link: /operations/
+    linkText: 查看运维手册
+  - title: 持续维护
+    details: 从当前版本与实际入口出发，理解架构、约束和交付流程。
+    link: /development/
+    linkText: 查看开发手册
+---
 
-这里提供 CageLedger 的使用说明、部署手册、开发参考和发行记录。产品介绍、功能演示和系统入口位于<a href="/" target="_self">项目门户</a>。
+<div class="doc-home-content">
 
-## 从任务开始
+## 从你的任务开始
 
-| 我需要完成的工作                   | 阅读路径                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| 开始录入和处理日常业务             | [快速开始](/guide/getting-started) → [业务流程](/guide/business-flow)                       |
-| 接收动物、打印笼卡和安排入驻       | [笼卡管理](/guide/cage-cards) → [笼位与房间管理](/guide/rooms-and-cages)                    |
-| 执行房间动物巡检和异常处置         | [动物巡检](/guide/animal-inspection)                                                        |
-| 填写数量统计表、生成结算和月度汇总 | [数量统计表](/guide/quantity-sheets) → [饲养费核算](/guide/billing)                         |
-| 交回登记、归档与补录报销单         | [结算与报销](/guide/settlement-and-reimbursement)                                           |
-| 部署、备份或排查运行问题           | [部署与运行](/operations/deployment) → [故障排查](/operations/troubleshooting)              |
-| 判断当前入口、兼容 API 和遗留组件  | [当前版本与兼容边界](/development/current-baseline)                                         |
-| 维护代码、接口和发布制品           | [本地开发](/development/local-development) → [测试与质量](/development/testing-and-quality) |
+| 当前任务                     | 推荐阅读                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| 第一次登录并处理业务         | [快速开始](/guide/getting-started) → [工作台导航](/guide/navigation)            |
+| 确认到货、打印笼卡与安排入驻 | [笼卡与接收](/guide/cage-cards) → [笼位与房间](/guide/rooms-and-cages)          |
+| 录入月度数量并核算费用       | [数量统计表](/guide/quantity-sheets) → [饲养费核算](/guide/billing)             |
+| 交回单据、补录报销与归档     | [结算与报销](/guide/settlement-and-reimbursement)                               |
+| 新部署或排查运行异常         | [运维导航](/operations/) → [故障排查](/operations/troubleshooting)              |
+| 修改代码或核对历史实现       | [当前版本与兼容边界](/development/current-baseline) → [开发导航](/development/) |
 
-## 按角色阅读
+## 文档与当前版本
 
-### 日常工作人员
+本轮文档以 **v1.31.7（Build 276）** 的实际入口为基准。[更新日志](/releases/)记录各版本变化，[当前版本与兼容边界](/development/current-baseline)说明现役流程与保留实现。截图使用隔离环境中的虚构数据，图注说明演示范围；[图文与引用规范](/development/documentation-media)记录来源和维护方法。
 
-[快速开始](/guide/getting-started)介绍登录后的操作顺序。[用户操作手册](/guide/user-manual)按业务模块提供详细步骤。
+系统入口与产品介绍见<a href="/" target="_self">项目门户</a>。开发者可通过页面底部的“编辑此页”更新源文件；AI 工具可读取 [llms.txt](/llms.txt)。
 
-### 房间管理员
-
-[工作台导航](/guide/navigation)说明授权范围内的入口。[笼位与房间管理](/guide/rooms-and-cages)和[动物巡检](/guide/animal-inspection)覆盖日常维护、占用和复查。
-
-### 系统管理员
-
-[系统配置](/operations/configuration)、[账号与权限](/operations/accounts-and-permissions)、[数据管理与 IACUC 索引](/operations/data-and-iacuc)说明系统管理边界。
-
-### 开发与运维人员
-
-[本地开发](/development/local-development)记录开发环境和端口。[项目结构](/development/project-structure)、[API 与数据模型](/development/api-and-data-model)和[发布与交付](/development/release-and-delivery)覆盖维护路径。
-
-## 文档约定
-
-- `wiki/` 是文档源，生产文档站由 `/docs/` 提供。
-- 每页可通过“编辑此页”返回 Gitea 更新源文件；[llms.txt](/llms.txt) 提供面向 AI 助手的文档索引与约束。
-- [更新日志](/releases/)是版本变化的权威记录，并同步系统“关于”页中的发行信息。
-- 业务功能、部署方式、环境变量和接口变化同时更新对应的使用、运维和开发页面。
+</div>

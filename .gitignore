@@ -19,6 +19,13 @@ docs-dist
 wiki/.vitepress/cache/
 wiki/public/*
 !wiki/public/cageledger.crt
+!wiki/public/diagrams/
+wiki/public/diagrams/*
+!wiki/public/diagrams/*.svg
+!wiki/public/screenshots/
+wiki/public/screenshots/*
+!wiki/public/screenshots/*.png
+!wiki/public/screenshots/manifest.json
 *.local
 .env
 .env.*
@@ -41,8 +48,7 @@ test-results
 *.njsproj
 *.sln
 *.sw?
-.vitepress/
-wiki/.vitepress/
+wiki/.vitepress/dist/
 tmp/
 
 # Developer-local release converters and verified installation media.

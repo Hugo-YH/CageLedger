@@ -10,6 +10,7 @@
   --vp-c-border: var(--cl-color-border-secondary);
   --vp-c-text-1: var(--cl-color-text);
   --vp-c-text-2: var(--cl-color-text-secondary);
+  --vp-c-text-3: var(--cl-color-text-tertiary);
   --vp-font-family-base: var(--cl-font-sans);
   --vp-shadow-1: var(--cl-shadow-card);
 }
@@ -42,61 +43,60 @@
   letter-spacing: normal;
 }
 
-.VPDoc .vp-doc a {
+:is(.VPDoc, .VPHome) .vp-doc a {
   font-weight: 400;
 }
 
-.VPDoc .vp-doc h2 {
+:is(.VPDoc, .VPHome) .vp-doc h2 {
   margin-top: calc(var(--cl-space-8) + var(--cl-space-4));
   padding-top: 0;
   border-top: 0;
 }
 
-.VPDoc .vp-doc h3 {
+:is(.VPDoc, .VPHome) .vp-doc h3 {
   margin-top: var(--cl-space-8);
 }
 
-.VPDoc .vp-doc table {
+:is(.VPDoc, .VPHome) .vp-doc table {
   display: table;
   width: 100%;
   margin: var(--cl-space-6) 0;
-  overflow: hidden;
   border: 1px solid var(--vp-c-border);
   border-collapse: separate;
   border-spacing: 0;
   border-radius: var(--cl-radius-card);
 }
 
-.VPDoc .vp-doc tr {
+:is(.VPDoc, .VPHome) .vp-doc tr {
   border: 0;
 }
 
-.VPDoc .vp-doc th,
-.VPDoc .vp-doc td {
+:is(.VPDoc, .VPHome) .vp-doc th,
+:is(.VPDoc, .VPHome) .vp-doc td {
   border-right: 1px solid var(--vp-c-border);
   border-bottom: 1px solid var(--vp-c-border);
 }
 
-.VPDoc .vp-doc th:last-child,
-.VPDoc .vp-doc td:last-child {
+:is(.VPDoc, .VPHome) .vp-doc th:last-child,
+:is(.VPDoc, .VPHome) .vp-doc td:last-child {
   border-right: 0;
 }
 
-.VPDoc .vp-doc tr:last-child td {
+:is(.VPDoc, .VPHome) .vp-doc tr:last-child td {
   border-bottom: 0;
 }
 
-.VPDoc .vp-doc th {
+:is(.VPDoc, .VPHome) .vp-doc th {
   color: var(--vp-c-text-1);
   background: var(--vp-c-bg-alt);
 }
 
-.VPDoc .vp-doc code,
-.VPDoc .vp-doc div[class*="language-"] {
+:is(.VPDoc, .VPHome) .vp-doc code,
+:is(.VPDoc, .VPHome) .vp-doc div[class*="language-"] {
   border-radius: var(--cl-radius-control);
 }
 
-.VPDoc .vp-doc :is(button, .VPButton) {
+:is(.VPDoc, .VPHome) .vp-doc :is(button, .VPButton) {
   min-height: 32px;
   border-radius: var(--cl-radius-control);
   transition:
@@ -106,12 +106,12 @@
     box-shadow var(--cl-motion-base) var(--cl-ease-out);
 }
 
-.VPDoc .vp-doc :is(a, button, input, select, textarea):focus-visible {
+:is(.VPDoc, .VPHome) .vp-doc :is(a, button, input, select, textarea):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--cl-brand-1) 42%, transparent);
   outline-offset: 2px;
 }
 
-.VPDoc .vp-doc div[class*="language-"] {
+:is(.VPDoc, .VPHome) .vp-doc div[class*="language-"] {
   border: 1px solid var(--vp-c-border);
 }
 
@@ -161,7 +161,7 @@
   font-weight: 400;
 }
 
-@media (max-width: 639px) {
+@media (width <= 639px) {
   .cageledger-doc-contributors {
     align-items: flex-start;
     flex-direction: column;
@@ -176,5 +176,93 @@
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+}
+
+/* Reading layouts share Ant tokens while retaining document typography. */
+.vp-doc p,
+.vp-doc li {
+  line-height: 1.85;
+  overflow-wrap: break-word;
+}
+
+.doc-home-content {
+  max-width: 1152px;
+  margin: var(--cl-space-8) auto 0;
+  padding: 0 var(--cl-space-8) var(--cl-space-8);
+}
+
+.doc-home-content h2 {
+  font-size: 24px;
+  line-height: 1.5;
+}
+
+.doc-table-scroll {
+  max-width: 100%;
+  margin: var(--cl-space-6) 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: var(--cl-radius-card);
+}
+
+:is(.VPDoc, .VPHome) .vp-doc .doc-table-scroll table {
+  margin: 0;
+}
+
+.doc-table-scroll:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.doc-figure {
+  margin: var(--cl-space-8) 0;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-border);
+  border-radius: var(--cl-radius-card);
+  background: var(--vp-c-bg-alt);
+}
+
+.doc-figure > a {
+  display: block;
+  background: #fff;
+}
+
+.doc-figure > a:focus-visible {
+  outline-offset: -3px;
+}
+
+.doc-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.doc-figure figcaption {
+  padding: var(--cl-space-4);
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.doc-figure figcaption span {
+  white-space: nowrap;
+}
+
+@media (width >= 960px) {
+  .VPHome .VPHero .name,
+  .VPHome .VPHero .text {
+    max-width: 840px;
+    font-size: 48px;
+    line-height: 1.25;
+  }
+}
+
+@media (width <= 639px) {
+  .doc-home-content {
+    padding: 0 var(--cl-space-6) var(--cl-space-6);
+  }
+
+  .doc-figure figcaption {
+    padding: var(--cl-space-2) var(--cl-space-4);
   }
 }
