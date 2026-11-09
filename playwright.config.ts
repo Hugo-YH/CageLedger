@@ -8,13 +8,16 @@ const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 const evidence = process.env.CAGELEDGER_E2E_OUTPUT_DIR;
 // Capturing documentation creates a fictional dataset and must run on its own.
 // Keep it outside default *.spec.ts collection; the managed file target opts in.
-const documentationCapture = process.argv.some((argument) =>
-  /(?:^|[/\\])documentation-capture\.capture\.ts$/.test(argument),
+const explicitCapture = process.argv.some((argument) =>
+  /(?:^|[/\\])(?:documentation-capture|ui-ux-review)\.capture\.ts$/.test(argument),
 );
+if (explicitCapture && process.argv.some((argument) => /\.spec\.ts$/.test(argument))) {
+  throw new Error("Screenshot capture files must run separately from the business regression suite.");
+}
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  ...(documentationCapture ? { testMatch: "**/documentation-capture.capture.ts" } : {}),
+  ...(explicitCapture ? { testMatch: "**/*.capture.ts" } : {}),
   fullyParallel: false,
   // E2E uses one ephemeral SQLite database. A single worker keeps shared
   // infrastructure fixtures deterministic across every local and CI run.

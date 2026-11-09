@@ -871,13 +871,6 @@
     box-shadow var(--motion-base) var(--ease-standard);
 }
 
-.empty-state {
-  display: grid;
-  place-items: center;
-  text-align: center;
-  color: var(--muted);
-}
-
 /* Shared compact controls and table surfaces (migrated from apple-ux.css). */
 .compact,
 .compact-action {
@@ -1043,15 +1036,27 @@
 }
 
 .empty-state {
+  display: grid;
+  place-items: center;
   min-height: 220px;
   padding: 24px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--surface-overlay), var(--surface-soft));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  text-align: center;
+  color: var(--muted);
 }
 
-.empty-state h3 {
-  color: var(--text);
+[data-ui="empty-state"] .app-empty-state-content {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 60ch;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+[data-ui="empty-state"] .app-empty-state-content .ant-typography {
+  margin: 0;
 }
 
 [data-ui="page-skeleton"] {

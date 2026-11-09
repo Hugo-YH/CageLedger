@@ -1,4 +1,5 @@
 import { Skeleton } from "antd";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 type PageSkeletonVariant = "page" | "table" | "detail" | "form";
 
@@ -19,6 +20,7 @@ export function PageSkeleton({
   /** Use inside an existing Card, Modal, or panel to avoid duplicate chrome. */
   embedded?: boolean;
 }) {
+  const active = !useMediaQuery("(prefers-reduced-motion: reduce)");
   const visibleRows = skeletonRows.slice(0, Math.max(1, Math.min(rows, skeletonRows.length)));
   const isTable = variant === "table";
   const isDetail = variant === "detail";
@@ -34,18 +36,18 @@ export function PageSkeleton({
       role="status"
     >
       <span className="app-visually-hidden">{label}正在加载</span>
-      {embedded ? null : <PageSkeletonHeading variant={variant} />}
+      {embedded ? null : <PageSkeletonHeading active={active} variant={variant} />}
       {isTable ? (
         <div className="page-skeleton-table" aria-hidden="true">
           <div className="page-skeleton-table-head">
             {Array.from({ length: 4 }, (_, index) => (
-              <Skeleton.Input active block key={index} size="small" />
+              <Skeleton.Input active={active} block key={index} size="small" />
             ))}
           </div>
           {Array.from({ length: tableRows }, (_, index) => (
             <div className="page-skeleton-table-row" key={index}>
               {Array.from({ length: 4 }, (_, cellIndex) => (
-                <Skeleton.Input active block key={cellIndex} size="small" />
+                <Skeleton.Input active={active} block key={cellIndex} size="small" />
               ))}
             </div>
           ))}
@@ -54,8 +56,8 @@ export function PageSkeleton({
         <div aria-hidden="true" className="page-skeleton-form-grid">
           {Array.from({ length: Math.max(rows, 6) }, (_, index) => (
             <div className="page-skeleton-form-field" key={index}>
-              <Skeleton.Input active size="small" />
-              <Skeleton.Input active block size="medium" />
+              <Skeleton.Input active={active} size="small" />
+              <Skeleton.Input active={active} block size="medium" />
             </div>
           ))}
         </div>
@@ -63,31 +65,31 @@ export function PageSkeleton({
         <div aria-hidden="true" className="page-skeleton-detail-grid">
           {Array.from({ length: Math.max(rows, 4) }, (_, index) => (
             <div className="page-skeleton-detail-item" key={index}>
-              <Skeleton.Input active size="small" />
-              <Skeleton.Input active block size="medium" />
+              <Skeleton.Input active={active} size="small" />
+              <Skeleton.Input active={active} block size="medium" />
             </div>
           ))}
         </div>
       ) : (
-        <Skeleton active paragraph={{ rows, width: visibleRows }} title={{ width: "32%" }} />
+        <Skeleton active={active} paragraph={{ rows, width: visibleRows }} title={{ width: "32%" }} />
       )}
     </section>
   );
 }
 
-function PageSkeletonHeading({ variant }: { variant: PageSkeletonVariant }) {
+function PageSkeletonHeading({ variant, active }: { variant: PageSkeletonVariant; active: boolean }) {
   const isTable = variant === "table";
   return (
     <div className={`page-skeleton-heading${isTable ? " page-skeleton-toolbar" : ""}`} aria-hidden="true">
-      <Skeleton.Input active block size="large" />
+      <Skeleton.Input active={active} block size="large" />
       {isTable ? (
         <div className="page-skeleton-heading-actions">
-          <Skeleton.Button active size="small" />
-          <Skeleton.Button active size="small" />
-          <Skeleton.Button active size="small" />
+          <Skeleton.Button active={active} size="small" />
+          <Skeleton.Button active={active} size="small" />
+          <Skeleton.Button active={active} size="small" />
         </div>
       ) : (
-        <Skeleton.Button active size="medium" />
+        <Skeleton.Button active={active} size="medium" />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { ActionIcon } from "./ui/ActionIcon";
-import { Alert, Button, Empty, Flex, Pagination, Space, Typography } from "antd";
+import { Alert, Button, Flex, Pagination, Space, Typography } from "antd";
+import { EmptyState } from "./ui/EmptyState";
 import { Modal } from "./ui/Modal";
 import { CloseOutlined } from "@ant-design/icons";
 import { type ReactNode, useEffect, useRef } from "react";
@@ -46,7 +47,7 @@ export function PageState({ title, detail, retry }: { title: string; detail?: st
   }
   return (
     <div className="empty-state" role="status" aria-live="polite">
-      <Empty description={detail || title} />
+      <EmptyState title={title} detail={detail && detail !== title ? detail : undefined} />
     </div>
   );
 }

@@ -273,6 +273,13 @@
       "allowedPrefixes": ["[data-ui='system-status-page']", ".system-"],
       "breakpoints": ["desktop", "1180px", "760px", "landscape"],
       "status": "complete"
+    },
+    "empty-state": {
+      "root": "[data-ui='empty-state']",
+      "owner": "src/styles/components.css",
+      "allowedPrefixes": ["[data-ui='empty-state']", ".app-empty-state-content", ".empty-state"],
+      "breakpoints": ["desktop", "760px"],
+      "status": "complete"
     }
   },
   "antGlobalOwner": "src/styles/features/antd-system.css"

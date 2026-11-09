@@ -11,6 +11,7 @@ export { Drawer } from "./Drawer";
 export { Modal } from "./Modal";
 export { ModalPresence } from "./ModalPresence";
 export { Feedback } from "./Feedback";
+export { EmptyState } from "./EmptyState";
 export { FormField } from "./FormField";
 export { HelpPopover } from "./HelpPopover";
 export { Sheet } from "./Sheet";
