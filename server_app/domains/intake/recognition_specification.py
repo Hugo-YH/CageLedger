@@ -66,3 +66,27 @@ def normalize_specification(raw):
     if invalid or len(set(dimensions)) != len(dimensions):
         return "", True
     return " / ".join(measurements), not bool(measurements)
+
+
+def specification_fits_request(requested, purchased):
+    """A purchase entirely inside the requested range is compatible, in the same units."""
+
+    def intervals(raw):
+        normalized, uncertain = normalize_specification(raw)
+        if uncertain or not normalized:
+            return None
+        result = {}
+        for part in normalized.split(" / "):
+            match = re.fullmatch(rf"({_VALUE})(?:-({_VALUE}))?(kg|g|w|m|y|d)", part)
+            if not match:
+                return None
+            result[match[3]] = (Decimal(match[1]), Decimal(match[2] or match[1]))
+        return result
+
+    request, purchase = intervals(requested), intervals(purchased)
+    return bool(
+        request
+        and purchase
+        and request.keys() == purchase.keys()
+        and all(request[unit][0] <= low <= high <= request[unit][1] for unit, (low, high) in purchase.items())
+    )

@@ -34,6 +34,15 @@ export const tagColors = {
     completed: "success",
     void: "default",
   },
+  intakeReview: {
+    same: "success",
+    different: "error",
+    missing: "warning",
+    supplement: "processing",
+    unknown: "default",
+    calculated: "cyan",
+    retained: "default",
+  },
 };
 
 /** @param {"light" | "dark"} mode @param {{ mobile?: boolean, motion?: boolean }} options

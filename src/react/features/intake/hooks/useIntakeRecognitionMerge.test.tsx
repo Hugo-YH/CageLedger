@@ -44,6 +44,13 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+function resolvablePreview(): IntakeReviewPreview {
+  const response = previewResult();
+  response.items[0].resolutionFields = ["quantity", "endDate"];
+  response.items[0].resolutions = { quantity: "saved", endDate: "saved" };
+  response.items[0].canAcknowledge = false;
+  return response;
+}
 function setup() {
   const revision = { current: 1 };
   const saveInFlight = { current: false };
@@ -390,4 +397,151 @@ it("allows the server's sole eligible target even when other records only share 
   await act(() => result.current.confirm(original.id));
   expect(save.mutateAsync).toHaveBeenCalledOnce();
   expect(save.mutateAsync.mock.calls[0][0]).toMatchObject({ item: { id: original.id, updatedAt: "v1" } });
+});
+
+it("keeps the old preview while checking a field choice and confirms only the explicit raw choice with the new token", async () => {
+  const initial = resolvablePreview();
+  const read = deferred<IntakeReviewPreview>();
+  const resolved = resolvablePreview();
+  resolved.items[0] = {
+    ...resolved.items[0],
+    resolutions: { quantity: "incoming", endDate: "saved" },
+    mergedItem: { ...merged, quantity: 15 },
+    confirmationToken: "chosen-token",
+  };
+  vi.mocked(previewIntakeReview).mockResolvedValueOnce(initial).mockReturnValueOnce(read.promise);
+  const { result, save } = setup();
+  save.mutateAsync.mockResolvedValue({ item: { ...merged, quantity: 15 } });
+  await act(() => result.current.preview(incoming));
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.resolveField(original.id, "quantity", "incoming")!;
+    void result.current.confirm(original.id);
+  });
+  expect(result.current.state).toMatchObject({ checking: true, incoming, resolutions: { quantity: "incoming" } });
+  expect(result.current.state?.result).toBe(initial);
+  expect(previewIntakeReview).toHaveBeenLastCalledWith(incoming, undefined, [], expect.any(AbortSignal), {
+    quantity: "incoming",
+  });
+  expect(save.mutateAsync).not.toHaveBeenCalled();
+  await act(async () => {
+    read.resolve(resolved);
+    await pending;
+  });
+  await act(() => result.current.confirm(original.id));
+  expect(save.mutateAsync).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      item: { ...merged, quantity: 15 },
+      recognitionMerge: {
+        reviewVersion: 2,
+        incoming,
+        confirmationToken: "chosen-token",
+        resolutions: { quantity: "incoming" },
+      },
+    }),
+  );
+});
+
+it("retains an unsuccessful field choice for an explicit retry without submitting the old preview", async () => {
+  const initial = resolvablePreview();
+  const refreshed = resolvablePreview();
+  refreshed.items[0].confirmationToken = "retried-choice-token";
+  refreshed.items[0].resolutions = { quantity: "incoming", endDate: "saved" };
+  vi.mocked(previewIntakeReview)
+    .mockResolvedValueOnce(initial)
+    .mockRejectedValueOnce(new Error("选择核对暂不可用"))
+    .mockResolvedValueOnce(refreshed);
+  const { result, save } = setup();
+  save.mutateAsync.mockResolvedValue({ item: merged });
+  await act(() => result.current.preview(incoming));
+  await act(() => result.current.resolveField(original.id, "quantity", "incoming"));
+  expect(result.current.state).toMatchObject({
+    result: initial,
+    checking: false,
+    needsRefresh: true,
+    error: "选择核对暂不可用",
+    resolutions: { quantity: "incoming" },
+  });
+  await act(() => result.current.confirm(original.id));
+  expect(save.mutateAsync).not.toHaveBeenCalled();
+  act(() => result.current.retry());
+  await waitFor(() => expect(result.current.state?.checking).toBe(false));
+  expect(previewIntakeReview).toHaveBeenLastCalledWith(incoming, undefined, [], expect.any(AbortSignal), {
+    quantity: "incoming",
+  });
+  expect(result.current.state?.needsRefresh).toBe(false);
+  expect(result.current.state?.result?.items[0].confirmationToken).toBe("retried-choice-token");
+  await act(() => result.current.confirm(original.id));
+  expect(save.mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      recognitionMerge: {
+        reviewVersion: 2,
+        incoming,
+        confirmationToken: "retried-choice-token",
+        resolutions: { quantity: "incoming" },
+      },
+    }),
+  );
+});
+
+it("aborts an earlier field review and ignores its late result when the same choice is changed", async () => {
+  const first = deferred<IntakeReviewPreview>();
+  const second = deferred<IntakeReviewPreview>();
+  vi.mocked(previewIntakeReview)
+    .mockResolvedValueOnce(resolvablePreview())
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise);
+  const { result } = setup();
+  await act(() => result.current.preview(incoming));
+  let firstPending!: Promise<void>;
+  let secondPending!: Promise<void>;
+  act(() => {
+    firstPending = result.current.resolveField(original.id, "quantity", "incoming")!;
+    secondPending = result.current.resolveField(original.id, "quantity", "saved")!;
+  });
+  expect(vi.mocked(previewIntakeReview).mock.calls[1][3]?.aborted).toBe(true);
+  expect(vi.mocked(previewIntakeReview).mock.calls[2][3]?.aborted).toBe(false);
+  expect(result.current.state?.resolutions).toEqual({ quantity: "saved" });
+  const obsolete = resolvablePreview();
+  obsolete.items[0].confirmationToken = "obsolete-choice";
+  await act(async () => {
+    first.resolve(obsolete);
+    await firstPending;
+  });
+  expect(result.current.state?.checking).toBe(true);
+  expect(result.current.state?.result?.items[0].confirmationToken).not.toBe("obsolete-choice");
+  const latest = resolvablePreview();
+  latest.items[0].confirmationToken = "latest-choice";
+  await act(async () => {
+    second.resolve(latest);
+    await secondPending;
+  });
+  expect(result.current.state?.checking).toBe(false);
+  expect(result.current.state?.result?.items[0].confirmationToken).toBe("latest-choice");
+});
+
+it("cancels a field recheck on a new draft revision and does not allow unlisted or unrelated field choices", async () => {
+  const read = deferred<IntakeReviewPreview>();
+  vi.mocked(previewIntakeReview).mockResolvedValueOnce(resolvablePreview()).mockReturnValueOnce(read.promise);
+  const { result, revision, rerender, save } = setup();
+  await act(() => result.current.preview(incoming));
+  act(() => {
+    void result.current.resolveField(original.id, "iacuc", "incoming");
+    void result.current.resolveField("unrelated", "quantity", "incoming");
+  });
+  expect(previewIntakeReview).toHaveBeenCalledOnce();
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.resolveField(original.id, "quantity", "incoming")!;
+  });
+  revision.current += 1;
+  rerender();
+  expect(vi.mocked(previewIntakeReview).mock.calls[1][3]?.aborted).toBe(true);
+  expect(result.current.state).toBeNull();
+  await act(async () => {
+    read.resolve(resolvablePreview());
+    await pending;
+  });
+  await act(() => result.current.confirm(original.id));
+  expect(save.mutateAsync).not.toHaveBeenCalled();
 });

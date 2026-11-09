@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
-import type { IntakeBatch, IntakeRecognitionImageInput, IntakeReviewPreview } from "../../../../contracts/intake";
+import type {
+  IntakeBatch,
+  IntakeRecognitionImageInput,
+  IntakeReviewPreview,
+  IntakeReviewResolution,
+  IntakeReviewResolutions,
+} from "../../../../contracts/intake";
 import { previewIntakeReview, type useSaveIntakeBatch } from "../../../api/intake";
 import { ApiError } from "../../../api/client";
 import { useLatestRequest } from "../../../hooks/useLatestRequest";
@@ -19,12 +25,14 @@ interface MergeState {
   saving: boolean;
   saveError: string;
   needsRefresh: boolean;
+  resolutions: IntakeReviewResolutions;
+  resolutionCandidateId?: string;
 }
 
 export function useIntakeRecognitionMerge({
   revision,
   save,
-  saveInFlight,
+  saveInFlight: saveInFlightRef,
   snapshotImages = () => [],
   duplicate,
   onSaved,
@@ -44,7 +52,10 @@ export function useIntakeRecognitionMerge({
 }) {
   const [state, setState] = useState<MergeState | null>(null);
   const currentState = useRef(state);
-  currentState.current = state;
+  const updateState = useCallback((next: MergeState | null) => {
+    currentState.current = next;
+    setState(next);
+  }, []);
   const requests = useLatestRequest();
   const visible = state?.revision === revision.current ? state : null;
   const previewRequest = useRef<{ controller: AbortController; revision: number } | null>(null);
@@ -61,7 +72,7 @@ export function useIntakeRecognitionMerge({
     if (!duplicate?.details.review || duplicate.intent.draftRevision !== revision.current) return;
     cancelPreview();
     requests.invalidate();
-    setState({
+    updateState({
       revision: duplicate.intent.draftRevision,
       incoming: duplicate.intent.item,
       images: duplicate.intent.recognitionImages,
@@ -73,14 +84,20 @@ export function useIntakeRecognitionMerge({
       saving: false,
       saveError: duplicate.error,
       needsRefresh: false,
+      resolutions: {},
     });
-  }, [duplicate, revision, cancelPreview, requests]);
+  }, [duplicate, revision, cancelPreview, requests, updateState]);
 
   async function load(
     incoming: IntakeBatch,
     excludeId: string | undefined,
     images: IntakeRecognitionImageInput[],
     intent?: IntakeSaveIntent,
+    review?: {
+      result: IntakeReviewPreview | null;
+      resolutions: IntakeReviewResolutions;
+      resolutionCandidateId?: string;
+    },
   ) {
     cancelPreview();
     const startedRevision = revision.current;
@@ -88,33 +105,35 @@ export function useIntakeRecognitionMerge({
     previewRequest.current = { controller, revision: startedRevision };
     const isCurrentRequest = requests.begin();
     const valid = () => !controller.signal.aborted && isCurrentRequest() && revision.current === startedRevision;
-    setState({
+    const resolutions = { ...review?.resolutions };
+    updateState({
       revision: startedRevision,
       incoming,
       images,
       excludeId,
       intent,
-      result: null,
+      result: review?.result || null,
       checking: true,
       error: "",
       saving: false,
       saveError: "",
       needsRefresh: false,
+      resolutions,
+      resolutionCandidateId: review?.resolutionCandidateId,
     });
     try {
-      const result = await previewIntakeReview(incoming, excludeId, images, controller.signal);
-      if (valid()) setState((current) => (current ? { ...current, result, checking: false } : null));
+      const result = Object.keys(resolutions).length
+        ? await previewIntakeReview(incoming, excludeId, images, controller.signal, resolutions)
+        : await previewIntakeReview(incoming, excludeId, images, controller.signal);
+      if (valid() && currentState.current) updateState({ ...currentState.current, result, checking: false });
     } catch (error) {
-      if (valid())
-        setState((current) =>
-          current
-            ? {
-                ...current,
-                checking: false,
-                error: error instanceof Error ? error.message : "预约核对失败，草稿已保留，请重试。",
-              }
-            : null,
-        );
+      if (valid() && currentState.current)
+        updateState({
+          ...currentState.current,
+          checking: false,
+          error: error instanceof Error ? error.message : "预约核对失败，草稿及字段选择已保留，请重试。",
+          needsRefresh: true,
+        });
     } finally {
       if (previewRequest.current?.controller === controller) previewRequest.current = null;
     }
@@ -123,15 +142,21 @@ export function useIntakeRecognitionMerge({
     return load(incoming, excludeId, snapshotImages());
   }
   function close() {
-    if (currentState.current?.saving || saveInFlight.current) return;
+    if (currentState.current?.saving || saveInFlightRef.current) return;
     cancelPreview();
     requests.invalidate();
-    setState(null);
+    updateState(null);
     onCloseReview?.();
   }
   function selected(id?: string) {
     const pending = currentState.current;
-    if (!pending || pending.revision !== revision.current || pending.checking || pending.saving || saveInFlight.current)
+    if (
+      !pending ||
+      pending.revision !== revision.current ||
+      pending.checking ||
+      pending.saving ||
+      saveInFlightRef.current
+    )
       return null;
     const candidates = pending.result?.items || [];
     const candidate = id
@@ -153,6 +178,28 @@ export function useIntakeRecognitionMerge({
     close();
     onEdit?.(choice.candidate.item);
   }
+  function resolveField(id: string, field: string, value: IntakeReviewResolution) {
+    const pending = currentState.current;
+    if (
+      !pending ||
+      pending.revision !== revision.current ||
+      pending.saving ||
+      pending.needsRefresh ||
+      saveInFlightRef.current
+    )
+      return;
+    const candidate = pending.result?.items.find((item) => item.item.id === id);
+    if (!candidate?.resolutionFields?.includes(field)) return;
+    const resolutions = {
+      ...(pending.resolutionCandidateId === id ? pending.resolutions : {}),
+      [field]: value,
+    };
+    return load(pending.incoming, pending.excludeId, pending.images, pending.intent, {
+      result: pending.result,
+      resolutions,
+      resolutionCandidateId: id,
+    });
+  }
   async function confirm(id?: string) {
     const choice = selected(id);
     if (!choice) return;
@@ -161,13 +208,13 @@ export function useIntakeRecognitionMerge({
     // Any resumed print still needs its popup opened in this explicit user gesture.
     const popup = pending.intent?.print ? openIntakePrintWindow() : null;
     if (pending.intent?.print && !popup) {
-      setState({ ...pending, saveError: "打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。" });
+      updateState({ ...pending, saveError: "打印窗口被浏览器拦截，请允许本站打开弹出窗口后重试。" });
       return;
     }
     const isCurrentRequest = requests.begin();
     const valid = () => isCurrentRequest() && revision.current === pending.revision;
-    saveInFlight.current = true;
-    setState({ ...pending, saving: true, saveError: "" });
+    saveInFlightRef.current = true;
+    updateState({ ...pending, saving: true, saveError: "" });
     try {
       const response = await save.mutateAsync({
         item: { ...candidate.mergedItem, updatedAt: candidate.item.updatedAt },
@@ -179,26 +226,27 @@ export function useIntakeRecognitionMerge({
           reviewVersion: 2,
           incoming: pending.incoming,
           confirmationToken: candidate.confirmationToken,
+          ...(Object.keys(pending.resolutions).length ? { resolutions: pending.resolutions } : {}),
         },
       });
       if (!valid()) {
         popup?.close();
         return;
       }
-      setState(null);
+      updateState(null);
       onCloseReview?.();
       await onSaved(response.item, pending.intent, popup);
     } catch (error) {
       popup?.close();
       if (valid())
-        setState({
+        updateState({
           ...pending,
           saving: false,
           saveError: error instanceof Error ? error.message : "补充失败，草稿已保留，请重试或重新核对。",
           needsRefresh: error instanceof ApiError && error.status === 409,
         });
     } finally {
-      saveInFlight.current = false;
+      saveInFlightRef.current = false;
     }
   }
   return {
@@ -208,8 +256,15 @@ export function useIntakeRecognitionMerge({
     close,
     acknowledge,
     edit,
+    resolveField,
     retry: () => {
-      if (visible && !visible.saving) void load(visible.incoming, visible.excludeId, visible.images, visible.intent);
+      const pending = currentState.current;
+      if (pending && pending.revision === revision.current && !pending.saving && !saveInFlightRef.current)
+        void load(pending.incoming, pending.excludeId, pending.images, pending.intent, {
+          result: pending.result,
+          resolutions: pending.resolutions,
+          resolutionCandidateId: pending.resolutionCandidateId,
+        });
     },
   };
 }

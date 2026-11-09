@@ -1,5 +1,6 @@
 // Generated from wiki/更新日志.md. Run npm run release:notes:sync after editing the changelog.
 export const RELEASE_NOTE_VERSIONS: string[] = [
+  "1.31.11",
   "1.31.10",
   "1.31.9",
   "1.31.8",

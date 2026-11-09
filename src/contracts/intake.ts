@@ -296,6 +296,18 @@ export interface IntakeDuplicateDetails {
   review?: IntakeReviewPreview;
 }
 
+export interface IntakeReviewCalculation {
+  basis: "fixed_days" | "calendar_months" | "date_range";
+  periodSource?: "saved" | "incoming";
+  startDate: string;
+  endDate: string;
+  days: number;
+  months?: number;
+}
+
+export type IntakeReviewResolution = "saved" | "incoming";
+export type IntakeReviewResolutions = Record<string, IntakeReviewResolution>;
+
 export interface IntakeRecognitionMergeCandidate {
   item: IntakeBatch;
   matchedFields: IntakeDuplicateMatchedField[];
@@ -309,6 +321,7 @@ export interface IntakeRecognitionMergeCandidate {
     incoming: unknown;
     after: unknown;
     source: "image" | "text" | "saved";
+    calculation?: IntakeReviewCalculation;
   }>;
   confirmationToken: string;
 }
@@ -322,13 +335,17 @@ export type IntakeReviewOutcome = "unmatched" | "registered" | "supplement" | "c
 
 export interface IntakeReviewCandidate extends IntakeRecognitionMergeCandidate {
   reviewStatus: Exclude<IntakeReviewOutcome, "unmatched">;
-  mergeStrategy?: "saved_image_first";
+  mergeStrategy?: "saved_image_first" | "incoming_image_first";
+  resolutionFields?: string[];
+  resolutions?: IntakeReviewResolutions;
   canAcknowledge: boolean;
   comparisons: Array<{
     field: string;
     before: unknown;
     incoming: unknown;
-    status: "same" | "different" | "missing" | "supplement" | "unknown";
+    status: "same" | "different" | "missing" | "supplement" | "unknown" | "calculated" | "retained";
+    calculation?: IntakeReviewCalculation;
+    placeholder?: { before: boolean; incoming: boolean };
   }>;
 }
 
@@ -351,7 +368,12 @@ export interface IntakeSaveRequest {
   duplicateConfirmation?: string;
   /** New local images, persisted alongside the successful batch transaction only. */
   recognitionImages?: IntakeRecognitionImageInput[];
-  recognitionMerge?: { reviewVersion?: 2; incoming: Partial<IntakeBatch>; confirmationToken: string };
+  recognitionMerge?: {
+    reviewVersion?: 2;
+    incoming: Partial<IntakeBatch>;
+    confirmationToken: string;
+    resolutions?: IntakeReviewResolutions;
+  };
 }
 
 /** Read-only public projection; never expose the complete intake batch or account data. */

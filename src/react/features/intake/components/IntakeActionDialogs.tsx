@@ -86,9 +86,18 @@ export function IntakeActionDialogs({
             preview={preview}
             incoming={merge.state!.incoming}
             images={merge.state!.images}
-            pending={merge.state!.saving || saves.mutation.isPending}
-            error={merge.state!.saveError}
+            pending={merge.state!.checking || merge.state!.saving || saves.mutation.isPending}
+            checking={merge.state!.checking}
+            error={merge.state!.saveError || merge.state!.error}
             blocked={merge.state!.needsRefresh}
+            requestedResolutions={
+              merge.state!.resolutionCandidateId
+                ? {
+                    candidateId: merge.state!.resolutionCandidateId,
+                    values: merge.state!.resolutions,
+                  }
+                : undefined
+            }
             onClose={merge.close}
             onConfirm={(id) => void merge.confirm(id)}
             onRefresh={merge.retry}
@@ -96,6 +105,7 @@ export function IntakeActionDialogs({
             onEdit={merge.edit}
             canCreateAnother={Boolean(duplicate)}
             onCreateAnother={() => void saves.confirmDuplicate()}
+            onResolve={(id, field, value) => void merge.resolveField(id, field, value)}
           />
         ) : null}
       </ModalPresence>

@@ -5,7 +5,11 @@ import re
 from server_app.domains.intake.husbandry_period import husbandry_month_values, parse_husbandry_months
 from server_app.domains.intake.identifier_recognition import normalize_recognized_identifiers
 from server_app.domains.intake.recognition_quantity import merge_purchase_quantities, sanitize_quantity_facts
-from server_app.domains.intake.recognition_specification import is_missing_specification, normalize_specification
+from server_app.domains.intake.recognition_specification import (
+    is_missing_specification,
+    normalize_specification,
+    specification_fits_request,
+)
 from server_app.domains.intake.strain_standard import standardize_strain
 from server_app.shared.intake_identifiers import (
     intake_identifier_key,
@@ -213,7 +217,7 @@ def merge_sources(payload, evidence, sources, *, review=None):
         if (
             specification_key(purchase_spec)
             and specification_key(husbandry_spec)
-            and specification_key(purchase_spec) != specification_key(husbandry_spec)
+            and not specification_fits_request(husbandry_spec, purchase_spec)
         ):
             compare(
                 "specification",

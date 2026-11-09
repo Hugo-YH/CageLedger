@@ -5,6 +5,7 @@ import unicodedata
 
 from .identifier_matching import identifier_match_keys
 from .recognition_merge import NUMBER_FIELDS, TEXT_FIELDS
+from .recognition_sex import confirmed_sex, placeholder, sex_source_issues
 from .recognition_specification import normalize_specification
 from .strain_standard import standardize_strain
 
@@ -60,7 +61,22 @@ def comparisons(existing, incoming):
     for field in (*IDENTIFIERS, *CORE, *OPTIONAL):
         before, proposed = value(existing, field), value(incoming, field)
         a, b = key(field, before), key(field, proposed)
-        if field in IDENTIFIERS:
+        if field == "sex":
+            a, b = confirmed_sex(existing), confirmed_sex(incoming)
+            unknown_before = a is None and not missing(before) and not placeholder(existing)
+            unknown_incoming = b is None and not missing(proposed) and not placeholder(incoming)
+            status = (
+                "unknown"
+                if unknown_before or unknown_incoming
+                else "missing"
+                if b is None
+                else "supplement"
+                if a is None
+                else "same"
+                if a == b
+                else "different"
+            )
+        elif field in IDENTIFIERS:
             a = identifier_match_keys(existing).searchable_members[field]
             b = identifier_match_keys(incoming).searchable_members[field]
             status = (
@@ -80,7 +96,10 @@ def comparisons(existing, incoming):
             status = "unknown"
         else:
             status = "same" if a == b else "different"
-        result.append({"field": field, "before": before, "incoming": proposed, "status": status})
+        row = {"field": field, "before": before, "incoming": proposed, "status": status}
+        if field == "sex" and (placeholder(existing) or placeholder(incoming)):
+            row["placeholder"] = {"before": placeholder(existing), "incoming": placeholder(incoming)}
+        result.append(row)
     return result
 
 
@@ -199,16 +218,25 @@ def source_issues(incoming, images):
                     )
     except ValueError as exc:
         issues.append({"field": "identifiers", "message": str(exc)})
+    issues.extend(sex_source_issues(incoming))
     return list({(row["field"], row["message"]): row for row in issues}.values())
 
 
-def supplement(existing, incoming):
-    """Fill only missing fields; preserve zero, identity, status and every old source."""
+def supplement(existing, incoming, image_fields=frozenset(), resolutions=None, explicit_resolutions=None):
+    """Fill gaps or apply bound images; preserve identity, cards, status and sources."""
     import copy
-    from datetime import date, timedelta
 
-    from .husbandry_period import calendar_month_end
+    from .recognition_period import PERIOD_FIELDS, supplement_period
 
+    resolutions = resolutions or {}
+    image_fields = (set(image_fields) - resolutions.keys()) | {
+        field for field, choice in resolutions.items() if choice == "incoming"
+    }
+    if "strainStandard" in resolutions:
+        if resolutions["strainStandard"] == "incoming":
+            image_fields.add("strainRaw")
+        else:
+            image_fields.discard("strainRaw")
     merged = copy.deepcopy(existing)
     period_saved = (
         bool(existing.get("endDate") or existing.get("husbandryMonths")) or existing.get("husbandryDays") is not None
@@ -216,23 +244,21 @@ def supplement(existing, incoming):
     excluded = set()
     if existing.get("intakePurpose") == "direct_sampling":
         excluded.update(("roomName", "endDate", "husbandryMonths", "husbandryDays", "finalCardCount"))
-    if period_saved:
+    if period_saved and not image_fields.intersection(PERIOD_FIELDS):
         excluded.update(("endDate", "husbandryMonths", "husbandryDays"))
     for field in (*TEXT_FIELDS, *NUMBER_FIELDS):
-        if field not in excluded and missing(merged.get(field)) and not missing(incoming.get(field)):
+        if field == "sex":
+            if confirmed_sex(incoming) and (
+                missing(existing.get(field)) or placeholder(existing) or field in image_fields
+            ):
+                merged[field] = incoming[field]
+        elif (
+            field not in excluded
+            and (missing(merged.get(field)) or field in image_fields)
+            and not missing(incoming.get(field))
+        ):
             merged[field] = incoming[field]
-    if merged.get("intakeDate") and merged.get("intakePurpose", "housing") != "direct_sampling":
-        start = date.fromisoformat(merged["intakeDate"])
-        if not merged.get("endDate"):
-            if months := merged.get("husbandryMonths"):
-                merged["endDate"] = calendar_month_end(merged["intakeDate"], months)
-            elif merged.get("husbandryDays") is not None:
-                merged["endDate"] = (start + timedelta(days=merged["husbandryDays"])).isoformat()
-        if merged.get("endDate"):
-            days = (date.fromisoformat(merged["endDate"]) - start).days
-            if days < 0:
-                raise ValueError("补充日期晚于已有结束日期，请核对。")
-            merged["husbandryDays"] = days
+    calculation = supplement_period(existing, incoming, merged, image_fields, explicit_resolutions)
     raw = incoming.get("rawMessage", "")
     if raw and raw not in (existing.get("rawMessage") or ""):
         merged["rawMessage"] = (existing.get("rawMessage") or "") + "\n\n补充预约内容：\n" + raw
@@ -245,6 +271,7 @@ def supplement(existing, incoming):
             "source": "image"
             if field != "rawMessage" and (incoming.get("recognition") or {}).get("inputImages")
             else "text",
+            **({"calculation": calculation} if calculation and field in ("intakeDate", *PERIOD_FIELDS) else {}),
         }
         for field in (*TEXT_FIELDS, *NUMBER_FIELDS, "rawMessage")
         if existing.get(field) != merged.get(field)

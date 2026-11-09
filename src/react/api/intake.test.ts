@@ -120,4 +120,35 @@ describe("intake save API", () => {
       ),
     ).toBeNull();
   });
+
+  it("binds explicit field resolutions to the preview and the versioned merge confirmation", async () => {
+    const item = { ...createIntakeDraft("测试"), id: "original", updatedAt: "saved-v1" };
+    const resolutions = { sex: "incoming" as const, intakeDate: "incoming" as const };
+    const controller = new AbortController();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ item }))));
+    await previewIntakeReview(item, undefined, [], controller.signal, resolutions);
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      "/api/intake-batches/recognition-preview",
+      expect.objectContaining({
+        signal: controller.signal,
+        body: JSON.stringify({ reviewVersion: 2, item, resolutions }),
+      }),
+    );
+    const recognitionMerge = {
+      reviewVersion: 2 as const,
+      incoming: item,
+      confirmationToken: "choices-token",
+      resolutions,
+    };
+    await saveIntakeBatch({ item, exists: true, recognitionMerge });
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      "/api/intake-batches/original",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ item, recognitionMerge, expectedUpdatedAt: "saved-v1" }),
+      }),
+    );
+  });
 });

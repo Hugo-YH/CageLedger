@@ -190,6 +190,7 @@ def write_intake_batch_entity_state(method, item_id, payload, actor, spec, ports
                     {
                         "changes": merge_changes,
                         "rawMessage": payload["recognitionMerge"]["incoming"].get("rawMessage", ""),
+                        **({"resolutions": payload["recognitionMerge"].get("resolutions", {})} if review_merge else {}),
                     },
                 )
             )

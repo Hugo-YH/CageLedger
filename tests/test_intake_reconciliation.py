@@ -57,7 +57,7 @@ class IntakeReconciliationTests(TestCase):
                 conn, ACTOR, {"reviewVersion": 2, "item": incoming, "recognitionImages": list(images), **options}
             )
 
-    def supplement(self, candidate, incoming, images=(), **options):
+    def supplement(self, candidate, incoming, images=(), *, resolutions=None, **options):
         return self.save(
             candidate["mergedItem"] or candidate["item"],
             exists=True,
@@ -68,6 +68,7 @@ class IntakeReconciliationTests(TestCase):
                 "reviewVersion": 2,
                 "incoming": incoming,
                 "confirmationToken": candidate["confirmationToken"],
+                **({"resolutions": resolutions} if resolutions is not None else {}),
             },
             **options,
         )
@@ -119,6 +120,15 @@ class IntakeReconciliationTests(TestCase):
         )
         self.assertEqual(equivalent["outcome"], "registered")
 
+    def test_automatic_project_enrichment_does_not_force_a_write_for_an_exact_appointment(self):
+        original = self.original(project="")
+        incoming = self.incoming_item(original, project="IACUC自动匹配的课题")
+        before = self.snapshot()
+        candidate = self.preview(incoming)["items"][0]
+        self.assertTrue(candidate["canAcknowledge"])
+        self.assertEqual(candidate["reviewStatus"], "registered")
+        self.assertEqual(self.snapshot(), before)
+
     def test_saved_image_appointment_accepts_later_text_without_sex_or_specification(self):
         original = self.original(
             image=True,
@@ -155,7 +165,7 @@ class IntakeReconciliationTests(TestCase):
         self.assertTrue(candidate["canMerge"])
         self.assertFalse(candidate["canAcknowledge"])
         self.assertEqual(candidate["mergeStrategy"], "saved_image_first")
-        self.assertEqual(next(row["status"] for row in candidate["comparisons"] if row["field"] == "sex"), "different")
+        self.assertEqual(next(row["status"] for row in candidate["comparisons"] if row["field"] == "sex"), "missing")
         candidate["mergedItem"]["sex"] = "雌性"
         saved = self.supplement(candidate, incoming)
         for field in (

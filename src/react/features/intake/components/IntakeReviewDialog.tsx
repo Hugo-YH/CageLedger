@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { Alert, Card, Col, Collapse, Flex, Image, Row, Table, Tag, Typography, type TableProps } from "antd";
+import { Alert, Card, Col, Collapse, Flex, Image, Row, Typography } from "antd";
 
 import type {
   IntakeBatch,
   IntakeRecognitionImageInput,
-  IntakeReviewCandidate,
   IntakeReviewPreview,
+  IntakeReviewResolution,
+  IntakeReviewResolutions,
 } from "../../../../contracts/intake";
-import { intakePurposeLabel, intakeStatusLabel, speciesLabel } from "../../../../domain/intake";
+import { intakeStatusLabel } from "../../../../domain/intake";
 import { ActionButton } from "../../../components/ui";
 import { ModalShell } from "../../../components/WorkspaceUi";
 import { IntakeRecognitionReview } from "./IntakeRecognitionReview";
 import { RecognitionSources } from "./IntakeRecognitionImages";
+import { IntakeReviewComparisons } from "./IntakeReviewComparisons";
 
 const LABELS: Record<string, string> = {
   purchaseOrderNo: "采购单号",
@@ -43,7 +45,6 @@ const LABELS: Record<string, string> = {
   receiverName: "接收人",
   vetPhone: "联系电话",
 };
-const STATUS = { same: "一致", different: "不一致", missing: "本次缺失", supplement: "可补充", unknown: "无法确认" };
 const OUTCOME = {
   unmatched: "未发现已登记预约",
   registered: "已登记",
@@ -52,44 +53,6 @@ const OUTCOME = {
   related: "发现相关预约，请核对完整编号",
   insufficient: "信息不足，暂不能确认一致",
 };
-function valueText(value: unknown, field: string) {
-  if (value === null || value === undefined || value === "") return "未填写";
-  if (field === "intakePurpose" && typeof value === "string") return intakePurposeLabel(value);
-  if (field === "species" && typeof value === "string") return speciesLabel(value);
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
-}
-type Comparison = IntakeReviewCandidate["comparisons"][number];
-function comparisonColumns(candidate: IntakeReviewCandidate): TableProps<Comparison>["columns"] {
-  const merged = candidate.canMerge ? candidate.mergedItem : null;
-  return [
-    { title: "字段", dataIndex: "field", width: 120, render: (field: string) => LABELS[field] || field },
-    { title: "原预约", dataIndex: "before", render: (value, row) => valueText(value, row.field) },
-    { title: "本次识别", dataIndex: "incoming", render: (value, row) => valueText(value, row.field) },
-    ...(merged
-      ? [
-          {
-            title: "合并后",
-            key: "after",
-            render: (_value: unknown, row: Comparison) =>
-              valueText(
-                row.field === "strainStandard"
-                  ? merged.strainStandard || merged.strainRaw
-                  : merged[row.field as keyof IntakeBatch],
-                row.field,
-              ),
-          },
-        ]
-      : []),
-    {
-      title: "核对结果",
-      dataIndex: "status",
-      width: 120,
-      render: (status: Comparison["status"]) => (
-        <Tag color={status === "different" ? "error" : status === "same" ? "success" : undefined}>{STATUS[status]}</Tag>
-      ),
-    },
-  ];
-}
 function initialSelection(preview: IntakeReviewPreview) {
   if (preview.items.length === 1) return preview.items[0].item.id;
   const clear = preview.items.filter((item) => item.canAcknowledge || item.canMerge);
@@ -203,8 +166,10 @@ export function IntakeReviewDialog({
   incoming,
   images,
   pending,
+  checking = false,
   error,
   blocked,
+  requestedResolutions,
   canCreateAnother = false,
   onClose,
   onConfirm,
@@ -212,13 +177,16 @@ export function IntakeReviewDialog({
   onAcknowledge,
   onEdit,
   onCreateAnother,
+  onResolve,
 }: {
   preview: IntakeReviewPreview;
   incoming: IntakeBatch;
   images: IntakeRecognitionImageInput[];
   pending: boolean;
+  checking?: boolean;
   error: string;
   blocked: boolean;
+  requestedResolutions?: { candidateId: string; values: IntakeReviewResolutions };
   canCreateAnother?: boolean;
   onClose: () => void;
   onConfirm: (id: string) => void;
@@ -226,6 +194,7 @@ export function IntakeReviewDialog({
   onAcknowledge: (id: string) => void;
   onEdit: (id: string) => void;
   onCreateAnother: () => void;
+  onResolve?: (id: string, field: string, value: IntakeReviewResolution) => void;
 }) {
   const [selectedId, setSelectedId] = useState(() => initialSelection(preview));
   const selected = preview.items.find((candidate) => candidate.item.id === selectedId);
@@ -252,7 +221,7 @@ export function IntakeReviewDialog({
             description={
               preview.total > 1
                 ? `找到 ${preview.total} 条相关记录，请选择要查看的原预约；不会自动选择或合并其他记录。`
-                : "数量、标准品系、规格及完整编号必须可确认；空缺和无法识别的信息不代表一致。补充仅填原预约空缺，已有非空值保持原值。"
+                : "数量、标准品系、规格及完整编号需核对；空缺和无法识别的信息不代表一致。补充前请查看“合并后”取值及日期计算依据，确认后才更新已保存预约。"
             }
           />
           {preview.sourceIssues.length ? (
@@ -269,6 +238,14 @@ export function IntakeReviewDialog({
                   ))}
                 </ul>
               }
+            />
+          ) : null}
+          {checking ? (
+            <Alert
+              showIcon
+              type="info"
+              title="正在按字段选择重新核对…"
+              description="合并结果仍显示上次预览，完成后才可确认。"
             />
           ) : null}
           <section aria-label="预约来源材料">
@@ -315,24 +292,16 @@ export function IntakeReviewDialog({
                 <Typography.Text type="secondary">更新时间：{candidate.item.updatedAt || "未知"}</Typography.Text>
                 <Typography.Text>{candidate.reason}</Typography.Text>
                 {selectedId === candidate.item.id ? (
-                  <>
-                    {candidate.mergeStrategy === "saved_image_first" && candidate.canMerge ? (
-                      <Alert
-                        showIcon
-                        type="warning"
-                        title="以原预约图片信息为主，文字补充空缺"
-                        description="数量、品系、规格等已有信息按原预约保留；本次文字仅补充空缺，并作为新依据留档。请核对“合并后”一列再确认。"
-                      />
-                    ) : null}
-                    <Table
-                      columns={comparisonColumns(candidate)}
-                      dataSource={candidate.comparisons}
-                      rowKey="field"
-                      pagination={false}
-                      scroll={{ x: candidate.canMerge && candidate.mergedItem ? 850 : 700 }}
-                      size="small"
-                    />
-                  </>
+                  <IntakeReviewComparisons
+                    candidate={candidate}
+                    labels={LABELS}
+                    pending={pending}
+                    blocked={blocked}
+                    requestedResolutions={
+                      requestedResolutions?.candidateId === candidate.item.id ? requestedResolutions.values : undefined
+                    }
+                    onResolve={onResolve ? (field, value) => onResolve(candidate.item.id, field, value) : undefined}
+                  />
                 ) : null}
               </Flex>
             </Card>
@@ -342,7 +311,7 @@ export function IntakeReviewDialog({
               showIcon
               type="error"
               title={error}
-              description="本次草稿和图片已保留。记录变化后请重新核对，不会自动覆盖新版本。"
+              description="本次草稿、图片及字段选择已保留。请重新核对后确认，不会自动覆盖新版本。"
             />
           ) : null}
         </Flex>
@@ -371,7 +340,12 @@ export function IntakeReviewDialog({
           </ActionButton>
         ) : null}
         {selected?.canMerge ? (
-          <ActionButton disabled={pending || blocked} loading={pending} onClick={() => onConfirm(selected.item.id)}>
+          <ActionButton
+            aria-label="确认补充原预约"
+            disabled={pending || blocked}
+            loading={pending}
+            onClick={() => onConfirm(selected.item.id)}
+          >
             确认补充原预约
           </ActionButton>
         ) : null}

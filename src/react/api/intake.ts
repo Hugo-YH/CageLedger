@@ -13,7 +13,7 @@ import type {
   PagedResponse,
 } from "./contracts";
 import type { IntakeRecognitionMergePreview } from "../../contracts/intake";
-import type { IntakePrintBatch, IntakeReviewPreview } from "../../contracts/intake";
+import type { IntakePrintBatch, IntakeReviewPreview, IntakeReviewResolutions } from "../../contracts/intake";
 import { ApiError, requestDownload, requestJson } from "./client";
 import { useColumnFilterOptions } from "./filterOptions";
 import { loadAllPages } from "./pagination";
@@ -141,6 +141,7 @@ export function previewIntakeReview(
   excludeId?: string,
   images: IntakeRecognitionImageInput[] = [],
   signal?: AbortSignal,
+  resolutions?: IntakeReviewResolutions,
 ) {
   return withIntakeImageRefs(
     images,
@@ -153,6 +154,7 @@ export function previewIntakeReview(
           item,
           ...(excludeId ? { excludeId } : {}),
           ...(recognitionImageRefs.length ? { recognitionImageRefs } : {}),
+          ...(resolutions && Object.keys(resolutions).length ? { resolutions } : {}),
         }),
       }),
     signal,
