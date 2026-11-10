@@ -1,15 +1,13 @@
 import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
 import type { IntakeBatch, IntakeRecognitionEvidence, IntakeReviewPreview } from "../../src/contracts/intake";
-import { ensureTestInfrastructure, expect, openIntakeEntry, test } from "./fixtures";
+import { ensureTestInfrastructure, expect, openIntakeEntry } from "./fixtures";
+import { loginIntakeAccount, test } from "./intake-account-fixtures";
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAD0lEQVR4nGP4TwAwjAwFAIS1/wF0QtmAAAAAAElFTkSuQmCC";
 const bytes = Buffer.from(png, "base64");
 async function setup(page: Page) {
-  await page.goto("/app");
-  await page.getByLabel("用户名", { exact: true }).fill("admin");
-  await page.getByLabel("密码", { exact: true }).fill("admin123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginIntakeAccount(page);
   await expect(page.getByLabel("用户名", { exact: true })).toBeHidden();
   expect((await (await page.request.get("/api/health")).json()).database).toContain("cageledger-e2e-");
   await ensureTestInfrastructure(page);

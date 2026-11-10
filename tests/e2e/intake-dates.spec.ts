@@ -1,3 +1,4 @@
+import { recognizeKeepingDraft } from "./intakeRecognitionReview";
 import {
   ensureTestInfrastructure,
   expect,
@@ -104,7 +105,7 @@ test("AI recognized date ranges populate the cycle and remain editable", async (
   await expect(days).toHaveValue("3");
 });
 
-for (const recognition of ["本地识别", "AI识别"]) {
+for (const recognition of ["本地识别", "AI识别"] as const) {
   test(`${recognition} saves a pending receipt date and later fills only the date on the same cards`, async ({
     page,
   }) => {
@@ -189,7 +190,7 @@ for (const recognition of ["本地识别", "AI识别"]) {
       });
     }
     await page.getByLabel("预约消息", { exact: true }).fill("接收日期：2026-10-28\n饲养周期1月");
-    await page.getByRole("button", { name: recognition, exact: true }).click();
+    await recognizeKeepingDraft(page, recognition);
     const end = page.getByLabel("结束日期", { exact: true });
     const days = page.getByLabel("饲养周期（天）", { exact: true });
     await expect(end).toHaveValue("2026-11-28");

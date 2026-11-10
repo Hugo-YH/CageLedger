@@ -203,6 +203,7 @@ test("technical service UI saves 4 days / 10 eyes / 300 yuan and shares workflow
   expect(workflow.totalAmount).toBe(300);
   expect(workflow.sourceType).toBe("pi_merged_technical_service");
   await openWorkflowCenter(page);
+  await filterServiceColumn(page, "项目负责人", ["技术服务验收负责人"]);
   await expect(page.getByRole("row").filter({ hasText: "技术服务验收负责人" })).toContainText("技术服务费");
   await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "费用类型" }), 2);
   await openNavigationEntry(page, "技术服务费管理", "已保存技术服务明细");

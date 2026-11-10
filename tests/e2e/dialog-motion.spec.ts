@@ -263,7 +263,7 @@ test("preview and notice replace each other after exit and never initiate on can
     );
   await page.evaluate(() => (window as Window & { releaseNoticeClipboard?: () => void }).releaseNoticeClipboard?.());
   expect(await unexpectedInitiation).toBe(false);
-  expect(writes).toEqual([false, false]);
+  expect(writes).toEqual([false, false, false]);
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -274,7 +274,7 @@ test("preview and notice replace each other after exit and never initiate on can
   await expect(notice.getByRole("button", { name: "复制并确认", exact: true })).toBeVisible();
   await notice.getByRole("button", { name: "复制并确认", exact: true }).click();
   await expect(preview.getByRole("button", { name: "已发起结算流程", exact: true })).toBeDisabled();
-  expect(writes).toEqual([false, false, false, true]);
+  expect(writes).toEqual([false, false, false, false, true]);
   await closeWithMotion(page, preview.locator(".ant-modal-close"));
   const restoredTrigger = page.getByRole("button", { name: /预览结算单$/ });
   await expect(restoredTrigger).not.toHaveClass(/ant-btn-loading/);

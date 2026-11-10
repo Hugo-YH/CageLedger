@@ -1,5 +1,7 @@
 import type { Page, Route } from "@playwright/test";
-import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry, test } from "./fixtures";
+import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry } from "./fixtures";
+import { loginIntakeAccount, test } from "./intake-account-fixtures";
+import { recognizeKeepingDraft } from "./intakeRecognitionReview";
 
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAD0lEQVR4nGP4TwAwjAwFAIS1/wF0QtmAAAAAAElFTkSuQmCC",
@@ -13,10 +15,7 @@ const evidence = {
 };
 
 async function login(page: Page) {
-  await page.goto("/app");
-  await page.getByLabel("用户名", { exact: true }).fill("admin");
-  await page.getByLabel("密码", { exact: true }).fill("admin123");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await loginIntakeAccount(page);
   await expect(page.getByLabel("用户名", { exact: true })).toBeHidden();
   await ensureTestInfrastructure(page);
   await openIntakeEntry(page);
@@ -130,7 +129,7 @@ test("recognizes synthetic images and persists evidence and original bytes in th
     .setInputFiles([image, { ...image, name: "采购信息.jpg", mimeType: "image/jpeg" }]);
   await expect(page.getByRole("button", { name: "移除图片 采购信息.jpg" })).toBeVisible();
   await expect(page.getByRole("button", { name: "本地识别" })).toBeDisabled();
-  await page.getByRole("button", { name: "AI识别" }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("24");
   await expect(page.getByLabel("规格（体重/日龄）", { exact: true })).toHaveValue("6–8个月");
   await expect(page.getByLabel("打印张数", { exact: true })).toHaveValue("4");
@@ -565,7 +564,7 @@ test("a quantity conflict shows both sources and retains the purchase quantity",
   );
   await page.getByLabel("预约图片文件", { exact: true }).setInputFiles([image, { ...image, name: "采购信息.png" }]);
   await expect(page.getByRole("button", { name: "移除图片 采购信息.png" })).toBeVisible();
-  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("30");
   const toggle = page.getByRole("button", { name: /请核对识别提示/ });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -619,7 +618,7 @@ test("calculated purchase quantity and its facts survive save and reload", async
     }),
   );
   await addImage(page);
-  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("30");
   await expect(page.getByLabel("规格（体重/日龄）", { exact: true })).toHaveValue("6-8w");
   await page.getByRole("button", { name: /请核对识别提示/ }).click();
@@ -686,7 +685,7 @@ test("review-required recognition clears an earlier quantity", async ({ page }) 
   );
   await addImage(page);
   await page.getByLabel("数量（只）", { exact: true }).fill("99");
-  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("");
   await expect(page.getByText("赠送归属不明确，请核对数量")).toBeHidden();
   await page.getByRole("button", { name: /请核对识别提示/ }).click();
@@ -714,7 +713,7 @@ for (const width of [1237, 390]) {
       }),
     );
     await addImage(page);
-    await page.getByRole("button", { name: "AI识别", exact: true }).click();
+    await recognizeKeepingDraft(page, "AI识别");
     const toggle = page.getByRole("button", { name: /请核对识别提示/ });
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await toggle.click();
@@ -745,7 +744,7 @@ test("calendar-month period waits for a date and persists its actual day count",
     }),
   );
   await addImage(page);
-  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(page.getByLabel("饲养周期（天）", { exact: true })).toHaveValue("");
   await expect(page.getByText("按 1 个自然月计算，请先填写接收日期", { exact: true })).toBeVisible();
   async function date(value: string) {
@@ -789,7 +788,7 @@ test("structured recognition review survives saving without depending on warning
     }),
   );
   await addImage(page);
-  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(page.getByLabel("数量（只）", { exact: true })).toHaveValue("30");
   await page.getByRole("button", { name: /请核对识别提示/ }).click();
   await expect(page.getByRole("cell", { name: "77 只", exact: true })).toBeVisible();

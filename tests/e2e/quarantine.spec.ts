@@ -423,6 +423,14 @@ test("received animals flow through pool, covered cohort and manual completion",
     "quarantine.batch_completed",
   );
   await openNavigationEntry(page, "笼卡管理", "待接收批次");
+  await page.getByRole("button", { name: "筛选批次号", exact: true }).click();
+  const intakeFilter = page.getByRole("group", { name: "筛选批次号选项", exact: true });
+  await intakeFilter.getByRole("searchbox").fill(intakeIds[1]);
+  const ownIntake = intakeFilter.getByRole("checkbox", { name: intakeIds[1], exact: false });
+  await ownIntake.check();
+  await expect(ownIntake).toBeChecked();
+  await intakeFilter.getByRole("button", { name: "应用", exact: true }).click();
+  await expect(intakeFilter).toBeHidden();
   const intakeRow = page.getByRole("row").filter({ hasText: intakeIds[1] });
   await intakeRow.getByRole("button", { name: "检疫记录" }).click();
   await expect(page.getByRole("dialog")).toContainText("所属检疫批次抽检无异常");

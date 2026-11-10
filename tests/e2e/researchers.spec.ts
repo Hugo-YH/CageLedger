@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { expect, openSettingsView, test } from "./fixtures";
 
 function spreadsheet(rows: Array<Array<string | null>>) {
@@ -38,13 +39,21 @@ test("researcher preview, import retry, stable IDs, contact editing and responsi
     true,
   );
   const usersBefore = (await (await page.request.get("/api/users")).json()).users.length;
+  const directoryBefore = await (await page.request.get("/api/researchers")).json();
+  const scope = `researcher-e2e-${randomUUID()}`;
+  const sameName = `同名测试-${scope}`;
+  const alphaAccount = `${scope}-alpha`;
+  const betaAccount = `${scope}-beta`;
+  const gammaAccount = `${scope}-gamma`;
+  const ownPeopleUrl = `/api/researchers?q=${encodeURIComponent(scope)}`;
+  expect((await (await page.request.get(ownPeopleUrl)).json()).page.total).toBe(0);
   await page.goto("/app");
   await openSettingsView(page, "实验人员信息");
   await expect(page.getByRole("heading", { name: "实验人员信息", exact: true })).toBeVisible();
   const content = spreadsheet([
-    ["同名测试", "researcher-alpha", "13900000001", "alpha@example.org", "实验人员/课题组A"],
-    ["同名测试", "researcher-beta", "13900000001", "beta@example.org", "实验人员/课题组B"],
-    ["第三位", "researcher-gamma", null, null, "实验人员/课题组A"],
+    [sameName, alphaAccount, "13900000001", "alpha@example.org", "实验人员/课题组A"],
+    [sameName, betaAccount, "13900000001", "beta@example.org", "实验人员/课题组B"],
+    [`第三位-${scope}`, gammaAccount, null, null, "实验人员/课题组A"],
   ]);
   await page.getByRole("button", { name: "导入 Excel", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "导入实验人员信息", exact: true });
@@ -54,7 +63,8 @@ test("researcher preview, import retry, stable IDs, contact editing and responsi
     buffer: content,
   });
   await expect(dialog.getByText("新增 3", { exact: true })).toBeVisible();
-  expect((await (await page.request.get("/api/researchers")).json()).page.total).toBe(0);
+  expect(await (await page.request.get("/api/researchers")).json()).toEqual(directoryBefore);
+  expect((await (await page.request.get(ownPeopleUrl)).json()).page.total).toBe(0);
   await dialog
     .getByRole("button", { name: /展开行/ })
     .first()
@@ -87,17 +97,26 @@ test("researcher preview, import retry, stable IDs, contact editing and responsi
   const notice = page.getByRole("status").filter({ hasText: "实验人员信息已导入" });
   await expect(notice).toContainText("新增 3 人");
   await notice.getByRole("button", { name: "关闭通知", exact: true }).click();
-  const people = (await (await page.request.get("/api/researchers")).json()).items;
+  const owned = await (await page.request.get(ownPeopleUrl)).json();
+  expect(owned.page.total).toBe(3);
+  const people = owned.items;
   expect(people).toHaveLength(3);
   expect(new Set(people.map((person: { id: string }) => person.id)).size).toBe(3);
+  expect(people.map((person: { account: string }) => person.account).sort()).toEqual(
+    [alphaAccount, betaAccount, gammaAccount].sort(),
+  );
+  expect((await (await page.request.get("/api/researchers")).json()).page.total).toBe(directoryBefore.page.total + 3);
   expect((await (await page.request.get("/api/users")).json()).users.length).toBe(usersBefore);
   const search = page
     .getByRole("searchbox", { name: "搜索实验人员" })
     .or(page.getByRole("textbox", { name: "搜索实验人员" }));
-  await search.fill("同名测试");
+  await search.fill(sameName);
   await search.press("Enter");
   await expect(page.locator("tr[data-row-key]")).toHaveCount(2);
   await search.fill("");
+  await expect(page.getByText(`共 ${directoryBefore.page.total + 3} 人`, { exact: true })).toBeVisible();
+  await search.fill(scope);
+  await search.press("Enter");
   await expect(page.locator("tr[data-row-key]")).toHaveCount(3);
   for (const [width, height] of [
     [1440, 900],
@@ -114,7 +133,7 @@ test("researcher preview, import retry, stable IDs, contact editing and responsi
   await page.locator(".ant-mobile-navigation-sheet .adm-list-item").filter({ hasText: "实验人员信息" }).click();
   await expect(page.getByRole("heading", { name: "实验人员信息", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 900 });
-  const alpha = people.find((person: { account: string }) => person.account === "researcher-alpha");
+  const alpha = people.find((person: { account: string }) => person.account === alphaAccount);
   let releaseDetail!: () => void;
   const detailGate = new Promise<void>((resolve) => {
     releaseDetail = resolve;
@@ -167,7 +186,7 @@ test("researcher preview, import retry, stable IDs, contact editing and responsi
   const saved = (await (await page.request.get(`/api/researchers/${alpha.id}`)).json()).item;
   expect(saved).toMatchObject({
     id: alpha.id,
-    account: "researcher-alpha",
+    account: alphaAccount,
     mobile: "13900000009",
     position: "另一次修改",
   });

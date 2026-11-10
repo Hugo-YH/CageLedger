@@ -1,3 +1,4 @@
+import { recognizeKeepingDraft } from "./intakeRecognitionReview";
 import { ensureTestInfrastructure, expect, openIntakeEntry, test } from "./fixtures";
 
 test("intake sex defaults, recognition and manual choices persist across both purposes", async ({ page }) => {
@@ -22,7 +23,7 @@ test("intake sex defaults, recognition and manual choices persist across both pu
   await expect(selection).toHaveText("雄性");
 
   await page.getByLabel("预约消息", { exact: true }).fill("性别：female\n数量：10\n到货直接取材");
-  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "本地识别");
   await expect(selection).toHaveText("雌性");
   await expect(page.getByRole("heading", { name: "直接取材预约", exact: true })).toBeVisible();
   await page
@@ -32,7 +33,7 @@ test("intake sex defaults, recognition and manual choices persist across both pu
     .click();
   await expect(page.getByRole("status").filter({ hasText: "预约消息已识别" })).toBeHidden();
   await page.getByLabel("预约消息", { exact: true }).fill("数量：10\n到货直接取材，性别未注明");
-  await page.getByRole("button", { name: "本地识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "本地识别");
   await expect(selection).toHaveText("雌性/雄性");
 
   await page
@@ -60,7 +61,7 @@ test("intake sex defaults, recognition and manual choices persist across both pu
       },
     }),
   );
-  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(selection).toHaveText("雄性");
   await page
     .getByRole("status")
@@ -69,7 +70,7 @@ test("intake sex defaults, recognition and manual choices persist across both pu
     .click();
   await expect(page.getByRole("status").filter({ hasText: "预约消息已识别（AI）" })).toBeHidden();
   aiSex = undefined;
-  await page.getByRole("button", { name: "AI识别", exact: true }).click();
+  await recognizeKeepingDraft(page, "AI识别");
   await expect(selection).toHaveText("雌性/雄性");
   await page
     .getByRole("status")

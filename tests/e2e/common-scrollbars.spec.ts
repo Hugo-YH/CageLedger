@@ -25,7 +25,8 @@ for (const colorScheme of ["light", "dark"] as const) {
       await openNavigationEntry(page, group, entry);
       const scroller = page.locator(selector).locator(".ant-table-content");
       await expect(scroller).toBeVisible();
-      await scroller.scrollIntoViewIfNeeded();
+      // Populated tables can be taller than the viewport; reveal their actual bottom track.
+      await scroller.evaluate((element) => element.scrollIntoView({ block: "end", inline: "nearest" }));
       const metrics = await scroller.evaluate((element) => {
         const rect = element.getBoundingClientRect();
         const track = getComputedStyle(element, "::-webkit-scrollbar");
@@ -44,6 +45,8 @@ for (const colorScheme of ["light", "dark"] as const) {
       expect(metrics.gutter).toBeGreaterThanOrEqual(9);
       expect(metrics.visibleThumb).toBe(6);
       await expect(page.locator('[data-ui="workspace"]')).toHaveCSS("scrollbar-width", "thin");
+      expect(metrics.y).toBeGreaterThan(0);
+      expect(metrics.y).toBeLessThan(page.viewportSize()!.height);
       const thumbWidth = (metrics.width * metrics.width) / metrics.contentWidth;
       const x = metrics.x + thumbWidth / 2;
       await page.mouse.move(x, metrics.y);
