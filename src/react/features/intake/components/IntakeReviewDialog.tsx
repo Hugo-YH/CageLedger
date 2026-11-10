@@ -171,6 +171,7 @@ export function IntakeReviewDialog({
   blocked,
   requestedResolutions,
   canCreateAnother = false,
+  createAnotherPending = false,
   onClose,
   onConfirm,
   onRefresh,
@@ -188,6 +189,7 @@ export function IntakeReviewDialog({
   blocked: boolean;
   requestedResolutions?: { candidateId: string; values: IntakeReviewResolutions };
   canCreateAnother?: boolean;
+  createAnotherPending?: boolean;
   onClose: () => void;
   onConfirm: (id: string) => void;
   onRefresh: () => void;
@@ -335,7 +337,7 @@ export function IntakeReviewDialog({
           </ActionButton>
         ) : null}
         {canCreateAnother ? (
-          <ActionButton disabled={pending || blocked} onClick={onCreateAnother}>
+          <ActionButton disabled={pending || blocked} loading={createAnotherPending} onClick={onCreateAnother}>
             确认为另一预约，另行保存
           </ActionButton>
         ) : null}

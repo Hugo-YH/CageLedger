@@ -7,6 +7,7 @@ import type { IntakeBatchListItem, IntakeBatchStatus, IntakeListParams } from ".
 import { useIntakeFilterOptions } from "../../../api/intake";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { CommandBar, DataTable } from "../../../components/ui";
+import { EmptyState } from "../../../components/ui/EmptyState";
 import { IntakeQuarantineStatus } from "../../quarantine/IntakeQuarantineStatus";
 import {
   intakeStatusLabel,
@@ -292,7 +293,13 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
       />
       <Card className="intake-batch-list-card">
         {bulkNotice ? (
-          <Alert className="intake-bulk-feedback" role="status" showIcon title={bulkNotice} type={bulkNoticeKind} />
+          <Alert
+            className="intake-bulk-feedback"
+            role={bulkNoticeKind === "error" ? "alert" : "status"}
+            showIcon
+            title={bulkNotice}
+            type={bulkNoticeKind}
+          />
         ) : null}
         {selectedItems.length && printDisabledReason ? (
           <Typography.Text id="intake-print-disabled-reason" type="secondary">
@@ -305,6 +312,11 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
             className="intake-batch-table"
             columns={columns}
             dataSource={items}
+            locale={{
+              emptyText: (
+                <EmptyState title="暂无匹配的批次" detail="可调整列筛选，或在「预约消息识别」中录入并保存批次。" />
+              ),
+            }}
             pagination={false}
             resizeKey="intake-batch"
             rowKey="id"

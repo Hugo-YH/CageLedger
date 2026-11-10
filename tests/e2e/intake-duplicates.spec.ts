@@ -80,14 +80,14 @@ test("intake save requires an explicit confirmation for a duplicate batch and pr
     await setDate(page, "接收日期", "2026-10-21");
 
     await page.getByRole("button", { name: "保存待接收批次", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "发现重复待接收批次", exact: true });
+    const dialog = page.getByRole("dialog", { name: "核对已有预约", exact: true });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText(batchNo);
-    await expect(dialog).toContainText("批次号");
+    await expect(dialog).toContainText("需求单号");
     await expect(dialog).not.toHaveClass(/ant-zoom-(appear|enter|leave)/);
     await page.screenshot({ path: testInfo.outputPath("intake-duplicate-batch.png"), animations: "disabled" });
 
-    await dialog.getByRole("button", { name: "返回修改", exact: true }).click();
+    await dialog.getByRole("button", { name: "返回本次录入", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
     expect(await duplicateIds()).toEqual([existingId]);
@@ -118,9 +118,17 @@ test("intake save requires an explicit confirmation for a duplicate batch and pr
         })
       ).ok(),
     ).toBe(true);
-    await dialog.getByRole("button", { name: "仍然保存", exact: true }).click();
-    await expect(dialog.getByRole("alert")).toContainText("重复记录已更新，请重新核对后确认保存。");
-    await expect(dialog).toContainText("后续匹配负责人");
+    await dialog.getByRole("button", { name: "确认为另一预约，另行保存", exact: true }).click();
+    await expect(dialog.getByRole("alert").filter({ hasText: "重复记录已更新，请重新核对后确认保存。" })).toBeVisible();
+    // The current review deliberately leaves multiple related records unselected.
+    await dialog
+      .locator(".ant-card")
+      .filter({ hasText: `PO-LATER-${suffix}` })
+      .getByRole("button", { name: "查看此预约", exact: true })
+      .click();
+    await expect(
+      dialog.getByRole("row").filter({ has: page.getByRole("cell", { name: "采购单号", exact: true }) }),
+    ).toContainText(`PO-LATER-${suffix}`);
     let releaseRequest = () => {};
     let requestStarted = () => {};
     const gate = new Promise<void>((resolve) => {
@@ -140,18 +148,18 @@ test("intake save requires an explicit confirmation for a duplicate batch and pr
       await route.fulfill({ status: 503, json: { error: "测试保存失败，请重试" } });
     });
     try {
-      await dialog.getByRole("button", { name: "仍然保存", exact: true }).click();
+      await dialog.getByRole("button", { name: "确认为另一预约，另行保存", exact: true }).click();
       await started;
-      await expect(dialog.getByRole("button", { name: /仍然保存$/ })).toHaveClass(/ant-btn-loading/);
+      await expect(dialog.getByRole("button", { name: /确认为另一预约，另行保存$/ })).toHaveClass(/ant-btn-loading/);
       await page.keyboard.press("Escape");
       await expect(dialog).toBeVisible();
     } finally {
       releaseRequest();
     }
-    await expect(dialog.getByRole("alert")).toContainText("测试保存失败，请重试");
+    await expect(dialog.getByRole("alert").filter({ hasText: "测试保存失败，请重试" })).toBeVisible();
     expect((await duplicateIds()).sort()).toEqual([existingId, laterId].sort());
     await page.unroute("**/api/intake-batches");
-    const retrySave = dialog.getByRole("button", { name: /仍然保存$/ });
+    const retrySave = dialog.getByRole("button", { name: /确认为另一预约，另行保存$/ });
     await expect(retrySave).not.toHaveClass(/ant-btn-loading/);
     const confirmedSave = page.waitForResponse((response) => {
       if (new URL(response.url()).pathname !== "/api/intake-batches" || response.request().method() !== "POST")
@@ -226,11 +234,11 @@ test("editing excludes the current batch and asks for confirmation after changin
       .getByRole("button", { name: "关闭通知" })
       .click();
     await expect(page.getByRole("status").filter({ hasText: "待接收批次已更新" })).toBeHidden();
-    await expect(page.getByRole("dialog", { name: "发现重复待接收批次", exact: true })).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "核对已有预约", exact: true })).toBeHidden();
 
     await editor.getByLabel("饲养需求批次编号", { exact: true }).fill(firstBatchNo);
     await editor.getByRole("button", { name: "保存待接收批次", exact: true }).click();
-    const duplicate = page.getByRole("dialog", { name: "发现重复待接收批次", exact: true });
+    const duplicate = page.getByRole("dialog", { name: "核对已有预约", exact: true });
     await expect(duplicate).toContainText(firstBatchNo);
     const confirmedEdit = page.waitForResponse((response) => {
       if (!response.url().endsWith(`/api/intake-batches/${secondId}`) || response.request().method() !== "PUT")
@@ -238,7 +246,7 @@ test("editing excludes the current batch and asks for confirmation after changin
       const body = JSON.parse(response.request().postData() || "{}") as { duplicateConfirmation?: string };
       return Boolean(body.duplicateConfirmation);
     });
-    await duplicate.getByRole("button", { name: "仍然保存", exact: true }).click();
+    await duplicate.getByRole("button", { name: "确认为另一预约，另行保存", exact: true }).click();
     await confirmedEdit;
     await expect(duplicate).toBeHidden();
     const saved = await page.request.get(`/api/intake-batches/${secondId}`);
@@ -313,17 +321,17 @@ test("printing a duplicate purchase order does not save or mark it printed until
     const printConfirm = page.getByRole("dialog", { name: "补齐空白笼卡", exact: true });
     await expect(printConfirm).toBeVisible();
     await printConfirm.getByRole("button", { name: "直接打印", exact: true }).click();
-    const duplicate = page.getByRole("dialog", { name: "发现重复待接收批次", exact: true });
+    const duplicate = page.getByRole("dialog", { name: "核对已有预约", exact: true });
     await expect(duplicate).toBeVisible();
     await expect(duplicate).toContainText("采购单号");
     await expect(duplicate).not.toHaveClass(/ant-zoom-(appear|enter|leave)/);
     await page.screenshot({ path: testInfo.outputPath("intake-duplicate-print.png"), animations: "disabled" });
-    await duplicate.getByRole("button", { name: "返回修改", exact: true }).click();
+    await duplicate.getByRole("button", { name: "返回本次录入", exact: true }).click();
     await expect.poll(matchingBatches).toEqual([expect.objectContaining({ id: existingId, status: "pending_print" })]);
 
     await page.getByRole("button", { name: "打印当前笼卡", exact: true }).click();
     await printConfirm.getByRole("button", { name: "直接打印", exact: true }).click();
-    await duplicate.getByRole("button", { name: "仍然保存", exact: true }).click();
+    await duplicate.getByRole("button", { name: "确认为另一预约，另行保存", exact: true }).click();
     await expect
       .poll(async () => (await matchingBatches()).some((item) => item.id !== existingId && item.status === "printed"))
       .toBe(true);

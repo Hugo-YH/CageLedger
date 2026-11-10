@@ -104,6 +104,7 @@ export function IntakeActionDialogs({
             onAcknowledge={merge.acknowledge}
             onEdit={merge.edit}
             canCreateAnother={Boolean(duplicate)}
+            createAnotherPending={saves.mutation.isPending}
             onCreateAnother={() => void saves.confirmDuplicate()}
             onResolve={(id, field, value) => void merge.resolveField(id, field, value)}
           />

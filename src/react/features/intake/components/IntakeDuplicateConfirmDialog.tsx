@@ -1,5 +1,5 @@
 import { formatPersonNames } from "../../../../domain/personNames";
-import { Table, type TableProps } from "antd";
+import { Alert, Table, type TableProps } from "antd";
 
 import type { IntakeDuplicateDetails, IntakeDuplicateItem, IntakeDuplicateMatchedField } from "../../../api/contracts";
 import { ActionButton } from "../../../components/ui";
@@ -73,7 +73,7 @@ export function IntakeDuplicateConfirmDialog({
         <p>匹配采购单号、订单编号或批次号的已有记录如下：</p>
         <Table columns={columns} dataSource={items} pagination={false} rowKey="id" scroll={{ x: 968 }} size="small" />
         {details.total > items.length ? <p>仅展示前 {items.length} 条匹配记录。</p> : null}
-        {error ? <p role="alert">{error}</p> : null}
+        {error ? <Alert role="alert" type="error" showIcon title={error} /> : null}
       </div>
       <div className="modal-shell-actions">
         <ActionButton disabled={pending} onClick={close}>
