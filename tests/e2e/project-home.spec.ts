@@ -2,6 +2,7 @@ import { captureUiAudit } from "./uiAudit";
 import { expect, test } from "./fixtures";
 
 test("project portal provides product and Gitea resource entry points", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "实验动物笼位管理与计费系统", level: 1 })).toBeVisible();
@@ -13,10 +14,24 @@ test("project portal provides product and Gitea resource entry points", async ({
   await expect(page.getByRole("heading", { name: "围绕实验动物中心日常工作的统一系统", level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "文档、版本与部署资源", level: 2 })).toBeVisible();
   await expect(page.getByRole("link", { name: "打开资源" }).first()).toHaveAttribute("href", "/docs/");
+  await expect(page.getByRole("heading", { name: "单据跟踪", level: 4, exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "打开资源" }).nth(1)).toHaveAttribute(
+    "href",
+    "https://git.cellnucle.us/hugo/cageledger/releases",
+  );
   await captureUiAudit(page, testInfo, "project-portal");
+  for (const width of [1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 960 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`project-portal-${width}-full.png`),
+      fullPage: true,
+      animations: "disabled",
+    });
+  }
 });
 
-test("project portal preserves readable mobile, dark, and reduced-motion layouts", async ({ page }) => {
+test("project portal preserves readable mobile, dark, and reduced-motion layouts", async ({ page }, testInfo) => {
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -37,6 +52,11 @@ test("project portal preserves readable mobile, dark, and reduced-motion layouts
           .every((value) => value === "0.001s"),
       ),
   ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("project-portal-390-dark-full.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
 });
 
 test("project portal uses the shared finite motion contract", async ({ page }) => {

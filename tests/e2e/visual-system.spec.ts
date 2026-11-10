@@ -1,4 +1,46 @@
 import { expect, openQuantityEntry, test } from "./fixtures";
+import { openAuthenticatedAuditPage } from "./auditSession";
+
+test("native dashboard skeletons become still without replacing content or issuing another read", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reads = 0;
+  await page.route("**/api/dashboard/overview*", async (route) => {
+    reads += 1;
+    await gate;
+    await route.fallback();
+  });
+  try {
+    await openAuthenticatedAuditPage(page);
+    const region = page.locator('.ant-dashboard-view[data-ui="page-skeleton"]');
+    await expect(region).toBeVisible();
+    const original = await region.elementHandle();
+    const animationNames = () =>
+      region
+        .locator(".ant-skeleton")
+        .evaluateAll((roots) =>
+          roots
+            .flatMap((root) => [root, ...root.querySelectorAll("*")])
+            .map((node) => getComputedStyle(node).animationName),
+        );
+    await expect.poll(async () => (await animationNames()).some((name) => name !== "none")).toBe(true);
+    const requested = reads;
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(async () => (await animationNames()).every((name) => name === "none")).toBe(true);
+    expect(reads).toBe(requested);
+    expect(await original!.evaluate((node) => node.isConnected)).toBe(true);
+    await page.screenshot({ path: info.outputPath("dashboard-loading-reduced.png"), animations: "disabled" });
+  } finally {
+    release();
+  }
+  await expect(page.locator('.ant-dashboard-view[data-ui="page-skeleton"]')).toHaveCount(0);
+});
 
 test("theme, motion and mobile breakpoint changes preserve drafts and usable control geometry", async ({
   page,

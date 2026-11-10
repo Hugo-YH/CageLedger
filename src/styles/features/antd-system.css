@@ -1094,6 +1094,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Ant's native Skeleton pulse also appears outside PageSkeleton. Keep these
+     placeholders still without changing their dimensions or loading lifecycle. */
+  .ant-skeleton,
+  .ant-skeleton * {
+    animation: none !important;
+  }
+
   /* Keep Ant's completion event when the preference interrupts an active modal.
      The shared 1ms duration ends it immediately; suppress its scale transform. */
   .ant-modal {

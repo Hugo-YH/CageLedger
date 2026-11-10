@@ -41,13 +41,13 @@ const capabilityItems: Array<{ icon: ReactNode; title: string; detail: string }>
   },
   {
     icon: <DatabaseOutlined />,
-    title: "报销核销",
-    detail: "将结算应收、报销单、经费明细与核销分摊保留在完整审计链路中。",
+    title: "单据跟踪",
+    detail: "登记与补录报销信息，区分单据阶段和锁定归档状态，保留完整审计记录。",
   },
   {
     icon: <DeploymentUnitOutlined />,
     title: "私有化部署",
-    detail: "提供 Docker、群晖 NAS 与离线包部署路径，数据保留在本地运行环境。",
+    detail: "提供 Docker、群晖 NAS 部署与按需离线镜像，数据保留在本地运行环境。",
   },
 ];
 
@@ -63,8 +63,8 @@ const workflowItems = [
     content: <span className="project-workflow-step-detail">合并 IACUC 明细并生成核算汇总。</span>,
   },
   {
-    title: "报销核销",
-    content: <span className="project-workflow-step-detail">关联报销单、经费明细与应收分摊。</span>,
+    title: "单据跟踪",
+    content: <span className="project-workflow-step-detail">登记与补录报销信息，分别跟踪单据阶段和归档状态。</span>,
   },
 ];
 
@@ -151,7 +151,7 @@ export function ProjectHome() {
           <SectionHeading
             eyebrow="项目资源"
             title="文档、版本与部署资源"
-            detail="项目文档随系统同域提供；Gitea 承载源码、正式 Release、离线包与容器镜像分发。"
+            detail="项目文档随系统同域提供；Gitea Release 提供版本与拉取指引，Packages 分发镜像，离线镜像按需提供。"
           />
           <Row className="project-resource-grid" gutter={[16, 16]}>
             {PROJECT_RESOURCE_LINKS.map((item, index) => (
@@ -208,7 +208,7 @@ function ProductScene() {
       <div className="project-demo-head">
         <div>
           <span className="project-eyebrow">运营闭环示意</span>
-          <strong>接收、饲养到结算核销</strong>
+          <strong>接收、饲养到单据跟踪</strong>
         </div>
         <Tag color="success" icon={<CheckCircleFilled />} variant="filled">
           本地受控
@@ -249,8 +249,8 @@ function ProductScene() {
           <div className="project-demo-flow-item">
             <span>03</span>
             <div>
-              <strong>结算核销</strong>
-              <small>审计归档</small>
+              <strong>单据跟踪</strong>
+              <small>阶段与归档状态</small>
             </div>
           </div>
         </div>
@@ -262,7 +262,7 @@ function ProductScene() {
           <Tag>IACUC</Tag>
           <Tag>数量统计</Tag>
           <Tag>结算单</Tag>
-          <Tag>报销台账</Tag>
+          <Tag>报销登记</Tag>
         </div>
       </div>
     </div>

@@ -3,9 +3,13 @@ import { ActionIcon } from "../../components/ui/ActionIcon";
 import { Button, Descriptions, Result, Skeleton, Tag } from "antd";
 
 import { usePublicCageCard } from "../../api/cageCard";
+import { ApiError } from "../../api/client";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
   const details = usePublicCageCard(qrId);
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const notFound = details.error instanceof ApiError && details.error.status === 404;
   const item = details.data;
   const rows: Array<[string, unknown]> = [
     ["笼号", item?.cageCode || item?.slotCode],
@@ -35,15 +39,20 @@ export function PublicScanView({ qrId = routeQrId() }: { qrId?: string }) {
         {details.isPending ? (
           <div aria-busy="true" aria-label="笼卡信息正在加载" className="public-scan-state" role="status">
             <span className="app-visually-hidden">笼卡信息正在加载</span>
-            <Skeleton active paragraph={{ rows: 5 }} title={{ width: "42%" }} />
+            <Skeleton active={!reducedMotion} paragraph={{ rows: 5 }} title={{ width: "42%" }} />
           </div>
         ) : details.error ? (
           <Result
-            status="warning"
-            title={<h1>未找到笼卡信息</h1>}
+            status={notFound ? "warning" : "error"}
+            title={<h1>{notFound ? "未找到笼卡信息" : "笼卡信息加载失败"}</h1>}
             subTitle={
               <>
-                <p>{details.error.message}</p>
+                {details.error instanceof ApiError ? <p>{details.error.message}</p> : null}
+                <p>
+                  {notFound
+                    ? "请核对二维码，或联系管理员确认笼卡记录。"
+                    : "请检查网络连接后重试；若仍无法加载，请稍后再试或联系管理员。"}
+                </p>
                 <small>{qrId}</small>
               </>
             }

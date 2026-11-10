@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api/client";
 import { queryKeys } from "./api/queryKeys";
 import { useSession } from "./api/session";
+import { useMediaQuery } from "./hooks/useMediaQuery";
 
 const LoginView = lazy(() => import("./features/auth/LoginView").then((module) => ({ default: module.LoginView })));
 const ProjectHome = lazy(() =>
@@ -19,13 +20,14 @@ const ReactWorkspace = lazy(() =>
 );
 
 function LoadingScreen() {
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   return (
     <main className="react-boot-screen" aria-busy="true" aria-live="polite">
       <img src="/cageledger-icon.svg" alt="" />
       <div>
         <strong>CageLedger</strong>
         <span className="app-visually-hidden">正在加载实验室运营台</span>
-        <Skeleton active paragraph={{ rows: 1, width: "160px" }} title={false} />
+        <Skeleton active={!reducedMotion} paragraph={{ rows: 1, width: "160px" }} title={false} />
       </div>
     </main>
   );
@@ -62,7 +64,7 @@ function ServiceError() {
     <main className="react-load-error" role="alert">
       <Result
         status="error"
-        subTitle="请检查 Python API 是否正在运行，然后重新加载页面。"
+        subTitle="请检查网络连接后重新加载；若仍无法访问，请联系系统管理员。"
         title="无法连接 CageLedger 服务"
         extra={
           <Button icon={<ActionIcon name="refresh" />} type="primary" onClick={() => window.location.reload()}>
