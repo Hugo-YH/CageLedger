@@ -115,11 +115,41 @@ test("researcher preview, import retry, stable IDs, contact editing and responsi
   await expect(page.getByRole("heading", { name: "实验人员信息", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 900 });
   const alpha = people.find((person: { account: string }) => person.account === "researcher-alpha");
-  await page
-    .locator(`tr[data-row-key="${alpha.id}"]`)
-    .getByRole("button", { name: "查看 / 编辑", exact: true })
-    .click();
+  let releaseDetail!: () => void;
+  const detailGate = new Promise<void>((resolve) => {
+    releaseDetail = resolve;
+  });
+  let detailFailed = true;
+  await page.route(`**/api/researchers/${alpha.id}`, async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await detailGate;
+    return detailFailed ? route.fulfill({ status: 503, json: { error: "测试人员资料暂不可用" } }) : route.fallback();
+  });
+  const loadingDialog = page.getByRole("dialog", { name: "实验人员资料", exact: true });
+  let pendingWidth = 0;
+  try {
+    await page
+      .locator(`tr[data-row-key="${alpha.id}"]`)
+      .getByRole("button", { name: "查看 / 编辑", exact: true })
+      .click();
+    await expect(loadingDialog.getByRole("status", { name: "人员资料正在加载", exact: true })).toBeVisible();
+    await expect(loadingDialog).not.toHaveClass(/ant-zoom-(appear|enter)/);
+    pendingWidth = await loadingDialog.evaluate((element) => element.getBoundingClientRect().width);
+    expect(pendingWidth).toBeCloseTo(800, 1);
+    await page.screenshot({ path: info.outputPath("researcher-detail-loading.png"), animations: "disabled" });
+  } finally {
+    releaseDetail();
+  }
+  const detailError = loadingDialog.getByRole("alert").filter({ hasText: "人员资料加载失败" });
+  await expect(detailError).toContainText("测试人员资料暂不可用");
+  expect(await loadingDialog.evaluate((element) => element.getBoundingClientRect().width)).toBeCloseTo(pendingWidth, 1);
+  detailFailed = false;
+  await detailError.getByRole("button", { name: "重新加载", exact: true }).click();
   const editor = page.getByRole("dialog", { name: "编辑实验人员资料", exact: true });
+  await expect(editor).toBeVisible();
+  await expect(editor).not.toHaveClass(/ant-zoom-(appear|enter)/);
+  expect(await editor.evaluate((element) => element.getBoundingClientRect().width)).toBeCloseTo(pendingWidth, 1);
+  await page.screenshot({ path: info.outputPath("researcher-detail-ready.png"), animations: "disabled" });
   await editor.getByRole("textbox", { name: "手机", exact: true }).fill("13900000009");
   const external = await page.request.put(`/api/researchers/${alpha.id}`, {
     data: { item: { position: "另一次修改" }, expectedUpdatedAt: alpha.updatedAt },

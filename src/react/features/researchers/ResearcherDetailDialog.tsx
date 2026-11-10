@@ -25,7 +25,14 @@ export function ResearcherDetailDialog({
   const detail = useResearcher(id);
   if (!detail.data)
     return (
-      <Modal open title="实验人员资料" onCancel={onClose} footer={<Button onClick={onClose}>关闭</Button>}>
+      <Modal
+        open
+        title="实验人员资料"
+        className="researcher-detail-dialog"
+        width="min(800px, calc(100vw - 32px))"
+        onCancel={onClose}
+        footer={<Button onClick={onClose}>关闭</Button>}
+      >
         {detail.isError ? (
           <PageState
             title="人员资料加载失败"

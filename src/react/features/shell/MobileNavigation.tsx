@@ -9,6 +9,7 @@ import {
   HomeOutlined,
   InboxOutlined,
   InfoCircleOutlined,
+  MessageOutlined,
   QrcodeOutlined,
   ReloadOutlined,
   ShopOutlined,
@@ -52,7 +53,7 @@ const navIcon: Record<NavIcon, ReactNode> = {
   info: <InfoCircleOutlined />,
   database: <DatabaseOutlined />,
   users: <TeamOutlined />,
-  feedback: <InfoCircleOutlined />,
+  feedback: <MessageOutlined />,
 };
 
 const billingIcon: Record<string, ReactNode> = {
@@ -252,7 +253,7 @@ export function MobileNavigation({
                 </List>
               ))}
             <List header="帮助与反馈">
-              <MenuItem icon={<InfoCircleOutlined />} label="帮助与反馈" view="feedback" onNavigate={onNavigate} />
+              <MenuItem icon={<MessageOutlined />} label="帮助与反馈" view="feedback" onNavigate={onNavigate} />
             </List>
             <List header="系统设置">
               {settingsViews.map(([view, label, icon]) => (

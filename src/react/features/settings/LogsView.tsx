@@ -48,7 +48,7 @@ export function LogsView() {
   return (
     <section className="workspace-view settings-workspace" data-feature="administration">
       <div className="workspace-body settings-workspace-body">
-        <CommandBar title="操作记录" ariaLabel="操作记录" />
+        <CommandBar title="操作日志" ariaLabel="操作日志" />
         <Card className="settings-log-card">
           {retained.loading ? (
             <PageSkeleton label="操作日志" variant="table" />

@@ -9,7 +9,7 @@ test("account create, edit and delete appear in the cached operation log with th
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
   await openSettingsView(page, "操作日志");
-  await expect(page.getByRole("heading", { name: "操作记录", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "操作日志", exact: true })).toBeVisible();
 
   const username = `audit-ui-${Date.now()}`;
   await openSettingsView(page, "账号管理");

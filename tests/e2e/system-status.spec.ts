@@ -1,4 +1,6 @@
 import type { Page } from "@playwright/test";
+import { APP_VERSION } from "../../src/react/version";
+import type { SystemUpdateStatus } from "../../src/contracts/administration";
 
 import { expect, openSettingsView, test } from "./fixtures";
 
@@ -13,7 +15,7 @@ async function login(page: Page, username = "admin", password = "admin123") {
 test("system documentation actions load the local docs and release history", async ({ page }, testInfo) => {
   await login(page);
   for (const [label, path, heading] of [
-    ["项目文档", "/docs/", "CageLedger 文档"],
+    ["项目文档", "/docs/", "CageLedger"],
     ["更新记录", "/docs/releases/", "更新日志"],
   ]) {
     await openSettingsView(page, "关于系统");
@@ -26,14 +28,14 @@ test("system documentation actions load the local docs and release history", asy
     await page.getByRole("menuitem", { name: label, exact: true }).click();
     await expect(page).toHaveURL(new URL(path, testInfo.project.use.baseURL).href);
     await expect(page.getByRole("heading", { name: new RegExp(`^${heading}`), level: 1 })).toBeVisible();
-    await expect(page.locator(".VPDoc")).not.toBeEmpty();
+    await expect(page.locator("#VPContent")).not.toBeEmpty();
     await testInfo.attach(label, { body: await page.screenshot(), contentType: "image/png" });
     await page.getByRole("link", { name: "进入系统", exact: true }).click();
     await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
   }
 });
 
-test("administrator can inspect and refresh process metrics", async ({ page }) => {
+test("administrator can inspect and refresh process metrics", async ({ page }, info) => {
   await page.setViewportSize({ width: 1218, height: 644 });
   await login(page);
   await openSettingsView(page, "关于系统");
@@ -79,6 +81,35 @@ test("administrator can inspect and refresh process metrics", async ({ page }) =
   await page.getByRole("button", { name: "刷新状态", exact: true }).click();
   await refreshed;
   await expect(page.getByRole("button", { name: "刷新状态", exact: true })).toBeEnabled();
+
+  let updateFailed = true;
+  let updateReads = 0;
+  await page.route("**/api/system/update-check", (route) => {
+    updateReads += 1;
+    return updateFailed
+      ? route.fulfill({ status: 503, json: { error: "测试更新服务暂不可用" } })
+      : route.fulfill({
+          json: {
+            currentVersion: APP_VERSION,
+            latestVersion: APP_VERSION,
+            updateAvailable: false,
+            latestUrl: `https://git.cellnucle.us/hugo/cageledger/releases/tag/v${APP_VERSION}`,
+          } satisfies SystemUpdateStatus,
+        });
+  });
+  expect(updateReads).toBe(0);
+  await page.getByRole("button", { name: "检查更新", exact: true }).click();
+  const updateError = page.getByRole("alert").filter({ hasText: "检查更新失败" });
+  await expect(updateError).toContainText("测试更新服务暂不可用");
+  await expect(updateError).not.toContainText("当前已是最新版本");
+  expect(updateReads).toBe(1);
+  await page.screenshot({ path: info.outputPath("system-update-error.png"), animations: "disabled" });
+  updateFailed = false;
+  await page.getByRole("button", { name: "检查更新", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "当前已是最新版本" })).toContainText(
+    `最新发布版 ${APP_VERSION}`,
+  );
+  expect(updateReads).toBe(2);
 
   for (const viewport of [
     { width: 1180, height: 760 },

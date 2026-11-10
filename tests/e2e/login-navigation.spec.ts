@@ -81,7 +81,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await openSettingsView(page, "数据管理");
   await expect(page.getByRole("heading", { name: "数据管理", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "操作日志");
-  await expect(page.getByRole("heading", { name: "操作记录", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "操作日志", exact: true, level: 2 })).toBeVisible();
   await openSettingsView(page, "关于系统");
   await expect(page.getByRole("heading", { name: "系统状态", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "当前服务进程", exact: true, level: 3 })).toBeVisible();

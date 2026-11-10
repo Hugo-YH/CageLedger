@@ -47,7 +47,6 @@ const pageTitles: Record<string, string> = {
   巡检标准: "巡检标准目录",
   房间管理: "饲养间与笼架",
   关于系统: "系统状态",
-  操作日志: "操作记录",
 };
 
 test.beforeEach(async ({ page }) => {

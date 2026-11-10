@@ -51,7 +51,7 @@ it("keeps the last successful page and its page number on failure, then retries"
       <LogsView />
     </QueryClientProvider>,
   );
-  expect(screen.getByText("操作记录")).toBeInTheDocument();
+  expect(screen.getByText("操作日志")).toBeInTheDocument();
   await screen.findByText("第一页记录");
   fireEvent.click(screen.getByText("下一页"));
   await screen.findByText("操作日志更新失败，暂显示上次结果");

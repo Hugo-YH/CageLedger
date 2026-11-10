@@ -697,11 +697,13 @@ function HealthTag({ health }: { health: RuntimeHealth }) {
 function UpdateCard({ update }: { update: ReturnType<typeof useSystemUpdate> }) {
   const status = update.isFetching
     ? "正在检查最新 Release"
-    : update.data?.updateAvailable
-      ? "发现新版本"
-      : update.data?.disabled
-        ? "更新检查已关闭"
-        : "当前已是最新版本";
+    : update.isError
+      ? "检查更新失败"
+      : update.data?.updateAvailable
+        ? "发现新版本"
+        : update.data?.disabled
+          ? "更新检查已关闭"
+          : "当前已是最新版本";
   return (
     <Alert
       action={
