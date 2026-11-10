@@ -10,12 +10,14 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest.mock import patch
 
 from server_app.domains.administration.system import (
     parse_proc_cpuinfo,
     parse_proc_meminfo,
     system_environment,
 )
+from server_app.performance import record_stage
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,7 +46,9 @@ class SystemEnvironmentParsingTests(unittest.TestCase):
         self.assertEqual(parse_proc_meminfo("MemFree: 1000 kB\n"), 0)
 
     def test_system_environment_shape(self):
-        payload = system_environment()
+        with patch("server_app.performance._STAGES", {}):
+            record_stage("payload.decode", 2.5, rows=3, size_bytes=4)
+            payload = system_environment()
         self.assertEqual(
             set(payload),
             {"cpu", "memory", "system", "python", "database", "performance"},
@@ -67,10 +71,15 @@ class SystemEnvironmentParsingTests(unittest.TestCase):
         self.assertIsInstance(payload["database"]["ok"], bool)
         self.assertEqual(
             set(payload["performance"]),
-            {"uptimeSeconds", "requests", "cache", "database", "pdf", "thresholds"},
+            {"uptimeSeconds", "requests", "cache", "database", "pdf", "thresholds", "stages", "documentWork"},
         )
         self.assertEqual(set(payload["performance"]["thresholds"]), {"slowRequestMs", "slowDatabaseMs"})
         self.assertEqual(set(payload["performance"]["pdf"]), {"cache", "jobs", "renders", "renderer"})
+        assert_shared_performance_shape(self, payload["performance"])
+        self.assertEqual(
+            payload["performance"]["stages"]["payload.decode"],
+            {"operations": 1, "rows": 3, "bytes": 4, "sampleCount": 1, "p50Ms": 2.5, "p95Ms": 2.5, "maxMs": 2.5},
+        )
 
 
 class SystemEnvironmentApiTests(unittest.TestCase):
@@ -146,6 +155,7 @@ class SystemEnvironmentApiTests(unittest.TestCase):
         self.assertIsNotNone(payload["database"]["sizeBytes"])
         self.assertGreaterEqual(payload["performance"]["requests"]["total"], 1)
         self.assertGreaterEqual(payload["performance"]["database"]["operations"], 1)
+        assert_shared_performance_shape(self, payload["performance"])
 
     def test_room_admin_is_rejected(self):
         request_json(
@@ -213,8 +223,52 @@ class SystemEnvironmentApiTests(unittest.TestCase):
                 "cacheHitRate",
                 "pdfActiveJobs",
                 "databaseSizeBytes",
+                "stages",
+                "documentWork",
             },
         )
+        assert_shared_performance_shape(self, payload["items"][-1])
+
+
+def assert_shared_performance_shape(case, payload):
+    budget = payload["documentWork"]
+    case.assertEqual(set(budget), {"capacity", "active", "waiting", "rejected"})
+    for value in budget.values():
+        case.assertIsInstance(value, int)
+        case.assertGreaterEqual(value, 0)
+    case.assertGreaterEqual(budget["capacity"], 1)
+    case.assertLessEqual(budget["active"], budget["capacity"])
+
+    stages = payload["stages"]
+    case.assertIsInstance(stages, dict)
+    case.assertLessEqual(
+        set(stages),
+        {
+            "cache.size",
+            "cache.wait",
+            "database.fetch",
+            "payload.decode",
+            "response.encode",
+            "response.compress",
+            "heavy.wait",
+            "pdf.maintenance",
+        },
+    )
+    for metrics in stages.values():
+        case.assertEqual(set(metrics), {"operations", "rows", "bytes", "sampleCount", "p50Ms", "p95Ms", "maxMs"})
+        for key in ("operations", "rows", "bytes", "sampleCount"):
+            case.assertIsInstance(metrics[key], int)
+            case.assertGreaterEqual(metrics[key], 0)
+        case.assertLessEqual(metrics["sampleCount"], 512)
+        case.assertLessEqual(metrics["sampleCount"], metrics["operations"])
+        latencies = [metrics[key] for key in ("p50Ms", "p95Ms", "maxMs")]
+        if metrics["sampleCount"]:
+            for latency in latencies:
+                case.assertIsInstance(latency, (int, float))
+                case.assertGreaterEqual(latency, 0)
+            case.assertEqual(latencies, sorted(latencies))
+        else:
+            case.assertEqual(latencies, [None, None, None])
 
 
 def available_port():

@@ -60,8 +60,18 @@ class PerformanceIndexTests(unittest.TestCase):
                     any("idx_billing_workflows_feeding_scope (month=? AND iacuc=?)" in step for step in plan), plan
                 )
                 technical_plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + technical, technical_params)]
+                # Both technical partial indexes retain the indexed month lookup;
+                # SQLite may prefer the newer month/PI index for this legacy expression.
                 self.assertTrue(
-                    any("idx_billing_workflows_technical_month (month=?)" in step for step in technical_plan)
+                    any(
+                        f"{index} (month=?)" in step
+                        for step in technical_plan
+                        for index in (
+                            "idx_billing_workflows_technical_month",
+                            "idx_billing_workflows_technical_month_pi",
+                        )
+                    ),
+                    technical_plan,
                 )
                 self.assertFalse(any("idx_billing_workflows_feeding_scope" in step for step in technical_plan))
                 self.assertEqual(

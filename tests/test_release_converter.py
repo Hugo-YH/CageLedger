@@ -61,8 +61,22 @@ class ReleaseConverterTests(unittest.TestCase):
             third = rt.converter_identity()
             self.assertNotEqual(first["bundle_sha256"], second["bundle_sha256"])
             self.assertNotEqual(second["bundle_sha256"], third["bundle_sha256"])
-            run.return_value = self.version.replace("26.8.2.2", "26.8.2.3")
-            self.assertNotEqual(rt.hashed(third), rt.hashed(rt.converter_identity()))
+            run.reset_mock()
+            next_version = self.version.replace("26.8.2.2", "26.8.2.3")
+            run.return_value = next_version
+            self.assertEqual(rt.converter_identity(), third)
+            run.assert_not_called()
+
+            self.binary.write_text("mock executable revision two")
+            fourth = rt.converter_identity()
+            self.assertNotEqual(third["bundle_sha256"], fourth["bundle_sha256"])
+            self.assertNotEqual(rt.hashed(third), rt.hashed(fourth))
+            self.assertEqual(fourth["version"], next_version)
+            self.assertEqual(run.call_count, 3)
+            self.assertEqual(run.call_args_list[0].args[0][:4], ["codesign", "--verify", "--deep", "--strict"])
+            self.assertEqual(run.call_args_list[1].args[0][:3], ["spctl", "--assess", "--type"])
+            self.assertEqual(run.call_args_list[2].args[0][0], str(self.binary.resolve()))
+            self.assertEqual(run.call_args_list[2].args[0][-1], "--version")
 
     def test_signature_assessment_permission_timeout_and_unknown_version_stop(self):
         failures = [

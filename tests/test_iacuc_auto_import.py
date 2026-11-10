@@ -76,8 +76,12 @@ class IacucAutoImportTests(unittest.TestCase):
     def test_latest_summary_path_returns_newest_file(self):
         inbox = Path(self.tmpdir.name) / "inbox"
         inbox.mkdir()
-        (inbox / "old.xlsx").touch()
-        (inbox / "new.csv").touch()
+        old = inbox / "old.xlsx"
+        new = inbox / "new.csv"
+        old.touch()
+        new.touch()
+        os.utime(old, (10, 10))
+        os.utime(new, (20, 20))
         Path(self.tmpdir.name, "ignored.txt").write_text("x", encoding="utf-8")
         latest = latest_summary_path(inbox)
         self.assertEqual(latest.name, "new.csv")
