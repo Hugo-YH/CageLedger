@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Modal } from "../../components/ui/Modal";
 import { RollbackOutlined } from "@ant-design/icons";
 
-import { PageSkeleton } from "../../components/WorkspaceUi";
+import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { useAnimalInspectionCatalogVersions, useRestoreInspectionCatalogVersion } from "../../api/animalManagement";
 
 export function InspectionVersionHistoryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -37,8 +37,24 @@ export function InspectionVersionHistoryModal({ open, onClose }: { open: boolean
       width={680}
     >
       {restoreError ? <Alert showIcon type="error" title={restoreError} /> : null}
+      {versions.isError && versions.data ? (
+        <Alert
+          role="alert"
+          showIcon
+          type="error"
+          title="版本历史更新失败，暂显示上次结果"
+          description={versions.error.message}
+          action={
+            <Button loading={versions.isFetching} onClick={() => void versions.refetch()}>
+              重新加载
+            </Button>
+          }
+        />
+      ) : null}
       {versions.isLoading ? (
         <PageSkeleton compact label="巡检版本" rows={3} variant="detail" />
+      ) : versions.isError && !versions.data ? (
+        <PageState title="版本历史加载失败" detail={versions.error.message} retry={() => void versions.refetch()} />
       ) : items.length === 0 ? (
         <Typography.Text type="secondary">暂无版本记录</Typography.Text>
       ) : (

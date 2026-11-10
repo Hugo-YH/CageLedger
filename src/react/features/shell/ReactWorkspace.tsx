@@ -21,6 +21,7 @@ import {
   TableOutlined,
   TagsOutlined,
   TeamOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Tooltip, Typography, type MenuProps } from "antd";
 import { lazy, memo, Suspense, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -283,9 +284,9 @@ function Workspace({ user }: { user: SessionUser }) {
       label: "动物管理",
       children: [
         item("animal-inspection-entry", "动物巡检", <AuditOutlined />),
-        item("animal-inspection-findings", "异常处置", <ReloadOutlined />),
+        item("animal-inspection-findings", "异常处置", <WarningOutlined />),
         item("animal-inspection-records", "巡检记录", <BookOutlined />),
-        item("animal-inspection-standards", "巡检标准", <InfoCircleOutlined />),
+        item("animal-inspection-standards", "巡检标准", <BookOutlined />),
       ],
     },
     {
