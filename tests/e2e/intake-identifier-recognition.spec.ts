@@ -169,16 +169,16 @@ test("one 60-animal appointment retains both orders and demands through duplicat
         field,
       );
     }
-    const confirmation = page.getByRole("dialog", { name: "发现重复待接收批次", exact: true });
+    const confirmation = page.getByRole("dialog", { name: "核对已有预约", exact: true });
     await expect(confirmation).toBeVisible();
-    await expect(confirmation).toContainText("共匹配到 3 条记录");
+    await expect(confirmation).toContainText("找到 3 条相关记录");
     await page.screenshot({ path: info.outputPath("member-duplicate-confirmation.png"), animations: "disabled" });
     const confirmedResponse = page.waitForResponse((response) => {
       if (new URL(response.url()).pathname !== "/api/intake-batches" || response.request().method() !== "POST")
         return false;
       return Boolean(response.request().postDataJSON()?.duplicateConfirmation);
     });
-    await confirmation.getByRole("button", { name: "仍然保存", exact: true }).click();
+    await confirmation.getByRole("button", { name: "确认为另一预约，另行保存", exact: true }).click();
     const confirmed = await confirmedResponse;
     expect(confirmed.ok(), await confirmed.text()).toBe(true);
     const result = (await confirmed.json()) as IntakeWriteResponse;

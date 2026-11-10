@@ -1,25 +1,8 @@
 import { compatibilityCase } from "./compatibilityCases";
+import { contrastFromLayers } from "./uiAudit";
 import type { Page } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { expect, openBillingNavigation, openWorkflowCenter, test } from "./fixtures";
-
-function contrastFromLayers(layers: Array<{ color: string; background: string; opacity: string }>) {
-  const numbers = (color: string) => (color.match(/[0-9.]+/g) || []).map(Number);
-  const foreground = numbers(layers[0].color);
-  const background = numbers(layers.find((layer) => layer.background !== "rgba(0, 0, 0, 0)")!.background);
-  const alpha = (foreground[3] ?? 1) * layers.reduce((value, layer) => value * Number(layer.opacity), 1);
-  const effective = foreground.slice(0, 3).map((value, index) => value * alpha + background[index] * (1 - alpha));
-  const luminance = (rgb: number[]) =>
-    rgb.slice(0, 3).reduce((total, value, index) => {
-      const channel = value / 255;
-      return (
-        total +
-        (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4) * [0.2126, 0.7152, 0.0722][index]
-      );
-    }, 0);
-  const values = [luminance(effective), luminance(background)];
-  return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
-}
 
 async function mockCandidates(page: Page) {
   const items = Array.from({ length: 12 }, (_, index) => ({

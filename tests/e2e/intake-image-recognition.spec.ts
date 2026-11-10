@@ -326,7 +326,17 @@ for (const action of ["save", "print"] as const) {
         if (request.method() === "POST" && new URL(request.url()).pathname === "/api/intake/recognition-uploads")
           uploadRequests += 1;
       });
+      const recognitionPreview = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname === "/api/intake-batches/recognition-preview",
+      );
       await page.getByRole("button", { name: "AI识别" }).click();
+      expect((await recognitionPreview).ok()).toBe(true);
+      const review = page.getByRole("dialog", { name: "核对已有预约", exact: true });
+      await expect(review).toBeVisible();
+      await review.getByRole("button", { name: "返回本次录入", exact: true }).click();
+      await expect(review).toBeHidden();
       await expect(page.getByLabel("饲养需求批次编号", { exact: true })).toHaveValue(batchNo);
       await setDate(page);
       const bodies: Array<{
@@ -345,7 +355,7 @@ for (const action of ["save", "print"] as const) {
         const printConfirm = page.getByRole("dialog", { name: "补齐空白笼卡", exact: true });
         await printConfirm.getByRole("button", { name: "直接打印", exact: true }).click();
       }
-      const duplicate = page.getByRole("dialog", { name: "发现重复待接收批次", exact: true });
+      const duplicate = page.getByRole("dialog", { name: "核对已有预约", exact: true });
       await expect(duplicate).toBeVisible();
       const saved = page.waitForResponse(
         (response) =>
@@ -353,7 +363,7 @@ for (const action of ["save", "print"] as const) {
           new URL(response.url()).pathname === "/api/intake-batches" &&
           Boolean(response.request().postDataJSON()?.duplicateConfirmation),
       );
-      await duplicate.getByRole("button", { name: "仍然保存", exact: true }).click();
+      await duplicate.getByRole("button", { name: "确认为另一预约，另行保存", exact: true }).click();
       const response = await saved;
       expect(response.ok()).toBe(true);
       savedId = ((await response.json()) as { item: { id: string } }).item.id;

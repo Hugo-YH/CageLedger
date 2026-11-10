@@ -9,20 +9,20 @@
  * neutral, reserved uses info blue, active uses success green, an open
  * period uses warning amber, and overdue uses error red. */
 .react-cage-view {
-  --cage-status-empty: #d9d9d9;
-  --cage-status-empty-soft: #fafafa;
-  --cage-status-reserved: #0958d9;
-  --cage-status-reserved-soft: #e6f4ff;
-  --cage-status-reserved-line: #91caff;
-  --cage-status-active: #389e0d;
-  --cage-status-active-soft: #f6ffed;
-  --cage-status-active-line: #b7eb8f;
-  --cage-status-open: #d48806;
-  --cage-status-open-soft: #fffbe6;
-  --cage-status-open-line: #ffe58f;
-  --cage-status-overdue: #cf1322;
-  --cage-status-overdue-soft: #fff1f0;
-  --cage-status-overdue-line: #ffa39e;
+  --cage-status-empty: var(--line);
+  --cage-status-empty-soft: var(--surface-soft);
+  --cage-status-reserved: var(--info-text);
+  --cage-status-reserved-soft: var(--info-soft);
+  --cage-status-reserved-line: var(--info-line);
+  --cage-status-active: var(--success-text);
+  --cage-status-active-soft: var(--success-soft);
+  --cage-status-active-line: var(--success-line);
+  --cage-status-open: var(--warning-text);
+  --cage-status-open-soft: var(--warning-soft);
+  --cage-status-open-line: var(--warning-line);
+  --cage-status-overdue: var(--danger-text);
+  --cage-status-overdue-soft: var(--danger-soft);
+  --cage-status-overdue-line: var(--danger-line);
 }
 
 /* Slots keep a fixed default size (square) instead of stretching across
@@ -171,6 +171,16 @@
   border-color: var(--cage-status-empty);
   border-style: dashed;
   color: var(--text-subtle);
+}
+
+/* Keep long cage labels within their fixed cell despite native button alignment. */
+.slot-code,
+.slot-iacuc,
+.slot-person,
+.slot-date,
+.slot-animal-meta {
+  align-self: stretch;
+  min-inline-size: 0;
 }
 
 .slot-code {

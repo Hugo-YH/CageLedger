@@ -39,6 +39,7 @@ const entries = [
 const selectedModule = process.env.UI_UX_MODULE || "all";
 const widths = (process.env.UI_UX_WIDTHS || "1280,1440,1920").split(",").map(Number);
 const phase = process.env.UI_UX_PHASE || "review";
+const colorScheme = process.env.UI_UX_THEME === "dark" ? "dark" : "light";
 const pageTitles: Record<string, string> = {
   总览: "实验动物笼位管理与计费系统",
   预约消息识别: "接收笼卡",
@@ -60,8 +61,9 @@ for (const width of widths) {
   test(`UI review ${selectedModule} ${phase} ${width}`, async ({ page }, info) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width, height: 960 });
-    await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     await openAuthenticatedAuditPage(page);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     const evidence = [];
     for (const [module, group, label] of entries) {
       if (selectedModule !== "all" && selectedModule !== module) continue;
@@ -89,7 +91,7 @@ for (const width of widths) {
       expect(geometry.fontSize, label).toBe("24px");
       expect(parseFloat(geometry.lineHeight), label).toBeCloseTo(32, 2);
       await page.screenshot({ path: info.outputPath(`${label}.png`), animations: "disabled" });
-      evidence.push({ module, label, width, ...geometry });
+      evidence.push({ module, label, width, colorScheme, ...geometry });
     }
     expect(evidence.length).toBeGreaterThan(0);
     writeFileSync(info.outputPath("review.json"), JSON.stringify(evidence, null, 2));

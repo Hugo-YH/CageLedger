@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import type { PlacementWriteResponse, RoomWorkspace } from "../../src/contracts/infrastructure";
-import { captureUiAudit } from "./uiAudit";
+import { captureUiAudit, contrastFromLayers } from "./uiAudit";
 import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry, test } from "./fixtures";
 
 test.afterEach(async ({ page }) => {
@@ -49,6 +49,37 @@ async function captureToolbar(page: Page, testInfo: TestInfo, name: string, tool
   const evidencePath = testInfo.outputPath(`${name}-computed-style.json`);
   await writeFile(evidencePath, JSON.stringify(evidence, null, 2));
   await testInfo.attach(`${name}-computed-style`, { path: evidencePath, contentType: "application/json" });
+  await page.screenshot({ path: testInfo.outputPath(`${name}.png`), animations: "disabled" });
+}
+
+async function inspectSlotContrast(page: Page, testInfo: TestInfo, name: string) {
+  const slot = page.getByRole("button", { name: /8014-01-A1/ });
+  const samples = await slot.evaluate((root) =>
+    [...root.querySelectorAll<HTMLElement>(".slot-code, .slot-iacuc, .slot-person, .slot-date")]
+      .filter((element) => element.getClientRects().length && element.textContent?.trim())
+      .map((element) => {
+        const layers = [];
+        for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+          const style = getComputedStyle(current);
+          layers.push({ color: style.color, background: style.backgroundColor, opacity: style.opacity });
+        }
+        return { text: element.textContent, layers };
+      }),
+  );
+  expect(samples.length).toBeGreaterThan(0);
+  const bounds = await slot.evaluate((root) => {
+    const cell = root.getBoundingClientRect();
+    return [...root.querySelectorAll<HTMLElement>(".slot-code, .slot-iacuc, .slot-person, .slot-date")]
+      .filter((element) => element.getClientRects().length)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { text: element.textContent, withinCell: rect.left >= cell.left && rect.right <= cell.right };
+      });
+  });
+  for (const label of bounds) expect(label.withinCell, `${name}: ${label.text}`).toBe(true);
+  const evidence = samples.map((sample) => ({ text: sample.text, contrast: contrastFromLayers(sample.layers) }));
+  for (const sample of evidence) expect(sample.contrast, `${name}: ${sample.text}`).toBeGreaterThanOrEqual(4.5);
+  await testInfo.attach(name, { body: JSON.stringify(evidence), contentType: "application/json" });
   await page.screenshot({ path: testInfo.outputPath(`${name}.png`), animations: "disabled" });
 }
 
@@ -217,6 +248,12 @@ for (const viewport of [
         expect(reserved.status).toBe("reserved");
         occupancyId = reserved.reservedOccupancyId!;
         expect(occupancyId).toBeTruthy();
+        for (const colorScheme of ["light", "dark"] as const) {
+          await page.emulateMedia({ colorScheme });
+          await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+          await inspectSlotContrast(page, testInfo, `reserved-slot-${colorScheme}`);
+        }
+        await page.emulateMedia({ colorScheme: "light" });
         await cages.getByRole("button", { name: /待进驻/ }).click();
         let attempts = 0;
         let releaseMoveIn!: () => void;
@@ -251,6 +288,16 @@ for (const viewport of [
         expect(labelColors.text).not.toBe(labelColors.background);
         await page.screenshot({ path: testInfo.outputPath("placement-error.png"), animations: "disabled" });
         await captureUiAudit(page, testInfo, "placement-recovery", placement);
+        await page.emulateMedia({ colorScheme: "dark" });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+        await expect(placement.getByRole("alert")).toContainText("测试入驻失败，请重试");
+        const darkLabelColors = await placement.getByText("已预留", { exact: true }).evaluate((element) => ({
+          text: getComputedStyle(element).color,
+          background: getComputedStyle(element).backgroundColor,
+        }));
+        expect(darkLabelColors.text).not.toBe(darkLabelColors.background);
+        await page.screenshot({ path: testInfo.outputPath("placement-recovery-dark.png"), animations: "disabled" });
+        await page.emulateMedia({ colorScheme: "light" });
         expect(attempts).toBe(1);
         const confirmedMoveIn = page.waitForResponse(
           (response) =>
@@ -273,6 +320,31 @@ for (const viewport of [
           .toEqual([false, "active"]);
         expect(attempts).toBe(2);
         await expect(placement.getByRole("alert")).toHaveCount(0);
+        await placement.getByRole("button", { name: "关闭", exact: true }).click();
+        for (const colorScheme of ["light", "dark"] as const) {
+          await page.emulateMedia({ colorScheme });
+          await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+          await inspectSlotContrast(page, testInfo, `active-slot-${colorScheme}`);
+        }
+        for (const [tone, endDate] of [
+          ["normal", "2099-01-01"],
+          ["overdue", "2000-02-01"],
+        ]) {
+          const item = (await room()).occupancies.find((entry) => entry.id === occupancyId)!;
+          expect(item.status).toBe("active");
+          const updated = await page.request.put(`/api/occupancies/${occupancyId}`, {
+            data: { item: { ...item, startDate: "2000-01-01", endDate }, expectedUpdatedAt: item.updatedAt },
+          });
+          expect(updated.ok()).toBe(true);
+          await page.reload();
+          const slot = page.getByRole("button", { name: /8014-01-A1/ });
+          await expect(slot).toHaveClass(new RegExp(`period-${tone}`));
+          for (const colorScheme of ["light", "dark"] as const) {
+            await page.emulateMedia({ colorScheme });
+            await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+            await inspectSlotContrast(page, testInfo, `${tone}-slot-${colorScheme}`);
+          }
+        }
       } finally {
         if (occupancyId) await page.request.delete(`/api/occupancies/${occupancyId}`);
       }
