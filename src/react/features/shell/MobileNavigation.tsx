@@ -190,7 +190,7 @@ export function MobileNavigation({
             ) : null}
             {visible("cages") ? (
               <List header="笼位管理">
-                <MenuItem icon={<AppstoreOutlined />} label="动态笼位图" view="cages" onNavigate={onNavigate} />
+                <MenuItem icon={<AppstoreOutlined />} label="笼位管理" view="cages" onNavigate={onNavigate} />
               </List>
             ) : null}
             {visible("animal-inspection-entry") ? (

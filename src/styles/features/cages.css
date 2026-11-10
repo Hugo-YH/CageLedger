@@ -369,16 +369,6 @@
   gap: 8px;
 }
 
-.placement-react-drawer .pill {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  line-height: 20px;
-}
-
 /* Mobile cage map and slot sizing (migrated from responsive.css). */
 @media (width < 768px) {
   .cage-preview {

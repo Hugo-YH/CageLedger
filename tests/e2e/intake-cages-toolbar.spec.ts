@@ -1,5 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import type { Locator, Page, TestInfo } from "@playwright/test";
+import type { PlacementWriteResponse, RoomWorkspace } from "../../src/contracts/infrastructure";
+import { captureUiAudit } from "./uiAudit";
 import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry, test } from "./fixtures";
 
 test.afterEach(async ({ page }) => {
@@ -160,7 +162,7 @@ for (const viewport of [
     ).toBe(true);
     if (viewport.width <= 760) {
       await page.getByRole("tab", { name: "更多", exact: true }).click();
-      await page.locator(".ant-mobile-navigation-sheet").getByText("动态笼位图", { exact: true }).click();
+      await page.locator(".ant-mobile-navigation-sheet").getByText("笼位管理", { exact: true }).last().click();
     } else await page.getByRole("menuitem", { name: /笼位管理/ }).click();
     const cages = page.getByRole("group", { name: "笼位图操作", exact: true });
     await cages.getByRole("button", { name: "多选录入", exact: true }).click();
@@ -197,6 +199,84 @@ for (const viewport of [
     await captureToolbar(page, testInfo, "cages-reservation", cages);
     await cages.getByRole("button", { name: "清空选择", exact: true }).click();
     await expect(cages.getByRole("button", { name: "确认预留", exact: true })).toHaveCount(0);
+    if (viewport.width === 1440) {
+      const room = async () => {
+        const response = await page.request.get("/api/infrastructure/rooms/room-e2e-8014?view=cages");
+        expect(response.ok()).toBe(true);
+        return (await response.json()) as RoomWorkspace;
+      };
+      let occupancyId = "";
+      try {
+        await cages.getByRole("button", { name: /待进驻/ }).click();
+        const placement = page.getByRole("dialog", { name: "待进驻动物", exact: true });
+        await placement.getByRole("button", { name: "选择空笼位", exact: true }).click();
+        await page.getByRole("button", { name: /8014-01-A1/ }).click();
+        await cages.getByRole("button", { name: "确认预留", exact: true }).click();
+        await expect(page.getByRole("status").filter({ hasText: "笼位已预留" })).toBeVisible();
+        const reserved = (await room()).placementTasks.find((task) => task.sourceBatchId === batchId)!;
+        expect(reserved.status).toBe("reserved");
+        occupancyId = reserved.reservedOccupancyId!;
+        expect(occupancyId).toBeTruthy();
+        await cages.getByRole("button", { name: /待进驻/ }).click();
+        let attempts = 0;
+        let releaseMoveIn!: () => void;
+        const moveInGate = new Promise<void>((resolve) => {
+          releaseMoveIn = resolve;
+        });
+        await page.route(`**/api/placement-tasks/${reserved.id}/move-in`, async (route) => {
+          attempts += 1;
+          if (attempts > 1) return route.fallback();
+          await moveInGate;
+          await route.fulfill({ status: 503, json: { error: "测试入驻失败，请重试" } });
+        });
+        // Ant loading icons contribute a prefix to the button's accessible name.
+        const moveIn = placement.getByRole("button", { name: /正式入驻$/ });
+        try {
+          await moveIn.click();
+          await expect(moveIn).toBeDisabled();
+          await expect(moveIn).toHaveClass(/ant-btn-loading/);
+        } finally {
+          releaseMoveIn();
+        }
+        await expect(placement.getByRole("alert")).toContainText("测试入驻失败，请重试");
+        await expect(moveIn).toBeEnabled();
+        const failed = await room();
+        expect(failed.placementTasks.find((task) => task.id === reserved.id)?.status).toBe("reserved");
+        expect(failed.occupancies.find((item) => item.id === occupancyId)?.status).toBe("reserved");
+        expect(attempts).toBe(1);
+        const labelColors = await placement.getByText("已预留", { exact: true }).evaluate((element) => ({
+          text: getComputedStyle(element).color,
+          background: getComputedStyle(element).backgroundColor,
+        }));
+        expect(labelColors.text).not.toBe(labelColors.background);
+        await page.screenshot({ path: testInfo.outputPath("placement-error.png"), animations: "disabled" });
+        await captureUiAudit(page, testInfo, "placement-recovery", placement);
+        expect(attempts).toBe(1);
+        const confirmedMoveIn = page.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname === `/api/placement-tasks/${reserved.id}/move-in`,
+        );
+        await moveIn.click();
+        const confirmed = (await (await confirmedMoveIn).json()) as PlacementWriteResponse;
+        expect(confirmed.task).toMatchObject({ id: reserved.id, status: "active" });
+        expect(confirmed.occupancy).toMatchObject({ id: occupancyId, status: "active" });
+        // The cage-room view intentionally omits completed placement tasks.
+        await expect
+          .poll(async () => {
+            const current = await room();
+            return [
+              current.placementTasks.some((task) => task.id === reserved.id),
+              current.occupancies.find((item) => item.id === occupancyId)?.status,
+            ];
+          })
+          .toEqual([false, "active"]);
+        expect(attempts).toBe(2);
+        await expect(placement.getByRole("alert")).toHaveCount(0);
+      } finally {
+        if (occupancyId) await page.request.delete(`/api/occupancies/${occupancyId}`);
+      }
+    }
     await page.request.delete(`/api/intake-batches/${batchId}`);
   });
 }

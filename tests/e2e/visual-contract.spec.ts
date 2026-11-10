@@ -102,7 +102,7 @@ test("primary actions and selected navigation use the official Ant Design blue",
   await expect(page.locator("html")).toHaveCSS("--primary", "#1677ff");
   await expect(page.locator("html")).toHaveCSS("--button-primary", "#1677ff");
   await page.getByRole("menuitem", { name: /笼位管理/ }).click();
-  await expect(page.getByRole("main")).toContainText(/动态笼位图|尚未创建饲养间/);
+  await expect(page.getByRole("main")).toContainText(/笼位管理|尚未创建饲养间/);
 });
 
 test("system status remains usable across supported viewports", async ({ page }, testInfo) => {

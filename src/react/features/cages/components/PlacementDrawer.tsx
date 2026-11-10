@@ -1,6 +1,6 @@
 import { formatPersonNames } from "../../../../domain/personNames";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
-import { Empty } from "antd";
+import { Alert, Empty, Tag } from "antd";
 import type { PlacementTask } from "../../../api/contracts";
 import { useMoveInPlacement } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
@@ -33,11 +33,28 @@ export function PlacementDrawer({
         </ActionButton>
       </div>
       <div className="modal-shell-body placement-react-list">
+        {moveIn.isError ? (
+          <Alert
+            role="alert"
+            type="error"
+            showIcon
+            title="正式入驻失败"
+            description={
+              <>
+                {moveIn.error.message}
+                <br />
+                请核对待进驻任务和笼位状态后，点击「正式入驻」重试。
+              </>
+            }
+          />
+        ) : null}
         {tasks.length ? (
           tasks.map((task) => (
             <article key={task.id} className={selectedTaskId === task.id ? "selected" : ""}>
               <div>
-                <span className={`pill ${task.status}`}>{task.status === "pending" ? "待分配" : "已预留"}</span>
+                <Tag color={task.status === "pending" ? "default" : "processing"} style={{ marginInlineEnd: 0 }}>
+                  {task.status === "pending" ? "待分配" : "已预留"}
+                </Tag>
                 <strong>{task.batchNo || "未命名批次"}</strong>
                 <small>
                   {task.plannedMoveInDate || "-"} · {formatPersonNames(task.pi) || "-"} ·{" "}
@@ -52,9 +69,9 @@ export function PlacementDrawer({
                 <ActionButton
                   icon={<ActionIcon name="reserve" />}
                   disabled={moveIn.isPending}
-                  loading={moveIn.isPending}
+                  loading={moveIn.isPending && moveIn.variables?.taskId === task.id}
                   tone="primary"
-                  onClick={() => void moveIn.mutateAsync({ taskId: task.id, actualMoveInDate: today })}
+                  onClick={() => moveIn.mutate({ taskId: task.id, actualMoveInDate: today })}
                 >
                   正式入驻
                 </ActionButton>
