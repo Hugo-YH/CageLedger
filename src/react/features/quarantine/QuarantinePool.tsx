@@ -2,6 +2,7 @@ import { formatPersonNames } from "../../../domain/personNames";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { PageSkeleton } from "../../components/PageSkeleton";
 import { CommandBar, HelpPopover, ListRefreshStatus } from "../../components/ui";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { useState } from "react";
 import { Alert, Button, DatePicker, Select, Space, Table, Tag } from "antd";
@@ -137,6 +138,9 @@ export function QuarantinePool({
           size="small"
           aria-busy={query.isFetching}
           dataSource={retained.data?.items ?? []}
+          locale={{
+            emptyText: <EmptyState title="暂无匹配的已接收动物" detail="可调整接收日期或检疫范围筛选后重新查看。" />,
+          }}
           scroll={{ x: 900 }}
           rowSelection={{
             selectedRowKeys: selected.map((s) => s.id),

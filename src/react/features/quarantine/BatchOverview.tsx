@@ -19,6 +19,7 @@ import {
 } from "antd";
 import type { QuarantineActivity, QuarantineOverview, QuarantinePage } from "../../../contracts/quarantine";
 import { useQuarantineQuery } from "../../api/quarantine";
+import { PageSkeleton } from "../../components/PageSkeleton";
 import { methodLabels, quarantineTestStateColor } from "./shared";
 import { speciesLabel } from "../../../domain/intake";
 
@@ -74,8 +75,10 @@ export function BatchActivity({ batchId }: { batchId: string }) {
             ),
           }))}
         />
+      ) : query.isPending ? (
+        <PageSkeleton compact embedded label="检疫操作历史" rows={3} />
       ) : (
-        <Empty description={query.isPending ? "正在读取操作历史" : "暂无操作历史"} />
+        <Empty description="暂无操作历史" />
       )}
       <Pagination
         size="small"

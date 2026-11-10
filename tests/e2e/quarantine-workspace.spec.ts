@@ -200,7 +200,32 @@ test("quarantine worklists show persisted records, reports and scoped activity",
   ).json();
   expect(prior.items).toHaveLength(0);
   await open(page, batch.name);
-  await page.getByRole("tab", { name: "操作历史", exact: true }).click();
+  let releaseActivity!: () => void;
+  let activityRequested!: () => void;
+  const activityGate = new Promise<void>((resolve) => {
+    releaseActivity = resolve;
+  });
+  const activityStarted = new Promise<void>((resolve) => {
+    activityRequested = resolve;
+  });
+  await page.route("**/api/quarantine/batches/*/activity?*", async (route) => {
+    activityRequested();
+    await activityGate;
+    await route.continue();
+  });
+  try {
+    await page.getByRole("tab", { name: "操作历史", exact: true }).click();
+    await activityStarted;
+    const activityLoading = page.getByRole("status", { name: "检疫操作历史正在加载", exact: true });
+    await expect(activityLoading).toBeVisible();
+    await expect(activityLoading).toHaveAttribute("aria-busy", "true");
+    await expect(page.getByText("暂无操作历史", { exact: true })).toHaveCount(0);
+    const path = testInfo.outputPath("quarantine-activity-loading.png");
+    await page.screenshot({ path, animations: "disabled" });
+    await testInfo.attach("quarantine-activity-loading", { path, contentType: "image/png" });
+  } finally {
+    releaseActivity();
+  }
   await expect(page.getByText("保存检测", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "出具报告", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "确认出具", exact: true }).click();

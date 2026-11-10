@@ -20,7 +20,7 @@ import {
   useUploadReceptionCertificate,
 } from "../../api/reception";
 import { queryKeys } from "../../api/queryKeys";
-import { ActionIcon, HelpPopover, Modal } from "../../components/ui";
+import { ActionIcon, EmptyState, HelpPopover, Modal } from "../../components/ui";
 import { formatDateTime, PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
@@ -558,7 +558,9 @@ export function ReceptionCertificateDrawer({
                     </Typography.Text>
                   </Flex>
                 ) : null}
-                {!lines.length && !phase ? <Empty description="识别失败可重试，或添加手工明细" /> : null}
+                {!lines.length && !phase ? (
+                  <EmptyState title="暂无接收登记明细" detail="识别结果或手工补充的登记明细会显示在此处。" />
+                ) : null}
                 <Form layout="vertical" disabled={!writable || pending}>
                   <Flex vertical gap={12}>
                     <CertificateGroupEditors

@@ -34,7 +34,7 @@ import {
 } from "../../api/reception";
 import { FilterableColumnTitle } from "../../components/FilterableTableHeader";
 import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
-import { ActionIcon, CommandBar, DataTable, Modal, ModalPresence } from "../../components/ui";
+import { ActionIcon, CommandBar, DataTable, EmptyState, Modal, ModalPresence } from "../../components/ui";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
@@ -387,7 +387,11 @@ export function ReceptionView() {
                     resizeKey="reception-list"
                     pagination={false}
                     refreshing={query.isFetching}
-                    locale={{ emptyText: "暂无已接收批次" }}
+                    locale={{
+                      emptyText: (
+                        <EmptyState title="暂无匹配的已接收批次" detail="可调整列筛选；批次确认接收后会显示在此处。" />
+                      ),
+                    }}
                   />
                 </div>
                 <Flex align="center" gap={12} justify="space-between" wrap>
