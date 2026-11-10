@@ -77,20 +77,28 @@ async function chooseOriginal(page: Page, row: Locator, id: string) {
     (response) =>
       response.url().includes(`/api/receptions/${id}/certificates?`) && response.request().method() === "POST",
   );
-  const chooser = page.waitForEvent("filechooser");
   await row.getByRole("button", { name: "合格证识别", exact: true }).click();
+  const source = page.getByRole("dialog", { name: "选择合格证来源", exact: true });
+  await expect(source.getByRole("button", { name: "读取剪贴板", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog", { name: `合格证与接收登记 · ${id}`, exact: true })).toBeHidden();
+  const chooser = page.waitForEvent("filechooser");
+  await source.getByRole("button", { name: "上传文件", exact: true }).click();
   await (await chooser).setFiles(syntheticPdf());
   return { response };
 }
 
-async function uploadOriginal(page: Page, id: string, responsePromise: Promise<Response>) {
+async function uploadOriginal(
+  page: Page,
+  id: string,
+  responsePromise: Promise<Response>,
+  name = "synthetic-certificate.pdf",
+) {
   const drawer = page.getByRole("dialog", { name: `合格证与接收登记 · ${id}`, exact: true });
   const response = await responsePromise;
   expect(response.ok(), await response.text()).toBe(true);
   const attachment = (await response.json()).attachment;
   expect(attachment.pageCount).toBe(1);
-  const image = drawer.getByRole("img", { name: "synthetic-certificate.pdf 首页原图", exact: true });
+  const image = drawer.getByRole("img", { name: `${name} 首页原图`, exact: true });
   await expect(image).toHaveAttribute("src", attachment.previewUrl);
   await expect
     .poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0))
@@ -98,6 +106,54 @@ async function uploadOriginal(page: Page, id: string, responsePromise: Promise<R
   await expect(drawer.getByRole("link", { name: "下载", exact: true })).toHaveAttribute("href", attachment.fileUrl);
   return drawer;
 }
+
+test("clipboard image original uploads after source choice and cancellation returns focus to the list", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const source = atob(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+    );
+    const bytes = Uint8Array.from(source, (character) => character.charCodeAt(0));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        read: () =>
+          Promise.resolve([
+            { types: ["image/png"], getType: () => Promise.resolve(new Blob([bytes], { type: "image/png" })) },
+          ]),
+      },
+    });
+  });
+  const { id, before, row } = await receivedBatch(page);
+  try {
+    const trigger = row.getByRole("button", { name: "合格证识别", exact: true });
+    await trigger.click();
+    const source = page.getByRole("dialog", { name: "选择合格证来源", exact: true });
+    await source.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(source).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    const response = page.waitForResponse(
+      (candidate) =>
+        candidate.url().includes(`/api/receptions/${id}/certificates?`) && candidate.request().method() === "POST",
+    );
+    await source.getByRole("button", { name: "读取剪贴板", exact: true }).click();
+    const drawer = await uploadOriginal(page, id, response, "剪贴板合格证.png");
+    await expect(drawer.getByText("合成识别失败：原件与草稿应保留", { exact: true })).toBeVisible();
+    const detail = await (await page.request.get(`/api/receptions/${id}/registration`)).json();
+    expect(detail.registration).toBeNull();
+    expect(detail.attachments).toHaveLength(1);
+    const original = await page.request.get(detail.attachments[0].fileUrl);
+    expect(original.headers()["content-type"]).toBe("image/png");
+    expect((await original.body()).toString("base64")).toBe(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+    );
+    expect(await (await page.request.get(`/api/intake-batches/${id}`)).json()).toEqual(before);
+  } finally {
+    await page.request.delete(`/api/intake-batches/${id}`);
+  }
+});
 
 test("certificate original, manual confirmation and export use the real backend without changing the reservation", async ({
   page,

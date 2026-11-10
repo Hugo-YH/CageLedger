@@ -32,6 +32,8 @@ import {
   certificateErrorMessage as errorMessage,
   certificateFileError,
   certificateLineErrors,
+  certificateMultipleFilesError,
+  certificateUploadAccept,
   hasStaleCertificateSource,
   mergeCertificateReviewWarnings,
   newCertificateLine,
@@ -208,7 +210,7 @@ export function ReceptionCertificateDrawer({
       setPendingRun(null);
       await recognizeAttachment(result.attachment, isCurrent, mode, { deferRegistrationRefresh: true });
     } catch (reason) {
-      if (isCurrent()) setError(errorMessage(reason, "上传失败，请重新选择 PDF 重试。当前登记草稿已保留。"));
+      if (isCurrent()) setError(errorMessage(reason, "上传失败，请重新选择合格证原件重试。当前登记草稿已保留。"));
     } finally {
       if (uploaded)
         void queryClient.invalidateQueries({ queryKey: queryKeys.receptionRegistration(record.batchId), exact: true });
@@ -347,8 +349,8 @@ export function ReceptionCertificateDrawer({
                       合格证原件
                     </Typography.Title>
                     <HelpPopover label="合格证原件说明" icon={<ExclamationCircleOutlined aria-hidden="true" />}>
-                      PDF 最大 30 MiB，选中后自动上传并按识别范围处理候选页面。每次最多识别 20
-                      页，超过时请拆分上传；原件始终保留。
+                      PDF、PNG、JPEG、WebP 每份最大 30 MiB，图片限单帧、2400 万像素。选中后自动上传并识别，
+                      原件始终保留。PDF 每次最多识别 20 页，超过时请拆分上传。
                     </HelpPopover>
                   </Flex>
                   <Space wrap role="group" aria-label="合格证原件操作">
@@ -357,13 +359,18 @@ export function ReceptionCertificateDrawer({
                         <input
                           ref={input}
                           type="file"
-                          accept="application/pdf,.pdf"
-                          aria-label="上传合格证 PDF"
+                          accept={certificateUploadAccept}
+                          aria-label="上传合格证文件"
                           hidden
                           disabled={!writable || pending}
                           onChange={(event) => {
-                            const file = event.target.files?.[0];
+                            const files = Array.from(event.target.files ?? []);
                             event.target.value = "";
+                            if (files.length > 1) {
+                              setError(certificateMultipleFilesError);
+                              return;
+                            }
+                            const file = files[0];
                             if (file) void uploadFile(file);
                           }}
                         />
@@ -461,7 +468,7 @@ export function ReceptionCertificateDrawer({
                         description={
                           <Flex vertical gap={4}>
                             <span>
-                              {pageSelection.mode === "all" ? "全部页面" : "自动筛选合格证页"}；PDF 共{" "}
+                              {pageSelection.mode === "all" ? "全部页面" : "自动筛选合格证页"}；原件共{" "}
                               {pageSelection.totalPages} 页。
                             </span>
                             <span>
@@ -506,7 +513,7 @@ export function ReceptionCertificateDrawer({
                     ) : null}
                   </>
                 ) : (
-                  <Empty description="尚未上传合格证 PDF" />
+                  <Empty description="尚未上传合格证原件" />
                 )}
               </Flex>
             </section>
@@ -554,7 +561,7 @@ export function ReceptionCertificateDrawer({
                   <Flex role="status" aria-live="polite" gap={12} align="center">
                     <Spin size="small" />
                     <Typography.Text>
-                      {phase === "upload" ? "正在上传 PDF 原件…" : "正在识别合格证，完成后自动预填…"}
+                      {phase === "upload" ? "正在上传合格证原件…" : "正在识别合格证，完成后自动预填…"}
                     </Typography.Text>
                   </Flex>
                 ) : null}

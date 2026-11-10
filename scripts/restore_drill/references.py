@@ -124,7 +124,17 @@ def references(conn):
         add(
             "reception-certificate",
             row["id"],
-            ["reception", "certificates", row["id"] + ".pdf"],
+            [
+                "reception",
+                "certificates",
+                row["id"]
+                + {
+                    "png": ".original.png",
+                    "jpg": ".original.jpg",
+                    "jpeg": ".original.jpg",
+                    "webp": ".original.webp",
+                }.get(row["name"].rsplit(".", 1)[-1].lower(), ".pdf"),
+            ],
             base + "/file" if base else None,
             size=row["size"],
             sha=row["sha256"],

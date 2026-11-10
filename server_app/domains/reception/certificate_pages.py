@@ -1,5 +1,6 @@
 """Select document candidates across the entire immutable PDF, with bounded rendering."""
 
+import hashlib
 import math
 import os
 import re
@@ -17,6 +18,7 @@ from server_app.config import (
 from server_app.runtime_logging import log_stage
 
 from . import certificate_files as files
+from .certificate_cache import cache
 
 VERSION = "document-frames-v1"
 MAX_AI_PAGES = 20
@@ -95,7 +97,13 @@ def prepare(content, page_count, first_preview, *, include_all=False):
                 original = root / "source.pdf"
                 original.write_bytes(content)
                 deadline = time.monotonic() + MAX_RENDER_SECONDS
-                dimensions = _info(original, page_count, env)
+                digest = hashlib.sha256(content).hexdigest()
+                _, facts = cache.remember(
+                    "dimensions",
+                    [VERSION, digest, page_count],
+                    lambda: (b"", {"dimensions": _info(original, page_count, env)}),
+                )
+                dimensions = facts["dimensions"]
                 selection = select_pages(dimensions, include_all=include_all)
                 if len(selection["selectedPages"]) > MAX_AI_PAGES:
                     raise ValueError(f"本次候选识别页超过{MAX_AI_PAGES}页，请拆分PDF后分别上传；原件已保留")
@@ -109,13 +117,22 @@ def prepare(content, page_count, first_preview, *, include_all=False):
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
                             raise files.CertificateUnavailableError("合格证逐页处理超时，请稍后重试或拆分PDF")
-                        image = files.render_page(
-                            original,
-                            target,
-                            number,
-                            env=env,
-                            timeout=min(RECEPTION_CERTIFICATE_PAGE_TIMEOUT_SECONDS, remaining),
+                        image, _ = cache.remember(
+                            "page",
+                            [files.RENDER_VERSION, digest, page_count, number],
+                            lambda number=number, target=target, remaining=remaining: (
+                                files.render_page(
+                                    original,
+                                    target,
+                                    number,
+                                    env=env,
+                                    timeout=min(RECEPTION_CERTIFICATE_PAGE_TIMEOUT_SECONDS, remaining),
+                                ),
+                                {},
+                            ),
                         )
+                        if time.monotonic() > deadline:
+                            raise files.CertificateUnavailableError("合格证逐页处理超时，请稍后重试或拆分PDF")
                     total_bytes += len(image)
                     if total_bytes > MAX_IMAGES_BYTES:
                         raise ValueError("识别图片合计超过30MiB，请拆分PDF后分别上传；原件已保留")

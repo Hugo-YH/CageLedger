@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 from PIL import Image, ImageChops
 
 from server_app.domains.reception import certificate_ai as ai
+from server_app.domains.reception import certificate_cache, certificate_image
 from server_app.domains.reception import certificate_files as files
 from server_app.domains.reception import certificate_pages as pages
 
@@ -46,6 +47,15 @@ def png():
 
 
 class CertificatePagesTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="certificate-page-cache-")
+        self.addCleanup(temporary.cleanup)
+        self.cache = certificate_cache.CertificateCache(temporary.name)
+        for module in (pages, certificate_image):
+            patcher = patch.object(module, "cache", self.cache)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_selects_all_paper_and_uncertain_frames_even_after_a_photo(self):
         selection = pages.select_pages(
             [
@@ -78,7 +88,11 @@ class CertificatePagesTests(unittest.TestCase):
         self.assertEqual(len(images), 2)
         diagnostics = [record.diagnostics for record in logs.records]
         self.assertEqual(
-            [item["stage"] for item in diagnostics if item["operation"] != "reception_certificate_render"],
+            [
+                item["stage"]
+                for item in diagnostics
+                if item["operation"] in {"reception_certificate_upload", "reception_certificate_recognition"}
+            ],
             ["pdf_parse", "preview_render", "pdf_parse", "page_render"],
         )
         raster_logs = [item for item in diagnostics if item["operation"] == "reception_certificate_render"]

@@ -40,7 +40,7 @@ import { useRetainedListData } from "../../hooks/useRetainedListData";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 import { DialogActivityContext } from "../../state/dialogActivity";
 import { ReceptionCertificateDrawer } from "./ReceptionCertificateDrawer";
-import { certificateFileError } from "./certificateDraft";
+import { ReceptionCertificateSourceModal } from "./ReceptionCertificateSourceModal";
 
 const selectionLimit = 200;
 const emptyFilterValues: string[] = [];
@@ -73,19 +73,10 @@ export function ReceptionView() {
   const [selectionVersion, setSelectionVersion] = useState("");
   const [exportRequest, setExportRequest] = useState<ReceptionExportRequest | null>(null);
   const [certificateTarget, setCertificateTarget] = useState<{ record: ReceptionRecord; file?: File } | null>(null);
-  const certificateInput = useRef<HTMLInputElement>(null);
-  const certificatePickerRecord = useRef<ReceptionRecord | null>(null);
+  const [certificateSource, setCertificateSource] = useState<ReceptionRecord | null>(null);
   const session = useSession();
   const certificateCanWrite =
     session.data?.user?.active !== false && ["admin", "room_admin"].includes(session.data?.user?.role ?? "");
-  useEffect(() => {
-    const input = certificateInput.current;
-    const cancel = () => {
-      certificatePickerRecord.current = null;
-    };
-    input?.addEventListener("cancel", cancel);
-    return () => input?.removeEventListener("cancel", cancel);
-  }, [certificateCanWrite]);
   const params: ReceptionListParams = { limit, offset, sortKey, sortDir, columnFilters };
   const query = useReceptions(params);
   const retained = useRetainedListData(query, queryKeys.receptions(params), "receptions");
@@ -262,12 +253,8 @@ export function ReceptionView() {
             onClick={() => {
               if (hasCertificate || !certificateCanWrite) {
                 setCertificateTarget({ record: item });
-              } else if (!certificatePickerRecord.current) {
-                certificatePickerRecord.current = item;
-                if (certificateInput.current) {
-                  certificateInput.current.value = "";
-                  certificateInput.current.click();
-                }
+              } else {
+                setCertificateSource(item);
               }
             }}
           >
@@ -416,30 +403,19 @@ export function ReceptionView() {
           )}
         </Flex>
       </div>
-      {certificateCanWrite ? (
-        <input
-          ref={certificateInput}
-          type="file"
-          accept="application/pdf,.pdf"
-          aria-label="选择待识别合格证 PDF"
-          hidden
-          onChange={(event) => {
-            const record = certificatePickerRecord.current;
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            certificatePickerRecord.current = null;
-            if (!record || !file || retained.blocked) return;
-            const error = certificateFileError(file);
-            if (error) {
-              void message.error(error);
-              return;
-            }
-            setCertificateTarget({ record, file });
-          }}
-        />
-      ) : null}
       <ModalPresence>
-        {certificateTarget ? (
+        {certificateSource ? (
+          <ReceptionCertificateSourceModal
+            key={`source-${certificateSource.batchId}`}
+            onClose={() => setCertificateSource(null)}
+            onFile={(file) => {
+              if (retained.blocked || !certificateCanWrite) return false;
+              setCertificateTarget({ record: certificateSource, file });
+              setCertificateSource(null);
+              return true;
+            }}
+          />
+        ) : certificateTarget ? (
           <ReceptionCertificateDrawer
             key={certificateTarget.record.batchId}
             record={certificateTarget.record}

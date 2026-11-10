@@ -13,7 +13,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory, TemporaryFile
 from threading import BoundedSemaphore
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from server_app.config import (
     RECEPTION_CERTIFICATE_FILES_PATH,
@@ -28,7 +28,16 @@ MAX_FILE_BYTES = 30 * 1024 * 1024
 MAX_ATTACHMENTS = 20
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
 MAX_IMAGE_EDGE = 3000
+MAX_SOURCE_IMAGE_PIXELS = 24_000_000
+RENDER_VERSION = "poppler-ppm-png-v1"
 _RENDER_SLOTS = BoundedSemaphore(2)
+_FORMATS = {
+    ".pdf": ("application/pdf", ".pdf"),
+    ".png": ("image/png", ".original.png"),
+    ".jpg": ("image/jpeg", ".original.jpg"),
+    ".jpeg": ("image/jpeg", ".original.jpg"),
+    ".webp": ("image/webp", ".original.webp"),
+}
 
 
 class CertificateUnavailableError(Exception):
@@ -38,6 +47,28 @@ class CertificateUnavailableError(Exception):
 def filename(value):
     name = str(value or "").replace("\\", "/").rsplit("/", 1)[-1]
     return "".join(char for char in name if char.isprintable())[:160].strip() or "合格证.pdf"
+
+
+def content_type(name):
+    entry = _FORMATS.get(Path(filename(name)).suffix.lower())
+    if entry is None:
+        raise ValueError("请选择PDF或PNG、JPEG、WebP合格证原件")
+    return entry[0]
+
+
+def validate(name, content):
+    if not isinstance(content, bytes) or not 0 < len(content) <= MAX_FILE_BYTES:
+        raise ValueError("合格证原件须为有效文件且不超过30MiB")
+    mime = content_type(name)
+    valid = {
+        "application/pdf": content.startswith(b"%PDF-"),
+        "image/png": content.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/jpeg": content.startswith(b"\xff\xd8\xff"),
+        "image/webp": content.startswith(b"RIFF") and content[8:12] == b"WEBP",
+    }
+    if not valid[mime]:
+        raise ValueError("合格证文件格式与扩展名不一致或文件已损坏")
+    return mime
 
 
 def tool(configured, name):
@@ -109,16 +140,44 @@ def render_page(original, target, number, *, env, timeout=RECEPTION_CERTIFICATE_
 
 
 def prepare(name, content):
-    if not isinstance(content, bytes) or not 0 < len(content) <= MAX_FILE_BYTES:
-        raise ValueError("合格证PDF须为有效文件且不超过30MiB")
     name = filename(name)
-    if not name.lower().endswith(".pdf") or not content.startswith(b"%PDF-"):
-        raise ValueError("请上传有效的PDF合格证原件")
+    mime = validate(name, content)
     try:
         with DOCUMENT_WORK.slot():
+            if mime != "application/pdf":
+                with _rendering_with_slot():
+                    return _prepare_image(name, content, mime)
             return _prepare_with_slot(name, content)
     except HeavyWorkBusy as exc:
         raise CertificateUnavailableError(str(exc)) from exc
+
+
+def _prepare_image(name, content, mime):
+    with log_stage("reception_certificate_upload", "image_preview", component="reception"):
+        try:
+            with Image.open(BytesIO(content)) as source:
+                if (
+                    Image.MIME.get(source.format) != mime
+                    or source.width * source.height > MAX_SOURCE_IMAGE_PIXELS
+                    or getattr(source, "n_frames", 1) != 1
+                ):
+                    raise ValueError("合格证图片须为不超过2400万像素的单帧PNG、JPEG或WebP")
+                image = ImageOps.exif_transpose(source)
+                image.thumbnail((MAX_IMAGE_EDGE, MAX_IMAGE_EDGE), Image.Resampling.LANCZOS)
+                if image.mode not in ("RGB", "RGBA"):
+                    image = image.convert("RGBA" if "transparency" in image.info else "RGB")
+                preview = None
+                for compression in (3, 6):
+                    with BytesIO() as output:
+                        image.save(output, format="PNG", compress_level=compression)
+                        preview = output.getvalue()
+                    if len(preview) <= MAX_IMAGE_BYTES:
+                        break
+                if not preview or len(preview) > MAX_IMAGE_BYTES:
+                    raise ValueError("合格证识别图片超过15MiB，请裁去无关背景后上传")
+        except (OSError, Image.DecompressionBombError) as exc:
+            raise ValueError("合格证图片无法读取，请检查原件或重新截图") from exc
+    return {"name": name, "sha256": hashlib.sha256(content).hexdigest(), "size": len(content), "page_count": 1}, preview
 
 
 def _prepare_with_slot(name, content):
@@ -187,14 +246,17 @@ def _rendering_with_slot():
         _RENDER_SLOTS.release()
 
 
-def path(identity, *, preview=False):
+def path(identity, *, preview=False, name="合格证.pdf"):
     if not re.fullmatch(r"[a-f0-9]{32}", identity):
         raise LookupError("合格证附件不存在")
-    return RECEPTION_CERTIFICATE_FILES_PATH / (identity + (".png" if preview else ".pdf"))
+    if not preview:
+        content_type(name)
+    suffix = ".png" if preview else _FORMATS[Path(filename(name)).suffix.lower()][1]
+    return RECEPTION_CERTIFICATE_FILES_PATH / (identity + suffix)
 
 
 @contextmanager
-def store(identity, original, preview):
+def store(identity, original, preview, *, name="合格证.pdf"):
     RECEPTION_CERTIFICATE_FILES_PATH.mkdir(parents=True, exist_ok=True, mode=0o700)
     owned = []
     committed = False
@@ -205,7 +267,7 @@ def store(identity, original, preview):
 
     try:
         with log_stage("reception_certificate_upload", "store_files", component="reception"):
-            for target, content in ((path(identity), original), (path(identity, preview=True), preview)):
+            for target, content in ((path(identity, name=name), original), (path(identity, preview=True), preview)):
                 with target.open("xb") as output:
                     owned.append(target)
                     os.fchmod(output.fileno(), 0o600)
@@ -219,8 +281,8 @@ def store(identity, original, preview):
                 target.unlink(missing_ok=True)
 
 
-def read(identity, *, preview=False):
-    target = path(identity, preview=preview)
+def read(identity, *, preview=False, name="合格证.pdf"):
+    target = path(identity, preview=preview, name=name)
     if (
         target.is_symlink()
         or not target.is_file()

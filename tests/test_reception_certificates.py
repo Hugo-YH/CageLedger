@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from email.message import Message
 from io import BytesIO
 from pathlib import Path
 from threading import Barrier
@@ -19,13 +20,13 @@ from openpyxl import load_workbook
 from PIL import Image
 
 from server_app.domains.reception import certificate_ai as ai
+from server_app.domains.reception import certificate_cache, certificate_image, repository, service, workbook
 from server_app.domains.reception import certificate_files as files
 from server_app.domains.reception import certificate_pages as pages
 from server_app.domains.reception import certificate_repository as repo
 from server_app.domains.reception import certificate_routes as routes
 from server_app.domains.reception import certificate_service as certificates
 from server_app.domains.reception import registration_service as registrations
-from server_app.domains.reception import repository, service, workbook
 from server_app.persistence.bootstrap import initialize_schema
 from server_app.repositories.entities import upsert_intake_batch
 from server_app.shared.concurrency import StaleWriteError
@@ -43,6 +44,9 @@ class ReceptionCertificateTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.path = self.root / "test.sqlite"
         self.file_root = self.root / "attachments"
+        image_cache = patch.object(certificate_image, "cache", certificate_cache.CertificateCache(self.root / "cache"))
+        image_cache.start()
+        self.addCleanup(image_cache.stop)
         self.conn = self.connect()
         self.addCleanup(self.conn.close)
         initialize_schema(self.conn)
@@ -315,6 +319,116 @@ class ReceptionCertificateTests(unittest.TestCase):
             self.assertRaises(files.CertificateUnavailableError),
         ):
             files.prepare("a.pdf", PDF)
+
+    def test_image_originals_are_immutable_single_page_sources_with_verified_downloads_and_backups(self):
+        from scripts.restore_drill.references import references
+
+        before = self.payload()
+        for image_format, suffix, mime in (
+            ("PNG", "png", "image/png"),
+            ("JPEG", "jpg", "image/jpeg"),
+            ("WEBP", "webp", "image/webp"),
+        ):
+            with self.subTest(image_format=image_format), BytesIO() as output:
+                Image.new("RGB", (120, 180), (180, 20, 40)).save(output, format=image_format)
+                original = output.getvalue()
+                with patch.object(files, "tool") as tool:
+                    attached = certificates.upload(
+                        ACTOR, self.batch["id"], self.batch["updatedAt"], f"剪贴板合格证.{suffix}", original
+                    )["attachment"]
+                tool.assert_not_called()
+                self.assertEqual(attached["pageCount"], 1)
+                self.assertEqual(attached["sha256"], hashlib.sha256(original).hexdigest())
+                self.assertEqual(certificates.download(self.conn, ACTOR, self.batch["id"], attached["id"])[0], original)
+                handler = Mock(command="GET", path=attached["fileUrl"])
+                handler.current_user.return_value = ACTOR
+                self.assertIs(
+                    routes.handle(handler, {"batchId": self.batch["id"], "attachmentId": attached["id"]}), True
+                )
+                handler.send_download.assert_called_once_with(original, attached["name"], mime)
+                self.assertNotEqual(
+                    files.path(attached["id"], name=attached["name"]), files.path(attached["id"], preview=True)
+                )
+                referenced = next(
+                    item
+                    for item in references(self.conn)["local"]
+                    if item["id"] == attached["id"] and item["kind"] == "reception-certificate"
+                )
+                self.assertEqual(referenced["sha256"], attached["sha256"])
+                self.assertTrue((self.file_root / Path(referenced["path"]).name).is_file())
+                with patch.object(ai, "deepseek_chat_json", return_value=(self.extraction(), {})):
+                    run = self.recognize(attached["id"])
+                self.assertEqual(run["status"], "completed")
+                self.assertEqual(run["result"]["pageSelection"]["selectedPages"], [1])
+                self.page_prepare.assert_not_called()
+        self.assertEqual(self.payload(), before)
+        self.assertIsNone(repo.registration(self.conn, self.batch["id"]))
+        self.assertEqual(self.count("reception.certificate_uploaded"), 3)
+
+    def test_image_size_animation_and_format_fail_without_writes(self):
+        with BytesIO() as output:
+            Image.new("RGB", (100, 150), "red").save(output, format="PNG")
+            original = output.getvalue()
+        with patch.object(files, "MAX_SOURCE_IMAGE_PIXELS", 100), self.assertRaisesRegex(ValueError, "2400万"):
+            certificates.upload(ACTOR, self.batch["id"], self.batch["updatedAt"], "large.png", original)
+        for name, value in (("bad.jpg", original), ("bad.png", b"\x89PNG\r\n\x1a\ntruncated"), ("bad.svg", b"<svg/>")):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                certificates.upload(ACTOR, self.batch["id"], self.batch["updatedAt"], name, value)
+        with BytesIO() as output:
+            Image.new("RGB", (100, 100), "red").save(
+                output, format="PNG", save_all=True, append_images=[Image.new("RGB", (100, 100), "blue")]
+            )
+            with self.assertRaisesRegex(ValueError, "单帧"):
+                certificates.upload(ACTOR, self.batch["id"], self.batch["updatedAt"], "animated.png", output.getvalue())
+        self.assertEqual(repo.attachments(self.conn, self.batch["id"]), [])
+        self.assertEqual(self.count("reception.certificate_uploaded"), 0)
+        with patch.object(certificates, "audit", side_effect=RuntimeError("rollback")), self.assertRaises(RuntimeError):
+            certificates.upload(ACTOR, self.batch["id"], self.batch["updatedAt"], "valid.png", original)
+        self.assertEqual(repo.attachments(self.conn, self.batch["id"]), [])
+        self.assertEqual(list(self.file_root.iterdir()), [])
+
+    def test_phone_image_orientation_and_resolution_apply_only_to_preview(self):
+        source = Image.new("RGB", (100, 150), (180, 20, 40))
+        exif = source.getexif()
+        exif[274] = 6
+        with BytesIO() as output:
+            source.save(output, format="JPEG", exif=exif)
+            original = output.getvalue()
+        metadata, preview = files.prepare("phone.jpeg", original)
+        with Image.open(BytesIO(preview)) as processed:
+            self.assertEqual(processed.size, (150, 100))
+            self.assertEqual(processed.mode, "RGB")
+        self.assertEqual(metadata["sha256"], hashlib.sha256(original).hexdigest())
+        with patch.object(files, "MAX_IMAGE_EDGE", 90):
+            _, resized = files.prepare("phone.jpeg", original)
+        with Image.open(BytesIO(resized)) as processed:
+            self.assertEqual(processed.size, (90, 60))
+
+    def test_image_multipart_http_upload_reuses_original_and_never_confirms_registration(self):
+        with BytesIO() as output:
+            Image.new("RGB", (100, 150), "red").save(output, format="PNG")
+            original = output.getvalue()
+        body = (
+            b'--certificate\r\nContent-Disposition: form-data; name="file"; filename="clipboard.png"\r\n'
+            b"Content-Type: image/png\r\n\r\n" + original + b"\r\n--certificate--\r\n"
+        )
+        for status in (201, 200):
+            handler = Mock(
+                command="POST",
+                path=f"/api/receptions/{self.batch['id']}/certificates?expectedBatchUpdatedAt={self.batch['updatedAt']}",
+                rfile=BytesIO(body),
+            )
+            handler.current_user.return_value = ACTOR
+            handler.headers = Message()
+            handler.headers["Content-Type"] = "multipart/form-data; boundary=certificate"
+            handler.headers["Content-Length"] = str(len(body))
+            response = routes.handle(handler, {"batchId": self.batch["id"]})
+            self.assertEqual(response.status, status)
+            self.assertEqual(response.payload["reused"], status == 200)
+            attached = response.payload["attachment"]
+            self.assertEqual(certificates.download(self.conn, ACTOR, self.batch["id"], attached["id"])[0], original)
+        self.assertIsNone(repo.registration(self.conn, self.batch["id"]))
+        self.assertEqual(self.count("reception.certificate_uploaded"), 1)
 
     def test_opaque_paths_file_rollback_and_symlink_rejection(self):
         for identity in ("../escape", "a" * 31, "A" * 32, "/tmp/file"):

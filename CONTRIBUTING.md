@@ -35,7 +35,7 @@ Vite开发服务拒绝通过静态文件或raw模块读取本工程的`data/`目
 容器已安装 Writer 和 Noto CJK 字体；本机应安装宋体、思源宋体或 Noto Serif CJK 字体。
 转换使用独立临时配置目录，超时或转换失败时不会出具报告。已有 Word 报告下载时转换为 PDF，原存档不覆盖。
 
-接收管理的合格证PDF上传使用Poppler的`pdfinfo`和`pdftoppm`校验原件、生成首页PNG；本机开发安装`brew install poppler`，生产镜像已包含`poppler-utils`。可用`CAGELEDGER_PDFINFO_BIN`、`CAGELEDGER_PDFTOPPM_BIN`指定可执行文件路径。原件保留全部页面，AI只接收首页图片；缺少组件时返回局部503提示，不阻塞接收列表或影响已有数据。
+接收管理的合格证PDF上传使用Poppler的`pdfinfo`和`pdftoppm`校验原件、生成首页PNG；本机开发安装`brew install poppler`，生产镜像已包含`poppler-utils`。可用`CAGELEDGER_PDFINFO_BIN`、`CAGELEDGER_PDFTOPPM_BIN`指定可执行文件路径。原件保留全部页面，AI接收全部候选合格证页，明确手机画幅照片可跳过并支持全页重试；PNG、JPEG、WebP原件生成独立预览后按单页识别。页面支持剪贴板读取、粘贴或文件上传，识别仍须人工确认。缺少组件时返回局部503提示，不阻塞接收列表或影响已有数据。
 
 ## 分支和提交
 

@@ -7,16 +7,27 @@ import type {
 import { abbreviateSupplier } from "../../../domain/intake";
 
 export const certificateSizeLimit = 30 * 1024 * 1024;
+export const certificateUploadAccept = "application/pdf,image/png,image/jpeg,image/webp,.pdf,.png,.jpg,.jpeg,.webp";
+export const certificateMultipleFilesError = "每次请选择一份合格证原件；多份文件请逐份上传，避免遗漏页面。";
 export const certificateSexOptions = ["雄性", "雌性", "雌雄", "未知"];
+const certificateMimeTypes: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+};
 
 export function certificateErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
 export function certificateFileError(file: File) {
-  if (!/\.pdf$/i.test(file.name) || (file.type && file.type !== "application/pdf")) return "请选择 PDF 合格证原件。";
-  if (file.size > certificateSizeLimit) return "PDF 原件不能超过 30 MiB。";
-  if (!file.size) return "PDF 原件不能为空。";
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  const mime = certificateMimeTypes[extension ?? ""];
+  if (!mime || (file.type && file.type.toLowerCase() !== mime)) return "请选择 PDF、PNG、JPEG 或 WebP 合格证原件。";
+  if (file.size > certificateSizeLimit) return "合格证原件不能超过 30 MiB。";
+  if (!file.size) return "合格证原件不能为空。";
   return "";
 }
 

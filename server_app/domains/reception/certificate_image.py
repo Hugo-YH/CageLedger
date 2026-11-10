@@ -5,19 +5,31 @@ from io import BytesIO
 
 from PIL import Image, ImageChops
 
-VERSION = "white-margin-v1"
+from .certificate_cache import cache
+
+VERSION = "white-margin-v2"
 
 
 def prepare(preview):
     if not isinstance(preview, bytes) or not 0 < len(preview) <= 15 * 1024 * 1024:
         raise ValueError("合格证页面图片无效")
+    processed, facts = cache.remember(
+        "preprocess", [VERSION, hashlib.sha256(preview).hexdigest()], lambda: _prepare(preview)
+    )
+    return (processed if facts["applied"] else preview), facts
+
+
+def _prepare(preview):
     with Image.open(BytesIO(preview)) as source:
         if source.format != "PNG" or not 0 < source.width <= 3000 or not 0 < source.height <= 3000:
             raise ValueError("合格证页面图片格式或尺寸无效")
-        image = source.convert("RGBA")
-        background = Image.new("RGBA", image.size, "white")
-        background.alpha_composite(image)
-        image = background.convert("RGB")
+        if "A" in source.getbands() or "transparency" in source.info:
+            image = source.convert("RGBA")
+            background = Image.new("RGBA", image.size, "white")
+            background.alpha_composite(image)
+            image = background.convert("RGB")
+        else:
+            image = source.convert("RGB")
     width, height = image.size
     # Every non-near-white pixel counts, including stamps, faint text and margin notes.
     red, green, blue = image.split()

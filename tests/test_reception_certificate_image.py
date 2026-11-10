@@ -2,13 +2,14 @@
 
 import base64
 import hashlib
+import tempfile
 import unittest
 from io import BytesIO
 from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
-from server_app.domains.reception import certificate_ai, certificate_image
+from server_app.domains.reception import certificate_ai, certificate_cache, certificate_image
 
 
 def png(image):
@@ -18,6 +19,13 @@ def png(image):
 
 
 class CertificateImageTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="certificate-image-cache-")
+        self.addCleanup(temporary.cleanup)
+        patcher = patch.object(certificate_image, "cache", certificate_cache.CertificateCache(temporary.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_crop_retains_both_certificates_coloured_stamp_and_faint_margin_note(self):
         image = Image.new("RGB", (1000, 1400), "white")
         draw = ImageDraw.Draw(image)

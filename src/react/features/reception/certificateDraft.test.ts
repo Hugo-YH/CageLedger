@@ -68,9 +68,24 @@ describe("certificate draft validation", () => {
     );
   });
 
-  it("accepts PDF originals up to 30 MiB and rejects other files before upload", () => {
-    expect(certificateFileError(new File(["pdf"], "certificate.pdf", { type: "application/pdf" }))).toBe("");
-    expect(certificateFileError(new File(["png"], "certificate.png", { type: "image/png" }))).toContain("PDF");
+  it("accepts PDF and supported image originals up to 30 MiB and rejects invalid files before upload", () => {
+    for (const [extension, type] of [
+      ["pdf", "application/pdf"],
+      ["png", "image/png"],
+      ["jpg", "image/jpeg"],
+      ["jpeg", "image/jpeg"],
+      ["webp", "image/webp"],
+    ]) {
+      expect(certificateFileError(new File(["original"], `certificate.${extension}`, { type }))).toBe("");
+      expect(certificateFileError(new File(["original"], `certificate.${extension}`))).toBe("");
+    }
+    for (const file of [
+      new File(["image"], "certificate.gif", { type: "image/gif" }),
+      new File(["image"], "certificate.pdf", { type: "image/png" }),
+      new File(["image"], "certificate.png", { type: "application/pdf" }),
+    ])
+      expect(certificateFileError(file)).toContain("PDF、PNG、JPEG 或 WebP");
+    expect(certificateFileError(new File([], "empty.png", { type: "image/png" }))).toContain("不能为空");
     const file = new File(["pdf"], "certificate.pdf", { type: "application/pdf" });
     Object.defineProperty(file, "size", { value: certificateSizeLimit + 1 });
     expect(certificateFileError(file)).toContain("30 MiB");

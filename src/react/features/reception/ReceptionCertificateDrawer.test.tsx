@@ -225,7 +225,7 @@ it("automatically uploads and recognizes a selected PDF, prefills every certific
       />,
     ),
   );
-  await screen.findByText("正在上传 PDF 原件…");
+  await screen.findByText("正在上传合格证原件…");
   expect(screen.getByRole("radio", { name: "自动筛选合格证页" })).toBeChecked();
   expect(screen.getByRole("radio", { name: "全部页面" })).toBeDisabled();
   detail = { ...detail, attachments: [attachment] };
@@ -250,6 +250,23 @@ it("automatically uploads and recognizes a selected PDF, prefills every certific
   fireEvent.click(screen.getAllByText("高级信息：来源原件与证件序号")[1]);
   expect(screen.getByRole("spinbutton", { name: "明细2 证件序号" })).toHaveValue("2");
   expect(screen.getByRole("spinbutton", { name: "明细2 证内行号" })).toHaveValue("2");
+  expect(requestJson).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: "PUT" }));
+});
+
+it("uploads an image original unchanged and recognizes it without automatically confirming registration", async () => {
+  detail = { ...detail, attachments: [] };
+  const original = new File(["original-image"], "合格证.png", { type: "image/png" });
+  const imageAttachment = { ...attachment, name: original.name, pageCount: 1 };
+  vi.mocked(requestMultipart).mockImplementation(() => {
+    detail = { ...detail, attachments: [imageAttachment] };
+    return Promise.resolve({ attachment: imageAttachment, reused: false });
+  });
+  mockRecognition(() => Promise.resolve({ run: completedRun(2) }));
+  render(view(<ReceptionCertificateDrawer record={record} initialFile={original} onClose={vi.fn()} onSaved={saved} />));
+  await screen.findByRole("textbox", { name: "明细1 合格证编号" });
+  expect(requestMultipart).toHaveBeenCalledOnce();
+  expect(vi.mocked(requestMultipart).mock.calls[0][1].get("file")).toBe(original);
+  expect(screen.getByRole("img", { name: "合格证.png 首页原图" })).toHaveAttribute("src", imageAttachment.previewUrl);
   expect(requestJson).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: "PUT" }));
 });
 
@@ -292,7 +309,7 @@ it("refreshes a reused upload when replacement is declined and preserves its exi
   vi.mocked(requestMultipart).mockResolvedValue({ attachment, reused: true });
   render(view());
   await screen.findByRole("textbox", { name: "明细1 合格证编号" });
-  fireEvent.change(screen.getByLabelText("上传合格证 PDF"), {
+  fireEvent.change(screen.getByLabelText("上传合格证文件"), {
     target: { files: [new File(["%PDF"], "合格证.pdf", { type: "application/pdf" })] },
   });
   await screen.findAllByText("替换本附件的编辑明细？");
@@ -392,7 +409,7 @@ it("appends a newly uploaded PDF without replacing another attachment's saved li
   render(view());
   await screen.findByRole("textbox", { name: "明细1 合格证编号" });
   fireEvent.change(screen.getByRole("textbox", { name: "明细1 合格证编号" }), { target: { value: "KEEP-EDIT" } });
-  fireEvent.change(screen.getByLabelText("上传合格证 PDF"), {
+  fireEvent.change(screen.getByLabelText("上传合格证文件"), {
     target: { files: [new File(["%PDF"], "第二份.pdf", { type: "application/pdf" })] },
   });
   expect(await screen.findByRole("textbox", { name: "明细2 合格证编号" })).toHaveValue("SECOND");
@@ -408,7 +425,7 @@ it("uses the selected all-pages mode for an uploaded PDF and shows its returned 
   render(view());
   await screen.findByRole("radio", { name: "全部页面" });
   fireEvent.click(screen.getByRole("radio", { name: "全部页面" }));
-  fireEvent.change(screen.getByLabelText("上传合格证 PDF"), {
+  fireEvent.change(screen.getByLabelText("上传合格证文件"), {
     target: { files: [new File(["%PDF"], "合格证.pdf", { type: "application/pdf" })] },
   });
   await screen.findByText("送识别页码：第 1、2、3、4 页。");

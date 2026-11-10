@@ -490,16 +490,16 @@
         {
           "method": "POST",
           "path": "/api/receptions/{batchId}/certificates",
-          "purpose": "上传不可覆盖的合格证PDF原件，生成首页预览并按SHA去重",
+          "purpose": "上传不可覆盖的合格证PDF或图片原件，生成PNG预览并按SHA去重",
           "permission": "staff",
-          "request": "query expectedBatchUpdatedAt；multipart file，PDF不超过30MiB，每批次最多20份",
+          "request": "query expectedBatchUpdatedAt；multipart file，PDF/PNG/JPEG/WebP不超过30MiB；图片限2400万像素单帧，每批次最多20份",
           "response": "{attachment,reused}；新附件201，重复200；损坏400，组件不可用503",
           "protection": "reception_certificate_write"
         },
         {
           "method": "POST",
           "path": "/api/receptions/{batchId}/certificates/{attachmentId}/recognize",
-          "purpose": "逐页筛选PDF文档候选并识别全部候选页的合格证及动物明细，保留任务状态与来源草稿",
+          "purpose": "识别PDF候选页或单页图片中的合格证及动物明细，保留任务状态与来源草稿",
           "permission": "staff",
           "request": "{requestId,expectedBatchUpdatedAt,includeAllPages?:boolean}；默认按画幅排除明显手机照片，可选全部页面；同requestId绑定范围；最多20页候选及30MiB图片，最多2个同时AI请求",
           "response": "{run}；status running/completed/failed；result含pageSelection与lines/warnings，失败保留原件，不自动确认登记",
@@ -508,9 +508,9 @@
         {
           "method": "GET",
           "path": "/api/receptions/{batchId}/certificates/{attachmentId}/file",
-          "purpose": "登录后校验附件归属与SHA256，下载不可修改的合格证PDF原件",
+          "purpose": "登录后校验附件归属与SHA256，下载不可修改的合格证原件",
           "request": "batchId、attachmentId",
-          "response": "application/pdf；不存在或跨批次404，校验失败503",
+          "response": "application/pdf或image/png、image/jpeg、image/webp；不存在或跨批次404，校验失败503",
           "protection": "read"
         },
         {

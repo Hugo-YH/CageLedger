@@ -121,6 +121,14 @@ beforeEach(() => {
   previewLoader = () => Promise.resolve(preview);
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   vi.mocked(requestJson).mockImplementation(async (url) => {
     const path = new URL(String(url), "http://localhost");
     if (path.pathname === "/api/receptions/preview") return previewLoader();
@@ -175,7 +183,7 @@ it("shows the list without directories, previews frozen versions, and keeps sele
   expect(within(dialog).getByRole("button", { name: "确认导出" })).toBeEnabled();
 });
 
-it("opens the system PDF picker before a modal and keeps the main list usable when details fail", async () => {
+it("asks for the original source before opening a file picker and keeps the list usable when details fail", async () => {
   const previous = vi.mocked(requestJson).getMockImplementation()!;
   let rejectDetail: (reason: Error) => void = () => {};
   vi.mocked(requestJson).mockImplementation((url, init) =>
@@ -192,15 +200,24 @@ it("opens the system PDF picker before a modal and keeps the main list usable wh
   const trigger = screen.getByRole("button", { name: "合格证识别" });
   expect(trigger).toHaveClass("ant-btn-color-primary", "ant-btn-variant-solid");
   fireEvent.click(trigger);
+  const source = screen.getByRole("dialog", { name: "选择合格证来源" });
+  expect(within(source).getByRole("button", { name: "读取剪贴板" })).toBeEnabled();
+  expect(chooser).not.toHaveBeenCalled();
+  expect(requestJson).toHaveBeenCalledTimes(1);
+  fireEvent.click(within(source).getByRole("button", { name: "上传文件" }));
   expect(chooser).toHaveBeenCalledOnce();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  const input = screen.getByLabelText("选择待识别合格证 PDF");
+  const input = screen.getByLabelText("选择待识别合格证文件");
   fireEvent(input, new Event("cancel"));
+  expect(source).toBeInTheDocument();
+  fireEvent.click(within(source).getByRole("button", { name: "取消" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(requestJson).toHaveBeenCalledTimes(1);
   fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("button", { name: "上传文件" }));
   expect(chooser).toHaveBeenCalledTimes(2);
-  fireEvent.change(input, { target: { files: [new File(["%PDF"], "original.pdf", { type: "application/pdf" })] } });
+  fireEvent.change(screen.getByLabelText("选择待识别合格证文件"), {
+    target: { files: [new File(["%PDF"], "original.pdf", { type: "application/pdf" })] },
+  });
   const drawer = screen.getByRole("dialog", { name: `合格证与接收登记 · ${record.batchNo}` });
   expect(within(drawer).getByRole("status", { name: "合格证详情正在加载" })).toBeInTheDocument();
   await act(async () => {

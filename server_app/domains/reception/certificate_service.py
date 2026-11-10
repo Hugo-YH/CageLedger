@@ -135,10 +135,7 @@ def detail(conn, actor, batch_id):
 
 def upload(actor, batch_id, expected, name, content):
     authorize(actor, write=True)
-    if not isinstance(content, bytes) or not 0 < len(content) <= certificate_files.MAX_FILE_BYTES:
-        raise ValueError("合格证PDF须为有效文件且不超过30MiB")
-    if not certificate_files.filename(name).lower().endswith(".pdf") or not content.startswith(b"%PDF-"):
-        raise ValueError("请上传有效的PDF合格证原件")
+    certificate_files.validate(name, content)
     with log_stage("reception_certificate_upload", "lookup", component="reception"):
         digest = hashlib.sha256(content).hexdigest()
         with connect_db() as conn:
@@ -155,7 +152,7 @@ def upload(actor, batch_id, expected, name, content):
         "preview_sha256": hashlib.sha256(preview).hexdigest(),
         "preview_size": len(preview),
     }
-    with certificate_files.store(item["id"], content, preview) as commit_files:
+    with certificate_files.store(item["id"], content, preview, name=item["name"]) as commit_files:
         with log_stage("reception_certificate_upload", "save", component="reception"):
             with connect_db() as conn:
                 begin_write(conn)
@@ -181,7 +178,7 @@ def download(conn, actor, batch_id, attachment_id, *, preview=False):
 
 
 def verified_file(item, *, preview=False):
-    content = certificate_files.read(item["id"], preview=preview)
+    content = certificate_files.read(item["id"], preview=preview, name=item["name"])
     digest = item["preview_sha256"] if preview else item["sha256"]
     size = item["preview_size"] if preview else item["size"]
     if not digest or size != len(content) or hashlib.sha256(content).hexdigest() != digest:
@@ -269,9 +266,19 @@ def recognize(actor, batch_id, attachment_id, body):
             with log_stage("reception_certificate_recognition", "verify_files", component="reception"):
                 first_preview = verified_file(attached, preview=True)
                 original = verified_file(attached)
-            images, selection = certificate_pages.prepare(
-                original, attached["page_count"], first_preview, include_all=include_all
-            )
+            if certificate_files.content_type(attached["name"]) == "application/pdf":
+                images, selection = certificate_pages.prepare(
+                    original, attached["page_count"], first_preview, include_all=include_all
+                )
+            else:
+                images = [{"pageNumber": 1, "image": first_preview}]
+                selection = {
+                    "totalPages": 1,
+                    "selectedPages": [1],
+                    "skippedPhotoPages": [],
+                    "mode": mode,
+                    "version": "single-image-v1",
+                }
             raw["pageSelection"] = selection
             result, evidence, _usage = certificate_ai.recognize(images, attachment_id, attempt["id"], batch)
             result["pageSelection"] = {

@@ -12,7 +12,7 @@ from server_app.web.request_body import read_body
 from server_app.web.response import JsonResponse
 
 from . import certificate_service, registration_service
-from .certificate_files import CertificateUnavailableError
+from .certificate_files import CertificateUnavailableError, content_type
 
 
 def handle(handler, params):
@@ -36,7 +36,7 @@ def handle(handler, params):
                     content, name = certificate_service.download(
                         conn, actor, batch_id, params["attachmentId"], preview=preview
                     )
-            handler.send_download(content, name, "image/png" if preview else "application/pdf")
+            handler.send_download(content, name, "image/png" if preview else content_type(name))
             return True
         if handler.command == "PUT":
             body = handler.read_json_body()
@@ -52,9 +52,11 @@ def handle(handler, params):
         expected = query.get("expectedBatchUpdatedAt", [None])[0]
         with connect_db() as conn:
             certificate_service.load_batch(conn, batch_id, expected=expected, writing=True)
-        name, content = parse_multipart_upload(
-            handler.headers.get("Content-Type", ""), read_body(handler.headers, handler.rfile)
-        )
+        with log_stage("reception_certificate_upload", "body_read", component="reception"):
+            body = read_body(handler.headers, handler.rfile)
+        with log_stage("reception_certificate_upload", "multipart_parse", component="reception"):
+            name, content = parse_multipart_upload(handler.headers.get("Content-Type", ""), body)
+        del body
         result = certificate_service.upload(actor, batch_id, expected, name, content)
         return JsonResponse(result, 200 if result["reused"] else 201)
     except PermissionError as exc:
