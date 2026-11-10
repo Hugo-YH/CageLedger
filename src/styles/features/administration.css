@@ -489,6 +489,7 @@
   container-name: system-status;
   container-type: inline-size;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   width: 100%;
   max-width: 1440px;
@@ -507,6 +508,7 @@
 
 .system-runtime-section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
 }
@@ -842,6 +844,7 @@
 
 [data-ui="system-status-page"] .system-history-card .ant-card-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 16px;
 }

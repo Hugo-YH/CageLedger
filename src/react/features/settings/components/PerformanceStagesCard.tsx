@@ -27,6 +27,7 @@ export function PerformanceStagesCard({ performance }: { performance: SystemPerf
       <Table
         size="small"
         pagination={false}
+        scroll={{ x: 720 }}
         rowKey="key"
         dataSource={data}
         locale={{ emptyText: "暂无处理阶段样本" }}
