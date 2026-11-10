@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { SettlementCandidate } from "../../../api/contracts";
 import { DataTable } from "../../../components/ui";
+import { EmptyState } from "../../../components/ui/EmptyState";
 import type { ListDensity } from "../../../components/ui/ListViewControls";
 import { buildSettlementColumns, type SettlementColumnsOptions } from "./settlementCandidateColumns";
 
@@ -24,6 +25,9 @@ export const SettlementCandidateTable = memo(function SettlementCandidateTable({
         size={density}
         columns={columns}
         dataSource={items}
+        locale={{
+          emptyText: <EmptyState title="暂无匹配的结算项" detail="可调整列筛选，或核对已保存的费用明细。" />,
+        }}
         pagination={false}
         resizeKey="settlement-candidates"
         rowKey="id"
