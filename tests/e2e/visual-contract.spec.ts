@@ -41,7 +41,12 @@ test("quantity workspace keeps its desktop and mobile layout contract", async ({
   await expect(entryTable).toBeVisible();
   await expect(entryTable.locator("thead th")).toHaveCount(10);
   await expect(entryTable.locator(".ant-input").first()).toBeVisible();
-  await expect(entryTable.locator(".ant-select").first()).toHaveCount(1);
+  const animalDetails = page.getByRole("switch", { name: "动物数量", exact: true });
+  await expect(animalDetails).toHaveAttribute("aria-checked", "false");
+  await expect(entryTable.getByRole("combobox")).toHaveCount(0);
+  await animalDetails.click();
+  await expect(animalDetails).toHaveAttribute("aria-checked", "true");
+  await expect(entryTable.getByRole("combobox", { name: "第 1 行增加类型", exact: true })).toBeVisible();
   await expect(page.locator(".quantity-entry-wrap")).toHaveCSS("max-height", "none");
 
   await page.getByRole("textbox", { name: /月份/ }).click();

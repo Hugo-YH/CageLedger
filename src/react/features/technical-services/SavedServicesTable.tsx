@@ -4,6 +4,7 @@ import { formatPersonNames } from "../../../domain/personNames";
 import type { TechnicalServiceListItem } from "../../../contracts/technicalServices";
 import type { ServiceListParams } from "../../api/technicalServices";
 import { DataTable } from "../../components/ui";
+import { EmptyState } from "../../components/ui/EmptyState";
 import type { ListDensity } from "../../components/ui/ListViewControls";
 import { ServiceColumnTitle } from "./ServiceColumnTitle";
 
@@ -59,6 +60,14 @@ export const SavedServicesTable = memo(function SavedServicesTable({
       rowKey="id"
       loading={pending}
       dataSource={items}
+      locale={{
+        emptyText: (
+          <EmptyState
+            title="暂无匹配的技术服务明细"
+            detail="可调整列筛选，或在「录入技术服务明细」中录入并保存明细。"
+          />
+        ),
+      }}
       scroll={{ x: 1200 }}
       pagination={false}
       size={density}
