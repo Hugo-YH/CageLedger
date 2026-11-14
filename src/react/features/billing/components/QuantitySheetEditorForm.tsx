@@ -7,7 +7,7 @@ import { Alert, Button, DatePicker, Input, Popover, Select, Space, Tag, Typograp
 import dayjs from "dayjs";
 import type { SessionUser } from "../../../api/contracts";
 import { createQuantityRow } from "../../../../domain/quantitySheets";
-import { ActionButton, CommandBar } from "../../../components/ui";
+import { ActionButton, CommandBar, ReadOnlyInput } from "../../../components/ui";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import type { QuantitySheetEditor } from "../hooks/useQuantitySheetEditor";
 import { todayMonth, QUANTITY_ROWS_PER_PAGE } from "../quantitySheetEditorModel";
@@ -262,16 +262,14 @@ function AutoFilledField({
 function ReadOnlyField({ label, value, placeholder }: { label: string; value: string; placeholder?: string }) {
   const labelId = useId();
   return (
-    <div aria-labelledby={labelId} className="quantity-ant-field quantity-readonly-field" role="group">
+    <div aria-labelledby={labelId} className="quantity-ant-field" role="group">
       <span id={labelId}>
         {label}
         <Tag variant="filled" className="quantity-field-source">
           系统带入
         </Tag>
       </span>
-      <Typography.Text className="readonly-field" type={value ? undefined : "secondary"}>
-        {value || placeholder || "-"}
-      </Typography.Text>
+      <ReadOnlyInput aria-label={label} value={value} placeholder={placeholder || "-"} />
     </div>
   );
 }

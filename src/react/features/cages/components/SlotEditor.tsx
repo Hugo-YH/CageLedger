@@ -4,7 +4,7 @@ import { Alert, Input } from "antd";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { useSaveOccupancy } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
-import { ActionButton } from "../../../components/ui";
+import { ActionButton, ReadOnlyInput } from "../../../components/ui";
 import { animalAgeText, cageCode, emptyOccupancy } from "../../../../domain/cages";
 import { Field, SexSelect, SlotStatusSelect } from "./CageFormControls";
 import { today } from "./cageWorkspaceDate";
@@ -114,11 +114,11 @@ export function SlotEditor({
               />
               <div className="monkey-age-field">
                 <label htmlFor="monkey-age">年龄</label>
-                <Input
+                <ReadOnlyInput
                   id="monkey-age"
                   type="text"
                   value={ageText || "自动计算"}
-                  readOnly
+                  title="根据出生日期自动计算，无需编辑；可选中复制"
                   aria-describedby="monkey-age-help"
                 />
                 <small id="monkey-age-help">根据出生日期自动计算</small>

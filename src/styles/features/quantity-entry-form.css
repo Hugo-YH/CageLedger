@@ -85,13 +85,6 @@
   background: var(--surface-soft);
 }
 
-.react-quantity-layout .quantity-readonly-field > .ant-typography {
-  min-height: var(--control-height);
-  display: flex;
-  align-items: center;
-  overflow-wrap: anywhere;
-}
-
 .react-quantity-layout .quantity-ant-field :is(.ant-input, .ant-select, .ant-picker),
 .react-quantity-layout .custom-billing-segment-fields :is(.ant-input, .ant-input-number) {
   width: 100%;

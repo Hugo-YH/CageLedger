@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import type { Researcher, ResearcherEditable } from "../../../contracts/researchers";
 import { ApiError } from "../../api/client";
 import { useResearcher, useSaveResearcher } from "../../api/researchers";
+import { ReadOnlyInput } from "../../components/ui";
 import { PageSkeleton, PageState } from "../../components/WorkspaceUi";
 import { Modal } from "../../components/ui";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
@@ -192,7 +193,11 @@ function ResearcherEditor({
         {canEdit ? (
           <Form layout="vertical" className="researcher-edit-form" disabled={save.isPending}>
             <Form.Item label="账号">
-              <Input aria-label="账号" value={baseline.account} readOnly />
+              <ReadOnlyInput
+                aria-label="账号"
+                value={baseline.account}
+                title="账号由人员目录带入，无需编辑；可选中复制"
+              />
             </Form.Item>
             {RESEARCHER_FIELDS.map(([field, label]) => (
               <Form.Item key={field} label={label}>

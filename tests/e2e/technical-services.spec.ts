@@ -423,6 +423,9 @@ test("saved service details edit, protect unsaved changes and delete through UI"
   await filterServiceColumn(page, "月份", ["2026-10"]);
   const row = page.getByRole("row").filter({ hasText: "Z2099003" });
   await row.getByRole("button", { name: "编辑", exact: true }).click();
+  const price = page.getByRole("textbox", { name: "收费标准", exact: true });
+  await expect(price).toHaveAttribute("readonly", "");
+  await expect(price).toHaveValue(/^30\.00 元／/);
   await page.getByLabel("计费数量 1", { exact: true }).fill("3");
   await page.getByRole("button", { name: "保存技术服务明细", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "技术服务明细", exact: true })).toBeHidden();

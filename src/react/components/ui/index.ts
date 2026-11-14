@@ -6,6 +6,7 @@ export { DataTable } from "./DataTable";
 export { DateInput } from "./DateInput";
 export { ListRefreshStatus } from "./ListRefreshStatus";
 export { RowActions } from "./RowActions";
+export { ReadOnlyInput } from "./ReadOnlyInput";
 export { Dialog } from "./Dialog";
 export { Drawer } from "./Drawer";
 export { Modal } from "./Modal";

@@ -80,12 +80,40 @@ test(
     await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
     await page.getByRole("combobox", { name: "房间号", exact: true }).click();
     await page.locator(".ant-select-dropdown").getByText("8014", { exact: true }).click();
-    await expect(page.getByRole("group", { name: "登记人员 系统带入", exact: true })).toHaveText(
-      "登记人员系统带入系统管理员",
-    );
-    await expect(page.getByRole("group", { name: "房间管理员 系统带入", exact: true })).toHaveText(
-      "房间管理员系统带入E2E 房间管理员",
-    );
+    const registrar = page.getByRole("textbox", { name: "登记人员", exact: true });
+    await expect(registrar).toHaveValue("系统管理员");
+    await expect(page.getByRole("textbox", { name: "房间管理员", exact: true })).toHaveValue("E2E 房间管理员");
+    await expect(registrar).toHaveAttribute("readonly", "");
+    await expect(registrar).toBeEnabled();
+    await registrar.focus();
+    await registrar.press("ControlOrMeta+A");
+    expect(await registrar.evaluate((input: HTMLInputElement) => [input.selectionStart, input.selectionEnd])).toEqual([
+      0,
+      "系统管理员".length,
+    ]);
+    await registrar.press("x");
+    await expect(registrar).toHaveValue("系统管理员");
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+      await registrar.hover();
+      await expect(registrar).toHaveCSS("cursor", "not-allowed");
+      const readonlyBackground = await registrar.evaluate((input) => getComputedStyle(input).backgroundColor);
+      const editableBackground = await iacucInput.evaluate((input) => getComputedStyle(input).backgroundColor);
+      expect(readonlyBackground).not.toBe(editableBackground);
+      await page.locator(".quantity-field-group-basic").screenshot({
+        path: testInfo.outputPath(`readonly-fields-${colorScheme}.png`),
+        animations: "disabled",
+      });
+    }
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.locator(".quantity-field-group-basic").screenshot({
+      path: testInfo.outputPath("readonly-fields-mobile.png"),
+      animations: "disabled",
+    });
+    await page.setViewportSize({ width: 1180, height: 900 });
     await page.getByRole("button", { name: /计费扩展选项/ }).click();
     await page.getByRole("switch", { name: "全额减免", exact: true }).check();
     await iacucInput.fill("E2E-IACUC-001");

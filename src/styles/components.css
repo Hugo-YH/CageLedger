@@ -925,6 +925,16 @@
   }
 }
 
+[data-ui="read-only-input"].ant-input {
+  background: var(--surface-soft);
+  cursor: not-allowed;
+}
+
+[data-ui="read-only-input"].ant-input:hover:not(:focus) {
+  border-color: var(--line);
+  background: var(--surface-soft);
+}
+
 /* Panel headers, table surfaces and form notices (migrated from
  * ux-foundation.css). */
 

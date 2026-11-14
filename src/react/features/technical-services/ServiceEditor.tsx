@@ -10,7 +10,7 @@ import { createClientId } from "../../../domain/id";
 import { useServiceCatalog, useServiceMutation } from "../../api/technicalServices";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { ActionIcon, CommandBar, DataTable, DateInput } from "../../components/ui";
+import { ActionIcon, CommandBar, DataTable, DateInput, ReadOnlyInput } from "../../components/ui";
 import { useQuantityIacuc } from "../billing/hooks/useQuantityIacuc";
 import { ServiceTotals } from "./ServiceTotals";
 
@@ -286,10 +286,13 @@ export function ServiceEditor({
                   options={(catalog.data?.items || []).map((item) => ({ value: item.id, label: item.name }))}
                 />
               </Form.Item>
-              <Form.Item label="收费标准">
-                <Typography.Text>
-                  {selected ? `${price.toFixed(2)} 元／${selected.unit}` : "选择服务项目后自动匹配"}
-                </Typography.Text>
+              <Form.Item label="收费标准" htmlFor="service-unit-price">
+                <ReadOnlyInput
+                  id="service-unit-price"
+                  value={selected ? `${price.toFixed(2)} 元／${selected.unit}` : ""}
+                  placeholder="选择服务项目后自动匹配"
+                  title="根据服务项目和计费类别自动匹配，无需编辑；可选中复制"
+                />
               </Form.Item>
             </div>
             <section className="technical-service-project-info" aria-label="IACUC项目信息">
