@@ -1,4 +1,5 @@
 import type { QuantitySheetRow } from "../../../api/contracts";
+import type { QuantitySheetValidationIssue } from "../../../../domain/quantitySheets";
 
 export const QUANTITY_ROWS_PER_PAGE = 31;
 const QUANTITY_FIELD_ORDER: Record<string, number> = {
@@ -15,6 +16,8 @@ const QUANTITY_FIELD_ORDER: Record<string, number> = {
 export type QuantityRowHandle = {
   getRow: () => QuantitySheetRow;
   setCalculated: (animals: number, cages: number) => void;
+  setValidationIssues?: (issues: QuantitySheetValidationIssue[]) => void;
+  clearValidationIssue?: (field: QuantitySheetValidationIssue["field"]) => void;
 };
 
 export function quantityTabTarget(

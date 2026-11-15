@@ -76,8 +76,29 @@ test(
     const savedMonth = await page.locator("#quantity-sheet-month").inputValue();
     expect(savedMonth).toMatch(/^\d{4}-\d{2}$/);
     const iacucInput = page.getByRole("combobox", { name: "IACUC 编号", exact: true });
+    await expect(page.getByRole("textbox", { name: "房间管理员", exact: true })).toHaveAttribute(
+      "placeholder",
+      "请先选择房间",
+    );
+    await page.getByRole("button", { name: "保存统计表", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "房间号", exact: true })).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByRole("combobox", { name: "房间号", exact: true })).toBeFocused();
+    await page.locator(".quantity-field-group-basic").screenshot({
+      path: testInfo.outputPath("quantity-field-errors.png"),
+      animations: "disabled",
+    });
     await iacucInput.fill("Z202506");
     await expect(page.locator('#quantity-iacuc-options option[value="Z2025063"]')).toHaveCount(1);
+    await iacucInput.fill("Z2025063");
+    await iacucInput.press("Tab");
+    const project = page.getByRole("textbox", { name: "项目名称", exact: true });
+    await expect(project).toHaveValue("E2E IACUC 候选项目");
+    await project.fill("人工修订项目");
+    await expect(page.locator(".quantity-auto-field").filter({ has: project })).toContainText("已手动调整");
+    await page.getByRole("button", { name: "恢复项目名称来源值", exact: true }).click();
+    await expect(project).toHaveValue("E2E IACUC 候选项目");
+    await expect(project).toBeFocused();
+    await expect(page.getByRole("dialog", { name: "确认保存数量统计表", exact: true })).toHaveCount(0);
     await page.getByRole("combobox", { name: "房间号", exact: true }).click();
     await page.locator(".ant-select-dropdown").getByText("8014", { exact: true }).click();
     const registrar = page.getByRole("textbox", { name: "登记人员", exact: true });

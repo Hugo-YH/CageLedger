@@ -3,7 +3,7 @@ import { formatPersonNames } from "../../../../domain/personNames";
 import { UploadOutlined } from "@ant-design/icons";
 import { Alert, Button, Flex, Form, Input, Space, Switch, Tag, Typography, Upload } from "antd";
 import { Modal } from "../../../components/ui/Modal";
-import { useContext, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
 
 import { fundingBookRemark, reviewFundingBookNos, type FundingBookReference } from "../../../../domain/fundingBookNo";
@@ -79,6 +79,19 @@ export function WorkflowRegistrationModal({
   onCancel: () => void;
   onRegistered: () => void;
 }) {
+  const [pendingId, setPendingId] = useState("");
+  // Block close events immediately, before React commits the busy appearance.
+  const pendingIdRef = useRef("");
+  const pending = Boolean(target && pendingId === target.id);
+  function pendingChanged(id: string, value: boolean) {
+    if (!value && pendingIdRef.current !== id) return;
+    pendingIdRef.current = value ? id : "";
+    setPendingId(pendingIdRef.current);
+  }
+  function cancel() {
+    if (target && pendingIdRef.current === target.id) return;
+    onCancel();
+  }
   return (
     <Modal
       destroyOnHidden
@@ -87,10 +100,19 @@ export function WorkflowRegistrationModal({
       rootClassName="app-modal-root workflow-registration-modal"
       title={`交回登记 · ${target?.month ?? ""} ${formatPersonNames(target?.pi)}`}
       width={640}
-      onCancel={onCancel}
+      closable={pending ? { disabled: true } : true}
+      keyboard={!pending}
+      mask={{ closable: !pending }}
+      onCancel={cancel}
     >
       {target ? (
-        <WorkflowRegistrationForm key={target.id} target={target} onCancel={onCancel} onRegistered={onRegistered} />
+        <WorkflowRegistrationForm
+          key={target.id}
+          target={target}
+          onCancel={cancel}
+          onRegistered={onRegistered}
+          onPendingChange={(value) => pendingChanged(target.id, value)}
+        />
       ) : null}
     </Modal>
   );
@@ -100,10 +122,12 @@ function WorkflowRegistrationForm({
   target,
   onCancel,
   onRegistered,
+  onPendingChange,
 }: {
   target: BillingWorkflow;
   onCancel: () => void;
   onRegistered: () => void;
+  onPendingChange: (pending: boolean) => void;
 }) {
   const advance = useAdvanceWorkflow();
   const feedback = useOperationFeedback();
@@ -115,6 +139,7 @@ function WorkflowRegistrationForm({
   const [reimbursementAttachment, setReimbursementAttachment] = useState<BillingWorkflowAttachment | null>(null);
   const save = useAsyncFormAction("交回登记失败，请重试");
   const upload = useAsyncFormAction("扫描件上传失败，请重试");
+  const operationPending = useRef(false);
   const [fundingBookReview, setFundingBookReview] = useState<{
     otherProjectOptions: FundingBookReference[];
     unknownFundingBookNos: string[];
@@ -128,68 +153,82 @@ function WorkflowRegistrationForm({
   );
   const fundingOptions = fundingBookOptions.data?.items ?? [];
 
+  async function runOperation(action: () => Promise<void>) {
+    if (operationPending.current) return;
+    operationPending.current = true;
+    onPendingChange(true);
+    try {
+      await action();
+    } finally {
+      operationPending.current = false;
+      onPendingChange(false);
+    }
+  }
+
   async function submitRegistration(confirmed = false) {
-    if (upload.pending) return;
-    await save.run(
-      async () => {
-        const values = await form.validateFields();
-        const reimbursementForms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
-        if (values.reimbursementFormReturned && !reimbursementForms.length) return;
-        const review = fundingBookOptions.data
-          ? reviewFundingBookNos(
-              reimbursementForms.map((entry) => entry.fundingBookNo),
-              fundingBookOptions.data.items.map((option) => option.value),
-              fundingBookOptions.data.piFundingBookOptions,
-            )
-          : { otherProjectOptions: [], unknownFundingBookNos: [] };
-        if (!confirmed && (review.otherProjectOptions.length || review.unknownFundingBookNos.length)) {
-          setFundingBookReview(review);
-          return;
-        }
-        setFundingBookReview({ otherProjectOptions: [], unknownFundingBookNos: [] });
-        const automaticRemarks = review.otherProjectOptions.map(fundingBookRemark);
-        const reimbursementFormNote = [values.reimbursementFormNote?.trim() || "", ...automaticRemarks]
-          .filter((value, index, entries) => value && entries.indexOf(value) === index)
-          .join("\n");
-        if (automaticRemarks.length) form.setFieldValue("reimbursementFormNote", reimbursementFormNote);
-        await advance.mutateAsync({
-          workflowId: target.id,
-          toStatus: "statement_archived",
-          registration: {
-            reimbursementForms: reimbursementForms.map((entry) => ({
-              formNo: entry.formNo,
-              amount: Number(entry.amount) || 0,
-              fundingBookNo: entry.fundingBookNo?.trim() || "",
-            })),
-            signedStatementReturned: Boolean(values.signedStatementReturned),
-            signedStatementNote: values.signedStatementNote?.trim() || "",
-            reimbursementFormReturned: Boolean(values.reimbursementFormReturned),
-            reimbursementFormNote,
-          },
-        });
-        return true;
-      },
-      (registered) => {
-        if (registered) {
-          feedback.success("结算单交回登记已保存", `${target.month} · ${formatPersonNames(target.pi)}`);
-          onRegistered();
-        }
-      },
+    await runOperation(() =>
+      save.run(
+        async () => {
+          const values = await form.validateFields();
+          const reimbursementForms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
+          if (values.reimbursementFormReturned && !reimbursementForms.length) return;
+          const review = fundingBookOptions.data
+            ? reviewFundingBookNos(
+                reimbursementForms.map((entry) => entry.fundingBookNo),
+                fundingBookOptions.data.items.map((option) => option.value),
+                fundingBookOptions.data.piFundingBookOptions,
+              )
+            : { otherProjectOptions: [], unknownFundingBookNos: [] };
+          if (!confirmed && (review.otherProjectOptions.length || review.unknownFundingBookNos.length)) {
+            setFundingBookReview(review);
+            return;
+          }
+          setFundingBookReview({ otherProjectOptions: [], unknownFundingBookNos: [] });
+          const automaticRemarks = review.otherProjectOptions.map(fundingBookRemark);
+          const reimbursementFormNote = [values.reimbursementFormNote?.trim() || "", ...automaticRemarks]
+            .filter((value, index, entries) => value && entries.indexOf(value) === index)
+            .join("\n");
+          if (automaticRemarks.length) form.setFieldValue("reimbursementFormNote", reimbursementFormNote);
+          await advance.mutateAsync({
+            workflowId: target.id,
+            toStatus: "statement_archived",
+            registration: {
+              reimbursementForms: reimbursementForms.map((entry) => ({
+                formNo: entry.formNo,
+                amount: Number(entry.amount) || 0,
+                fundingBookNo: entry.fundingBookNo?.trim() || "",
+              })),
+              signedStatementReturned: Boolean(values.signedStatementReturned),
+              signedStatementNote: values.signedStatementNote?.trim() || "",
+              reimbursementFormReturned: Boolean(values.reimbursementFormReturned),
+              reimbursementFormNote,
+            },
+          });
+          return true;
+        },
+        (registered) => {
+          if (registered) {
+            feedback.success("结算单交回登记已保存", `${target.month} · ${formatPersonNames(target.pi)}`);
+            onRegistered();
+          }
+        },
+      ),
     );
   }
 
   async function handleUpload(kind: "settlement" | "reimbursement", file: File) {
-    if (save.pending) return false;
-    await upload.run(
-      () => uploadWorkflowAttachment(target.id, kind, file),
-      (attachment) => {
-        if (kind === "settlement") setSettlementAttachment(attachment ?? null);
-        else setReimbursementAttachment(attachment ?? null);
-        feedback.success(
-          kind === "settlement" ? "结算单扫描件已上传" : "报销单扫描件已上传",
-          attachment?.originalName || file.name,
-        );
-      },
+    await runOperation(() =>
+      upload.run(
+        () => uploadWorkflowAttachment(target.id, kind, file),
+        (attachment) => {
+          if (kind === "settlement") setSettlementAttachment(attachment ?? null);
+          else setReimbursementAttachment(attachment ?? null);
+          feedback.success(
+            kind === "settlement" ? "结算单扫描件已上传" : "报销单扫描件已上传",
+            attachment?.originalName || file.name,
+          );
+        },
+      ),
     );
     return false;
   }
@@ -226,7 +265,11 @@ function WorkflowRegistrationForm({
       form={form}
       initialValues={registrationInitialValues(target)}
       layout="vertical"
-      onFinish={() => void submitRegistration()}
+      onSubmitCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void submitRegistration();
+      }}
     >
       {save.error || upload.error ? (
         <Alert role="alert" showIcon style={{ marginBottom: 12 }} title={save.error || upload.error} type="error" />
@@ -298,8 +341,15 @@ function WorkflowRegistrationForm({
         </>
       ) : null}
       <Flex justify="flex-end" gap={8} style={{ marginTop: 16 }}>
-        <Button onClick={onCancel}>取消</Button>
-        <Button disabled={upload.pending} loading={save.pending} type="primary" onClick={() => void form.submit()}>
+        <Button disabled={save.pending || upload.pending} onClick={onCancel}>
+          取消
+        </Button>
+        <Button
+          disabled={upload.pending}
+          loading={save.pending}
+          type="primary"
+          onClick={() => void submitRegistration()}
+        >
           保存登记
         </Button>
       </Flex>

@@ -253,6 +253,91 @@ test("certificate original, manual confirmation and export use the real backend 
   }
 });
 
+test("completed recognition can be loaded after refresh without another AI request or an automatic registration", async ({
+  page,
+}, info) => {
+  const { id, before, recognitionIds, row } = await receivedBatch(page);
+  try {
+    const response = await page.request.post(
+      `/api/receptions/${id}/certificates?expectedBatchUpdatedAt=${encodeURIComponent(before.item.updatedAt)}`,
+      { multipart: { file: syntheticPdf() } },
+    );
+    expect(response.ok()).toBe(true);
+    const { attachment } = await response.json();
+    let completed = false;
+    await page.route(`**/api/receptions/${id}/registration`, async (route) => {
+      const actual = await route.fetch();
+      const data = await actual.json();
+      await route.fulfill({
+        response: actual,
+        json: {
+          ...data,
+          runs: [
+            {
+              id: "existing-recognition",
+              attachmentId: attachment.id,
+              batchId: id,
+              sourceBatchUpdatedAt: before.item.updatedAt,
+              status: completed ? "completed" : "running",
+              error: "",
+              model: "synthetic",
+              createdAt: "2026-11-01",
+              updatedAt: "2026-11-01",
+              result: completed
+                ? {
+                    warnings: [],
+                    lines: [
+                      {
+                        id: "existing-recognition-line",
+                        attachmentId: attachment.id,
+                        runId: "existing-recognition",
+                        certificateIndex: 1,
+                        certificateLineIndex: 1,
+                        certificateNo: "EXISTING-RESULT",
+                        certificateStrain: "ICR",
+                        grade: "SPF",
+                        supplier: "合成出售单位",
+                        sex: "雄性",
+                        quantity: 3,
+                        specification: "6-8w",
+                        weightRaw: "",
+                        ageRaw: "",
+                        receiptId: null,
+                        experimentCertificateNo: "",
+                        notes: "",
+                      },
+                    ],
+                  }
+                : null,
+            },
+          ],
+        },
+      });
+    });
+    await page.reload();
+    await openNavigationEntry(page, "接收管理", "接收列表");
+    await row.getByRole("button", { name: "核对登记", exact: true }).click();
+    const drawer = page.getByRole("dialog", { name: `合格证与接收登记 · ${id}`, exact: true });
+    await expect(drawer.getByRole("button", { name: "刷新状态", exact: true })).toBeVisible();
+    await drawer.getByRole("button", { name: "添加手工明细", exact: true }).click();
+    await drawer.getByRole("textbox", { name: "明细1 合格证编号", exact: true }).fill("KEEP-BEFORE-LOAD");
+    completed = true;
+    await drawer.getByRole("button", { name: "刷新状态", exact: true }).click();
+    await expect(drawer.getByRole("button", { name: "载入识别结果", exact: true })).toBeVisible();
+    await drawer.screenshot({ path: info.outputPath("certificate-completed-result.png"), animations: "disabled" });
+    await drawer.getByRole("button", { name: "载入识别结果", exact: true }).click();
+    await expect(drawer.locator('input[aria-label="明细1 合格证编号"]')).toHaveValue("KEEP-BEFORE-LOAD");
+    await page.getByRole("button", { name: "载入并替换", exact: true }).click();
+    await expect(drawer.getByRole("textbox", { name: "明细1 合格证编号", exact: true })).toHaveValue("EXISTING-RESULT");
+    await expect(drawer.getByRole("spinbutton", { name: "明细1 证载数量", exact: true })).toHaveValue("3");
+    expect(recognitionIds).toHaveLength(0);
+    expect((await (await page.request.get(`/api/receptions/${id}/registration`)).json()).registration).toBeNull();
+    expect(await (await page.request.get(`/api/intake-batches/${id}`)).json()).toEqual(before);
+  } finally {
+    await page.request.delete(`/api/intake-batches/${id}`);
+  }
+});
+
 test("failed recognition retains the real uploaded original and current manual draft", async ({ page }) => {
   test.setTimeout(60_000);
   const { id, before, recognitionIds, row } = await receivedBatch(page);

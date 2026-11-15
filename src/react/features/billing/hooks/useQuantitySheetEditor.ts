@@ -11,7 +11,6 @@ import {
   normalizeQuantitySheet,
   roomBillingProfile,
   roomBillingUnit,
-  validateQuantitySheet,
 } from "../../../../domain/quantitySheets";
 import type { QuantityRowHandle } from "../components/QuantityEditorPages";
 import {
@@ -23,6 +22,8 @@ import {
   type QuantitySaveReceipt,
 } from "../quantitySheetEditorModel";
 import { useQuantityIacuc } from "./useQuantityIacuc";
+import { quantityAutoFillState } from "../quantitySheetEditorModel";
+import { useQuantityValidation } from "./useQuantityValidation";
 
 const normalizeIacuc = (value: string) => value.trim().toUpperCase();
 
@@ -35,6 +36,9 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   const identitiesQuery = usePrincipalIdentities(metadataEnabled);
   const rooms = roomsQuery.data?.items || [];
   const [draft, setDraft] = useState(() => createQuantitySheet(todayMonth, user.displayName));
+  const rowRefs = useRef<Array<QuantityRowHandle | null>>([]);
+  const { validationIssues, setValidationIssues, validationRowsExpanded, validateSheet, resetValidation } =
+    useQuantityValidation(rowRefs);
   const peopleEdits = useRef({ code: "", pi: false, owner: false });
   const fillFromIacuc = useCallback(
     (match: { iacuc: string; project?: string; pi?: string; owner?: string; funding?: string }) => {
@@ -49,8 +53,9 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
         owner: protectedFields.owner ? current.owner : match.owner || current.owner,
         funding: match.funding || current.funding,
       }));
+      setValidationIssues((current) => current.filter((issue) => issue.field !== "iacuc"));
     },
-    [],
+    [setValidationIssues],
   );
   const iacucLookup = useQuantityIacuc(draft.iacuc, fillFromIacuc);
   const [editorRows, setEditorRows] = useState(() => makeEditorRows(draft));
@@ -61,7 +66,6 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   const saveRequest = useLatestRequest(Boolean(confirmSave));
   useEffect(() => saveRequest.invalidate(), [confirmSave, saveRequest]);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
-  const rowRefs = useRef<Array<QuantityRowHandle | null>>([]);
   const selectedRoom = rooms.find((room) => room.id === draft.roomId);
   const unit = roomBillingUnit(selectedRoom);
   const billingProfile = roomBillingProfile(selectedRoom);
@@ -105,14 +109,17 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   const calculateBalances = useCallback(() => {
     let animals = 0;
     let cages = 0;
+    let hasAnimalBalance = false;
     rowRefs.current.forEach((handle) => {
       if (!handle) return;
       const row = handle.getRow();
+      hasAnimalBalance ||= Number(row.animalCount || 0) > 0;
       const autoAnimals = Math.max(animals + Number(row.addedCount || 0) - Number(row.removedCount || 0), 0);
       animals = row.animalCount == null ? autoAnimals : row.animalCount;
       cages = row.cageCount == null ? (animalDetails ? animals : cages) : row.cageCount;
       handle.setCalculated(animals, cages);
     });
+    if (hasAnimalBalance) rowRefs.current.forEach((handle) => handle?.clearValidationIssue?.("animalCount"));
   }, [animalDetails]);
 
   const cancelRecalculation = useCallback(() => {
@@ -143,6 +150,9 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   }, [customBillingSegmentCount, draft.fullExemption, freeCageEnabled, tierPriorityEnabled]);
 
   function setField<K extends keyof QuantitySheet>(key: K, value: QuantitySheet[K]) {
+    setValidationIssues((current) =>
+      current.filter((issue) => issue.field !== key && !(key === "month" && issue.field === "customBillingSegments")),
+    );
     if (key === "iacuc") {
       iacucLookup.reset();
       const code = normalizeIacuc(String(value));
@@ -153,6 +163,16 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
       peopleEdits.current.owner = true;
     }
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function restoreSourceField(key: "project" | "funding" | "pi" | "owner") {
+    if (!iacucMatch || normalizeIacuc(iacucMatch.iacuc) !== normalizeIacuc(draft.iacuc)) return;
+    const source = iacucMatch[key];
+    if (!quantityAutoFillState(draft[key], source, true, key === "pi" || key === "owner").canRestore || !source) return;
+    if (key === "pi" || key === "owner") {
+      peopleEdits.current = { ...peopleEdits.current, code: normalizeIacuc(draft.iacuc), [key]: false };
+    }
+    setDraft((current) => ({ ...current, [key]: source }));
   }
 
   function setFreeCageEnabled(enabled: boolean) {
@@ -193,6 +213,21 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   }
 
   function updateCustomBillingSegment(id: string, update: Partial<CustomBillingSegment>) {
+    const changed = new Set(Object.keys(update));
+    const datesChanged = changed.has("startDate") || changed.has("endDate");
+    if (datesChanged) {
+      changed.add("startDate");
+      changed.add("endDate");
+    }
+    if (changed.has("quantityMode")) changed.add("quantity");
+    setValidationIssues((current) =>
+      current.filter(
+        (issue) =>
+          issue.field !== "customBillingSegments" ||
+          (!(issue.segmentId === id && issue.segmentField && changed.has(issue.segmentField)) &&
+            !(!issue.segmentId && (datesChanged || changed.has("quantityMode")))),
+      ),
+    );
     setDraft((current) => ({
       ...current,
       customBillingSegments: current.customBillingSegments.map((segment) =>
@@ -202,6 +237,11 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   }
 
   function removeCustomBillingSegment(id: string) {
+    setValidationIssues((current) =>
+      current.filter(
+        (issue) => issue.field !== "customBillingSegments" || (issue.segmentId !== id && Boolean(issue.segmentId)),
+      ),
+    );
     setDraft((current) => {
       const customBillingSegments = current.customBillingSegments.filter((segment) => segment.id !== id);
       return {
@@ -214,6 +254,8 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   }
 
   function chooseRoom(roomId: string) {
+    setValidationIssues((current) => current.filter((issue) => issue.field !== "roomId"));
+    rowRefs.current.forEach((handle) => handle?.clearValidationIssue?.("animalCount"));
     const room = rooms.find((item) => item.id === roomId);
     const billingUnit = roomBillingUnit(room);
     const nextBillingProfile = roomBillingProfile(room);
@@ -246,6 +288,17 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
     });
   }
 
+  function validateEditor(form?: HTMLFormElement) {
+    const sheet = collectSheet();
+    const issues = validateSheet({ ...sheet, month: draft.month }, form);
+    if (issues.some((issue) => issue.field === "customBillingSegments")) setOptionsExpanded(true);
+    if (issues.length) {
+      setNotice("请修正标出的字段后保存。");
+      setNoticeKind("error");
+    }
+    return { sheet, issues };
+  }
+
   function requestSave(event: React.FormEvent) {
     event.preventDefault();
     if (!metadataReady) {
@@ -253,13 +306,13 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
       setNoticeKind("error");
       return;
     }
-    const sheet = collectSheet();
-    const issues = validateQuantitySheet(sheet);
+    const { sheet, issues } = validateEditor(
+      event.currentTarget instanceof HTMLFormElement ? event.currentTarget : undefined,
+    );
     if (issues.length) {
-      setNotice(issues.slice(0, 4).join("；"));
-      setNoticeKind("error");
       return;
     }
+    setNotice("");
     setConfirmSave(sheet);
   }
 
@@ -289,6 +342,7 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
       iacucLookup.reset();
       peopleEdits.current = { code: "", pi: false, owner: false };
       setDraft(next);
+      resetValidation();
       setEditorRows(makeEditorRows(next));
       setExists(false);
       setConfirmSave(null);
@@ -309,6 +363,7 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   }
 
   function startNew() {
+    resetValidation();
     iacucLookup.reset();
     peopleEdits.current = { code: "", pi: false, owner: false };
     const next = createQuantitySheet(todayMonth, user.displayName);
@@ -320,6 +375,7 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
   }
 
   function loadForEdit(sheet: QuantitySheet) {
+    resetValidation();
     iacucLookup.reset();
     const next = normalizeQuantitySheet(sheet);
     peopleEdits.current = { code: normalizeIacuc(next.iacuc), pi: true, owner: true };
@@ -354,6 +410,10 @@ export function useQuantitySheetEditor(user: SessionUser, mode: "entry" | "saved
     unit,
     billingProfile,
     animalDetails,
+    validationRowsExpanded,
+    validationIssues,
+    validateEditor,
+    restoreSourceField,
     freeCageAllowance,
     supportsFreeCages,
     supportsTierPriority,

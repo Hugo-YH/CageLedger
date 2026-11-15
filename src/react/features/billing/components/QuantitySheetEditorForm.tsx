@@ -1,16 +1,18 @@
 import { InfoCircleFilled } from "@ant-design/icons";
 import { PersonNamesInput } from "../../../components/ui/PersonNamesInput";
 import { formatPersonNames } from "../../../../domain/personNames";
-import { useId } from "react";
+import { useId, useRef } from "react";
 import type { ReactNode } from "react";
-import { Alert, Button, DatePicker, Input, Popover, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, DatePicker, Input, Popover, Select, Space, Tag, Typography, type InputRef } from "antd";
 import dayjs from "dayjs";
 import type { SessionUser } from "../../../api/contracts";
 import { createQuantityRow } from "../../../../domain/quantitySheets";
 import { ActionButton, CommandBar, ReadOnlyInput } from "../../../components/ui";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import type { QuantitySheetEditor } from "../hooks/useQuantitySheetEditor";
-import { todayMonth, QUANTITY_ROWS_PER_PAGE } from "../quantitySheetEditorModel";
+import { todayMonth, QUANTITY_ROWS_PER_PAGE, quantityAutoFillState } from "../quantitySheetEditorModel";
+import { quantityValidationProps } from "../quantityValidation";
+import { QuantityFieldError } from "./QuantityFieldError";
 import { QuantityBillingOptions } from "./QuantityBillingOptions";
 import { QuantityEditorPages } from "./QuantityEditorPages";
 import { QuantityIacucValidity } from "./QuantityIacucValidity";
@@ -47,14 +49,21 @@ export function QuantitySheetEditorForm({
     rowRefs,
     recalculate,
     animalDetails,
+    validationIssues,
+    validationRowsExpanded,
+    validateEditor,
+    restoreSourceField,
   } = editor;
   const visibleNotice = iacucLookup.error || notice;
   const visibleNoticeKind = iacucLookup.error ? "error" : noticeKind;
+  const sourceMatch =
+    iacucMatch?.iacuc.trim().toUpperCase() === draft.iacuc.trim().toUpperCase() ? iacucMatch : undefined;
   return (
     <form
       id="quantity-sheet-entry-form"
       className="panel large quantity-editor-panel quantity-entry-panel"
       onSubmit={requestSave}
+      onInvalidCapture={(event) => validateEditor(event.currentTarget)}
     >
       {headActions ? (
         <CommandBar title="数量明细" titleSize="section" ariaLabel="编辑数量统计表操作" actions={headActions} />
@@ -80,6 +89,8 @@ export function QuantitySheetEditorForm({
             >
               <span>月份</span>
               <DatePicker
+                {...quantityValidationProps(validationIssues, { field: "month" })}
+                aria-label="月份"
                 id="quantity-sheet-month"
                 picker="month"
                 format="YYYY-MM"
@@ -95,6 +106,7 @@ export function QuantitySheetEditorForm({
                   );
                 }}
               />
+              <QuantityFieldError issues={validationIssues} target={{ field: "month" }} />
             </label>
             <label
               className="field-required quantity-ant-field quantity-ant-field-required"
@@ -102,6 +114,7 @@ export function QuantitySheetEditorForm({
             >
               <span>房间号</span>
               <Select
+                {...quantityValidationProps(validationIssues, { field: "roomId" })}
                 aria-label="房间号"
                 className="quantity-room-select"
                 id="quantity-sheet-room"
@@ -112,9 +125,14 @@ export function QuantitySheetEditorForm({
                 value={draft.roomId}
                 onChange={chooseRoom}
               />
+              <QuantityFieldError issues={validationIssues} target={{ field: "roomId" }} />
             </label>
             <ReadOnlyField label="登记人员" value={user.displayName} />
-            <ReadOnlyField label="房间管理员" value={selectedRoom?.roomManager || ""} placeholder="当前房间未设置" />
+            <ReadOnlyField
+              label="房间管理员"
+              value={selectedRoom?.roomManager || ""}
+              placeholder={draft.roomId ? "该房间未配置管理员" : "请先选择房间"}
+            />
           </div>
         </div>
         <div className="field-cluster quantity-field-cluster">
@@ -125,6 +143,7 @@ export function QuantitySheetEditorForm({
             <label className="field-required quantity-ant-field quantity-ant-field-required quantity-iacuc-field">
               <span>IACUC 编号</span>
               <Input
+                {...quantityValidationProps(validationIssues, { field: "iacuc" })}
                 aria-label="IACUC 编号"
                 list="quantity-iacuc-options"
                 value={draft.iacuc}
@@ -138,6 +157,7 @@ export function QuantitySheetEditorForm({
                 }}
                 onBlur={(event) => void iacucLookup.apply(event.target.value)}
               />
+              <QuantityFieldError issues={validationIssues} target={{ field: "iacuc" }} />
               <datalist id="quantity-iacuc-options">
                 {iacucOptions.map((item, index) => (
                   <option key={`${item.iacuc}-${item.project}-${item.pi}-${index}`} value={item.iacuc}>
@@ -153,12 +173,29 @@ export function QuantitySheetEditorForm({
                 failed={iacucLookup.failed}
               />
             </label>
-            <AutoFilledField label="项目名称" value={draft.project} onChange={(value) => setField("project", value)} />
-            <AutoFilledField label="支撑经费" value={draft.funding} onChange={(value) => setField("funding", value)} />
+            <AutoFilledField
+              label="项目名称"
+              value={draft.project}
+              source={sourceMatch?.project}
+              matched={Boolean(sourceMatch)}
+              onRestore={() => restoreSourceField("project")}
+              onChange={(value) => setField("project", value)}
+            />
+            <AutoFilledField
+              label="支撑经费"
+              value={draft.funding}
+              source={sourceMatch?.funding}
+              matched={Boolean(sourceMatch)}
+              onRestore={() => restoreSourceField("funding")}
+              onChange={(value) => setField("funding", value)}
+            />
             <AutoFilledField
               personNames
               label="项目负责人"
               value={draft.pi}
+              source={sourceMatch?.pi}
+              matched={Boolean(sourceMatch)}
+              onRestore={() => restoreSourceField("pi")}
               onChange={(value) => setField("pi", value)}
               hint={
                 piHint
@@ -190,6 +227,9 @@ export function QuantitySheetEditorForm({
               personNames
               label="实验负责人"
               value={draft.owner}
+              source={sourceMatch?.owner}
+              matched={Boolean(sourceMatch)}
+              onRestore={() => restoreSourceField("owner")}
               onChange={(value) => setField("owner", value)}
             />
           </div>
@@ -213,7 +253,7 @@ export function QuantitySheetEditorForm({
       <QuantityEditorPages
         rows={editorRows}
         month={draft.month}
-        animalDetails={animalDetails}
+        animalDetails={animalDetails || validationRowsExpanded}
         showCalculatedPlaceholders={mode === "entry"}
         rowRefs={rowRefs}
         onChanged={recalculate}
@@ -227,6 +267,9 @@ function AutoFilledField({
   value,
   onChange,
   hint,
+  source,
+  matched,
+  onRestore,
   personNames = false,
 }: {
   personNames?: boolean;
@@ -234,20 +277,30 @@ function AutoFilledField({
   value: string;
   onChange: (value: string) => void;
   hint?: { title?: ReactNode; content: ReactNode };
+  source?: string;
+  matched: boolean;
+  onRestore: () => void;
 }) {
+  const id = useId();
+  const inputRef = useRef<InputRef>(null);
+  const state = quantityAutoFillState(value, source, matched, personNames);
   const input = personNames ? (
-    <PersonNamesInput aria-label={label} value={value} onChange={onChange} />
+    <PersonNamesInput ref={inputRef} id={id} aria-label={label} value={value} onChange={onChange} />
   ) : (
-    <Input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />
+    <Input ref={inputRef} id={id} aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />
   );
   return (
-    <label className="quantity-ant-field quantity-auto-field">
-      <span>
+    <div className="quantity-ant-field quantity-auto-field">
+      <label htmlFor={id}>
         {label}
-        <Tag variant="filled" className="quantity-field-source" title="选择 IACUC 后自动带入，可按实际情况修订">
-          自动带入
+        <Tag
+          variant="filled"
+          className="quantity-field-source"
+          title={matched ? "与当前 IACUC 来源比较，可按实际情况修订" : "尚未匹配当前 IACUC，可手动填写"}
+        >
+          {state.label}
         </Tag>
-      </span>
+      </label>
       {hint ? (
         <Popover placement="top" open title={hint.title} content={hint.content}>
           {input}
@@ -255,7 +308,22 @@ function AutoFilledField({
       ) : (
         input
       )}
-    </label>
+      {state.canRestore ? (
+        <Button
+          htmlType="button"
+          type="link"
+          size="small"
+          className="quantity-restore-source"
+          aria-label={`恢复${label}来源值`}
+          onClick={() => {
+            onRestore();
+            inputRef.current?.focus();
+          }}
+        >
+          恢复来源值
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

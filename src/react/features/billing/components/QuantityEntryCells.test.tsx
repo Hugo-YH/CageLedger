@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createQuantityRow } from "../../../../domain/quantitySheets";
 import { QuantityEntryCells } from "./QuantityEntryCells";
 import type { QuantityRowHandle } from "./quantityEntry";
+import { quantitySheetValidationIssues, normalizeQuantitySheet } from "../../../../domain/quantitySheets";
 
 afterEach(() => cleanup());
 
@@ -105,4 +106,48 @@ it("unmounts animal controls without discarding row values or its live save hand
   expect(screen.getByLabelText("第 1 行转入伦理号")).toHaveValue("Z-IN");
   expect(screen.getByLabelText("第 1 行转出伦理号")).toHaveValue("Z-OUT");
   expect(screen.getByLabelText("第 1 行结余笼数")).toHaveValue(3);
+});
+
+it("associates a transfer error with its input and clears only the edited row error without publishing the draft", () => {
+  const ref = createRef<QuantityRowHandle>();
+  const changed = vi.fn();
+  const row = { ...createQuantityRow("2026-10", true), addedType: "转入", removedType: "转出" };
+  render(
+    <table>
+      <tbody>
+        <tr>
+          <QuantityEntryCells
+            ref={ref}
+            row={row}
+            index={0}
+            animalDetails
+            month="2026-10"
+            shortViewport={false}
+            showCalculatedPlaceholders
+            onChanged={changed}
+          />
+        </tr>
+      </tbody>
+    </table>,
+  );
+  const issues = quantitySheetValidationIssues(
+    normalizeQuantitySheet({ month: "2026-10", roomId: "room", iacuc: "Z1", billingUnit: "animal_day", rows: [row] }),
+  );
+  act(() => ref.current?.setValidationIssues?.(issues));
+  const input = screen.getByLabelText("第 1 行转入伦理号");
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  expect(document.getElementById(input.getAttribute("aria-describedby")!)).toHaveTextContent("转入请填写伦理号");
+  fireEvent.change(input, { target: { value: "Z-IN" } });
+  expect(input).not.toHaveAttribute("aria-invalid");
+  expect(screen.getByLabelText("第 1 行转出伦理号")).toHaveAttribute("aria-invalid", "true");
+  expect(ref.current?.getRow().transferInFromIacuc).toBe("Z-IN");
+  expect(changed).toHaveBeenCalledOnce();
+  const animalCount = screen.getByLabelText("第 1 行结余总数");
+  expect(animalCount).toHaveAttribute("aria-invalid", "true");
+  expect(document.getElementById(animalCount.getAttribute("aria-describedby")!)).toHaveTextContent(
+    "按只/天计费房间必须填写动物结余总数",
+  );
+  fireEvent.change(animalCount, { target: { value: "2" } });
+  expect(animalCount).not.toHaveAttribute("aria-invalid");
+  expect(changed).toHaveBeenCalledTimes(2);
 });

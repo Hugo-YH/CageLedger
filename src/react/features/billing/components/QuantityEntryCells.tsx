@@ -1,8 +1,11 @@
-import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Button, Calendar, Input, Popover, Select } from "antd";
 import dayjs from "dayjs";
 
 import type { QuantitySheetRow } from "../../../api/contracts";
+import type { QuantitySheetValidationIssue } from "../../../../domain/quantitySheets";
+import { quantityValidationProps } from "../quantityValidation";
+import { QuantityFieldError } from "./QuantityFieldError";
 import {
   monthEnd,
   normalizeEditorDate,
@@ -10,6 +13,13 @@ import {
   quantityTabTarget,
   type QuantityRowHandle,
 } from "./quantityEntry";
+
+const relatedValidationFields: Partial<Record<keyof QuantitySheetRow, QuantitySheetValidationIssue["field"][]>> = {
+  addedCount: ["addedType"],
+  removedCount: ["removedType"],
+  addedType: ["transferInFromIacuc"],
+  removedType: ["transferOutToIacuc"],
+};
 
 export const QuantityEntryCells = memo(
   forwardRef<
@@ -29,6 +39,17 @@ export const QuantityEntryCells = memo(
   ) {
     // Animal inputs can unmount while the row draft and live save handle stay intact.
     const [row, setRow] = useState(initial);
+    const [validationIssues, setValidationIssues] = useState<QuantitySheetValidationIssue[]>([]);
+    const clearValidationIssue = useCallback((field: QuantitySheetValidationIssue["field"]) => {
+      setValidationIssues((current) =>
+        current.some((issue) => issue.field === field) ? current.filter((issue) => issue.field !== field) : current,
+      );
+    }, []);
+    const validation = (field: QuantitySheetValidationIssue["field"]) =>
+      quantityValidationProps(validationIssues, { field, rowId: row.id });
+    const fieldError = (field: QuantitySheetValidationIssue["field"]) => (
+      <QuantityFieldError issues={validationIssues} target={{ field, rowId: row.id }} />
+    );
     const [calculated, setCalculated] = useState({
       animals: Number(initial.animalCount || 0),
       cages: Number(initial.cageCount || 0),
@@ -41,23 +62,31 @@ export const QuantityEntryCells = memo(
       ref,
       () => ({
         getRow: () => row,
+        setValidationIssues,
+        clearValidationIssue,
         setCalculated: (animals, cages) =>
           setCalculated((current) =>
             current.animals === animals && current.cages === cages ? current : { animals, cages },
           ),
       }),
-      [row],
+      [row, clearValidationIssue],
     );
     const { addedCount, removedCount, animalCount, cageCount } = row;
     useEffect(() => {
       onChanged();
     }, [addedCount, removedCount, animalCount, cageCount, onChanged]);
-    const update = (key: keyof QuantitySheetRow, value: string | number | null) =>
+    const update = (key: keyof QuantitySheetRow, value: string | number | null) => {
+      const affected = (issue: QuantitySheetValidationIssue) =>
+        issue.field === key || Boolean(relatedValidationFields[key]?.includes(issue.field));
+      setValidationIssues((current) =>
+        current.some(affected) ? current.filter((issue) => !affected(issue)) : current,
+      );
       setRow((current) => ({
         ...current,
         [key]: value,
         balanceSource: key === "animalCount" || key === "cageCount" ? "manual" : current.balanceSource,
       }));
+    };
     const count = (value: string) => (value === "" ? null : Math.max(Number(value), 0));
     const setDate = (rawDateInput: string, date = normalizeEditorDate(rawDateInput, month)) =>
       setRow((current) => ({ ...current, rawDateInput, date }));
@@ -179,6 +208,7 @@ export const QuantityEntryCells = memo(
                 data-quantity-field="addedCount"
               />
               <Select
+                {...validation("addedType")}
                 aria-label={`第 ${index + 1} 行增加类型`}
                 className="quantity-type-select"
                 options={[
@@ -195,18 +225,23 @@ export const QuantityEntryCells = memo(
                 data-quantity-row={index}
                 data-quantity-field="addedType"
               />
+              {fieldError("addedType")}
               {row.addedType === "转入" ? (
-                <Input
-                  className="iacuc-lookup"
-                  aria-label={`第 ${index + 1} 行转入伦理号`}
-                  value={row.transferInFromIacuc}
-                  onChange={(event) => update("transferInFromIacuc", event.target.value.toUpperCase())}
-                  onKeyDown={handleTab}
-                  data-quantity-focusable="true"
-                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                  data-quantity-row={index}
-                  data-quantity-field="addedTransferIn"
-                />
+                <>
+                  <Input
+                    {...validation("transferInFromIacuc")}
+                    className="iacuc-lookup"
+                    aria-label={`第 ${index + 1} 行转入伦理号`}
+                    value={row.transferInFromIacuc}
+                    onChange={(event) => update("transferInFromIacuc", event.target.value.toUpperCase())}
+                    onKeyDown={handleTab}
+                    data-quantity-focusable="true"
+                    data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                    data-quantity-row={index}
+                    data-quantity-field="addedTransferIn"
+                  />
+                  {fieldError("transferInFromIacuc")}
+                </>
               ) : null}
             </div>
           ) : null}
@@ -227,6 +262,7 @@ export const QuantityEntryCells = memo(
                 data-quantity-field="removedCount"
               />
               <Select
+                {...validation("removedType")}
                 aria-label={`第 ${index + 1} 行减少类型`}
                 className="quantity-type-select"
                 options={[
@@ -243,38 +279,47 @@ export const QuantityEntryCells = memo(
                 data-quantity-row={index}
                 data-quantity-field="removedType"
               />
+              {fieldError("removedType")}
               {row.removedType === "转出" ? (
-                <Input
-                  className="iacuc-lookup"
-                  aria-label={`第 ${index + 1} 行转出伦理号`}
-                  value={row.transferOutToIacuc}
-                  onChange={(event) => update("transferOutToIacuc", event.target.value.toUpperCase())}
-                  onKeyDown={handleTab}
-                  data-quantity-focusable="true"
-                  data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-                  data-quantity-row={index}
-                  data-quantity-field="removedTransferOut"
-                />
+                <>
+                  <Input
+                    {...validation("transferOutToIacuc")}
+                    className="iacuc-lookup"
+                    aria-label={`第 ${index + 1} 行转出伦理号`}
+                    value={row.transferOutToIacuc}
+                    onChange={(event) => update("transferOutToIacuc", event.target.value.toUpperCase())}
+                    onKeyDown={handleTab}
+                    data-quantity-focusable="true"
+                    data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                    data-quantity-row={index}
+                    data-quantity-field="removedTransferOut"
+                  />
+                  {fieldError("transferOutToIacuc")}
+                </>
               ) : null}
             </div>
           ) : null}
         </td>
         <td className="animal-detail-col">
           {animalDetails ? (
-            <Input
-              className="quantity-balance-input"
-              aria-label={`第 ${index + 1} 行结余总数`}
-              type="number"
-              min="0"
-              placeholder={showCalculatedPlaceholders && calculated.animals > 0 ? String(calculated.animals) : ""}
-              value={row.animalCount ?? ""}
-              onChange={(event) => update("animalCount", count(event.target.value))}
-              onKeyDown={handleTab}
-              data-quantity-focusable="true"
-              data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
-              data-quantity-row={index}
-              data-quantity-field="animalCount"
-            />
+            <>
+              <Input
+                {...validation("animalCount")}
+                className="quantity-balance-input"
+                aria-label={`第 ${index + 1} 行结余总数`}
+                type="number"
+                min="0"
+                placeholder={showCalculatedPlaceholders && calculated.animals > 0 ? String(calculated.animals) : ""}
+                value={row.animalCount ?? ""}
+                onChange={(event) => update("animalCount", count(event.target.value))}
+                onKeyDown={handleTab}
+                data-quantity-focusable="true"
+                data-quantity-page={Math.floor(index / QUANTITY_ROWS_PER_PAGE)}
+                data-quantity-row={index}
+                data-quantity-field="animalCount"
+              />
+              {fieldError("animalCount")}
+            </>
           ) : null}
         </td>
         <td>

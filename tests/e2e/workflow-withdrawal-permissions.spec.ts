@@ -367,7 +367,34 @@ test("房间管理员可登记他人发起的结算流程，登记信息和台�
   const modal = page.getByRole("dialog").filter({ hasText: "交回登记" }).first();
   await modal.getByRole("switch", { name: "饲养费结算单", exact: true }).click();
   await modal.getByLabel("饲养费结算单备注").fill("房间管理员核对后登记");
+  let releaseSave: () => void = () => {};
+  let startedSave: () => void = () => {};
+  const saveGate = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
+  const saveStarted = new Promise<void>((resolve) => {
+    startedSave = resolve;
+  });
+  await page.route("**/api/billing-workflows/advance", async (route) => {
+    if (route.request().postDataJSON()?.workflowId === workflowId) {
+      startedSave();
+      await saveGate;
+    }
+    await route.continue();
+  });
   await modal.getByRole("button", { name: "保存登记", exact: true }).click();
+  await saveStarted;
+  try {
+    await expect(modal.getByRole("button", { name: "取消", exact: true })).toBeDisabled();
+    await expect(modal.locator(".ant-modal-close")).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(modal).toBeVisible();
+    await page.locator(".workflow-registration-modal .ant-modal-wrap").click({ position: { x: 1, y: 1 } });
+    await expect(modal).toBeVisible();
+    await expect(modal.getByLabel("饲养费结算单备注")).toHaveValue("房间管理员核对后登记");
+  } finally {
+    releaseSave();
+  }
   await expect(modal).not.toBeVisible();
   await expect(row).toContainText("结算单 已交回");
   await expect(row.getByRole("button", { name: "登记", exact: true })).toHaveCount(0);

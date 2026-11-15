@@ -5,6 +5,9 @@ import { Tooltip } from "../../../components/Tooltip";
 import { ActionIcon } from "../../../components/ui/ActionIcon";
 import { ActionButton, DateInput } from "../../../components/ui";
 import type { QuantitySheetEditor } from "../hooks/useQuantitySheetEditor";
+import type { QuantitySheetValidationIssue } from "../../../../domain/quantitySheets";
+import { quantityValidationProps } from "../quantityValidation";
+import { QuantityFieldError } from "./QuantityFieldError";
 
 export function QuantityBillingOptions({ editor }: { editor: QuantitySheetEditor }) {
   const {
@@ -26,6 +29,7 @@ export function QuantityBillingOptions({ editor }: { editor: QuantitySheetEditor
     updateCustomBillingSegment,
     removeCustomBillingSegment,
     billingProfile,
+    validationIssues = [],
   } = editor;
   return (
     <div className={`quantity-options-panel ${optionsExpanded ? "expanded" : "collapsed"}`}>
@@ -191,7 +195,16 @@ export function QuantityBillingOptions({ editor }: { editor: QuantitySheetEditor
                     </Tooltip>
                   </div>
                 </div>
-                <div className="quantity-free-cage-module quantity-custom-billing-module">
+                <div
+                  className="quantity-free-cage-module quantity-custom-billing-module"
+                  id="quantity-custom-billing-segments"
+                  tabIndex={-1}
+                  role="group"
+                  aria-label="自定义收费区间"
+                  aria-describedby={
+                    quantityValidationProps(validationIssues, { field: "customBillingSegments" })["aria-describedby"]
+                  }
+                >
                   <div className="quantity-free-cage-head">
                     <div>
                       <strong>自定义收费区间</strong>
@@ -211,6 +224,7 @@ export function QuantityBillingOptions({ editor }: { editor: QuantitySheetEditor
                       unit={unit}
                       onChanged={updateCustomBillingSegment}
                       onRemoved={removeCustomBillingSegment}
+                      validationIssues={validationIssues}
                     />
                   ) : (
                     <p className="quantity-custom-billing-empty">
@@ -218,6 +232,7 @@ export function QuantityBillingOptions({ editor }: { editor: QuantitySheetEditor
                       ；按需新增特殊饲养收费区间。
                     </p>
                   )}
+                  <QuantityFieldError issues={validationIssues} target={{ field: "customBillingSegments" }} />
                 </div>
               </div>
             ),
@@ -233,18 +248,20 @@ function CustomBillingSegmentsEditor({
   unit,
   onChanged,
   onRemoved,
+  validationIssues,
 }: {
   segments: CustomBillingSegment[];
   unit: "animal_day" | "cage_day";
   onChanged: (id: string, update: Partial<CustomBillingSegment>) => void;
   onRemoved: (id: string) => void;
+  validationIssues: QuantitySheetValidationIssue[];
 }) {
   const quantityLabel = unit === "animal_day" ? "动物数/天" : "笼数/天";
   const unitLabel = unit === "animal_day" ? "只/天" : "笼/天";
   return (
     <div className="custom-billing-segments" aria-label="自定义收费区间">
       {segments.map((segment, index) => (
-        <section key={segment.id} className="custom-billing-segment">
+        <section key={segment.id} className="custom-billing-segment" aria-label={`区间 ${index + 1}`}>
           <div className="custom-billing-segment-head">
             <div>
               <strong>区间 {index + 1}</strong>
@@ -271,17 +288,35 @@ function CustomBillingSegmentsEditor({
             <div className="custom-billing-field">
               <span>开始日期</span>
               <DateInput
+                {...quantityValidationProps(validationIssues, {
+                  field: "customBillingSegments",
+                  segmentId: segment.id,
+                  segmentField: "startDate",
+                })}
                 label="开始日期"
                 value={segment.startDate}
                 onChange={(value) => onChanged(segment.id, { startDate: value })}
+              />
+              <QuantityFieldError
+                issues={validationIssues}
+                target={{ field: "customBillingSegments", segmentId: segment.id, segmentField: "startDate" }}
               />
             </div>
             <div className="custom-billing-field">
               <span>结束日期</span>
               <DateInput
+                {...quantityValidationProps(validationIssues, {
+                  field: "customBillingSegments",
+                  segmentId: segment.id,
+                  segmentField: "endDate",
+                })}
                 label="结束日期"
                 value={segment.endDate}
                 onChange={(value) => onChanged(segment.id, { endDate: value })}
+              />
+              <QuantityFieldError
+                issues={validationIssues}
+                target={{ field: "customBillingSegments", segmentId: segment.id, segmentField: "endDate" }}
               />
             </div>
             {customBillingUsesAllQuantity(segment) ? (
@@ -293,22 +328,42 @@ function CustomBillingSegmentsEditor({
               <label>
                 {quantityLabel}
                 <InputNumber<number>
+                  {...quantityValidationProps(validationIssues, {
+                    field: "customBillingSegments",
+                    segmentId: segment.id,
+                    segmentField: "quantity",
+                  })}
+                  aria-label={`区间 ${index + 1} 每日数量`}
                   min={1}
                   step={1}
                   value={segment.quantity ?? null}
                   placeholder="每日数量"
                   onChange={(event) => onChanged(segment.id, { quantity: event == null ? null : Number(event) })}
                 />
+                <QuantityFieldError
+                  issues={validationIssues}
+                  target={{ field: "customBillingSegments", segmentId: segment.id, segmentField: "quantity" }}
+                />
               </label>
             )}
             <label>
               单价（元/{unitLabel}）
               <InputNumber<number>
+                {...quantityValidationProps(validationIssues, {
+                  field: "customBillingSegments",
+                  segmentId: segment.id,
+                  segmentField: "unitPrice",
+                })}
+                aria-label={`区间 ${index + 1} 收费单价`}
                 min={0.01}
                 step={0.01}
                 value={segment.unitPrice ?? null}
                 placeholder="收费单价"
                 onChange={(event) => onChanged(segment.id, { unitPrice: event == null ? null : Number(event) })}
+              />
+              <QuantityFieldError
+                issues={validationIssues}
+                target={{ field: "customBillingSegments", segmentId: segment.id, segmentField: "unitPrice" }}
               />
             </label>
             <div className="custom-billing-segment-note custom-billing-field">

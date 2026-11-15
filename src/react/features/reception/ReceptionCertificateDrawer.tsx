@@ -1,5 +1,5 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
-import { Alert, App, Button, Empty, Flex, Form, Image, Radio, Select, Space, Spin, Typography } from "antd";
+import { App, Button, Flex, Form, Radio, Space, Spin, Typography } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
@@ -27,6 +27,7 @@ import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { DialogActivityContext } from "../../state/dialogActivity";
 import { CertificateGroupEditors } from "./CertificateGroupEditors";
 import { ReceptionCertificateReview } from "./ReceptionCertificateReview";
+import { ReceptionCertificatePreview } from "./ReceptionCertificatePreview";
 import {
   certificateDifferences,
   certificateErrorMessage as errorMessage,
@@ -35,6 +36,7 @@ import {
   certificateMultipleFilesError,
   certificateUploadAccept,
   hasStaleCertificateSource,
+  latestCertificateRun,
   mergeCertificateReviewWarnings,
   newCertificateLine,
 } from "./certificateDraft";
@@ -64,6 +66,8 @@ export function ReceptionCertificateDrawer({
   const [showErrors, setShowErrors] = useState(false);
   const [attachmentId, setAttachmentId] = useState("");
   const [pendingRun, setPendingRun] = useState<ReceptionRecognitionRun | null>(null);
+  const [appliedRunIds, setAppliedRunIds] = useState<Set<string>>(() => new Set());
+  const [applyingResult, setApplyingResult] = useState(false);
   const [error, setError] = useState("");
   const [retryRecognitionId, setRetryRecognitionId] = useState("");
   const [recognitionModes, setRecognitionModes] = useState<Record<string, "auto" | "all">>({});
@@ -74,7 +78,7 @@ export function ReceptionCertificateDrawer({
   const initialUploadStarted = useRef(false);
   const [phase, setPhase] = useState<"upload" | "recognize" | null>(null);
   const { begin, invalidate } = useLatestRequest();
-  const pending = Boolean(phase) || save.isPending;
+  const pending = Boolean(phase) || save.isPending || applyingResult;
   const confirmLeave = useUnsavedChanges(dirty, upload.isPending || save.isPending);
 
   useEffect(() => {
@@ -85,7 +89,9 @@ export function ReceptionCertificateDrawer({
       const run = query.data.runs.find((candidate) => candidate.attachmentId === item.id);
       return run?.status === "completed" ? (run.result?.lines ?? []) : [];
     });
-    setLines((savedLines ?? previousResults).map((line) => ({ ...line })));
+    const initialLines = savedLines ?? previousResults;
+    setLines(initialLines.map((line) => ({ ...line })));
+    setAppliedRunIds(new Set(initialLines.flatMap((line) => (line.runId ? [line.runId] : []))));
     setDirty(!savedLines && previousResults.length > 0);
     setAttachmentId(query.data.attachments[0]?.id ?? "");
   }, [active, query.data, snapshot]);
@@ -113,7 +119,12 @@ export function ReceptionCertificateDrawer({
   ]);
   const lineErrors = lines.map((line) => certificateLineErrors(line, attachmentIds));
   const currentRuns = (detail?.runs ?? []).filter((run) => run.attachmentId === attachment?.id);
-  const latestRun = pendingRun?.attachmentId === attachment?.id ? pendingRun : currentRuns[0];
+  const localRun = pendingRun?.attachmentId === attachment?.id ? pendingRun : undefined;
+  const latestRun = latestCertificateRun(currentRuns[0], localRun);
+  const unloadedResult =
+    latestRun?.status === "completed" && latestRun.result?.lines.length && !appliedRunIds.has(latestRun.id)
+      ? latestRun
+      : null;
   const pageSelection = latestRun?.result?.pageSelection;
   const recognitionMode = recognitionModes[attachment?.id ?? ""] ?? pageSelection?.mode ?? "auto";
 
@@ -121,6 +132,59 @@ export function ReceptionCertificateDrawer({
     setLines(next);
     setDirty(true);
     setError("");
+  }
+
+  async function loadCompletedResult() {
+    if (!attachment || !snapshot || !unloadedResult?.result || !writable || pending || busy.current) return;
+    const target = attachment;
+    const run = unloadedResult;
+    const isCurrent = begin();
+    busy.current = true;
+    setApplyingResult(true);
+    try {
+      if (lines.some((line) => line.attachmentId === target.id)) {
+        const confirmed = await modal.confirm({
+          title: "载入并替换本原件的明细？",
+          content: "将用已完成的识别结果替换本原件的当前明细，核对并保存后才更新接收登记。",
+          okText: "载入并替换",
+          cancelText: "保留当前明细",
+        });
+        if (!confirmed) return;
+      }
+      if (!isCurrent()) return;
+      const latest = queryClient.getQueryData<ReceptionRegistrationResponse>(
+        queryKeys.receptionRegistration(record.batchId),
+      );
+      if (
+        latest &&
+        (latest.batch.updatedAt !== snapshot.batch.updatedAt ||
+          latest.applicationVersion !== snapshot.applicationVersion ||
+          (latest.registration?.updatedAt ?? null) !== (snapshot.registration?.updatedAt ?? null) ||
+          !latest.canWrite)
+      ) {
+        setError("来源资料或维护权限已变化，请刷新后重新核对。");
+        return;
+      }
+      const currentRun = latest?.runs.find((item) => item.attachmentId === target.id);
+      if (currentRun && (currentRun.id !== run.id || currentRun.status !== "completed")) {
+        setError("此原件的识别结果已更新，请刷新后重新载入。");
+        return;
+      }
+      const result = currentRun?.result ?? run.result;
+      if (!result?.lines.length) return;
+      const additions = result.lines.map((line) => ({ ...line, id: crypto.randomUUID() }));
+      setLines((current) => [...current.filter((line) => line.attachmentId !== target.id), ...additions]);
+      setAppliedRunIds((current) => new Set(current).add(run.id));
+      setPendingRun(currentRun ?? run);
+      setDirty(true);
+      setError("");
+      feedback.message.info("识别结果已载入当前草稿，核对并保存后生效。");
+    } catch (reason) {
+      if (isCurrent()) setError(errorMessage(reason, "载入识别结果失败，请重试。"));
+    } finally {
+      busy.current = false;
+      if (isCurrent()) setApplyingResult(false);
+    }
   }
 
   async function close() {
@@ -172,6 +236,7 @@ export function ReceptionCertificateDrawer({
         const additions = run.result.lines.map((line) => ({ ...line, id: crypto.randomUUID() }));
         if (additions.length) {
           changeLines([...lines.filter((line) => line.attachmentId !== target.id), ...additions]);
+          setAppliedRunIds((current) => new Set(current).add(run.id));
           feedback.info("合格证明细已识别", "请对照原件核对明细与预约差异，核对并保存后才更新接收登记。");
         } else setError("未识别到可登记明细，原有草稿已保留。请核对原件后重试或手工填写。");
       } else if (run.status === "failed") {
@@ -432,89 +497,24 @@ export function ReceptionCertificateDrawer({
                     </Typography.Text>
                   </Flex>
                 ) : null}
-                {attachments.length ? (
-                  <Select
-                    aria-label="选择合格证原件"
-                    value={attachment?.id}
-                    options={attachments.map((item) => ({
-                      value: item.id,
-                      label: `${item.name}（${item.pageCount} 页）`,
-                    }))}
-                    onChange={(id) => {
-                      setAttachmentId(id);
-                      setPendingRun(null);
-                      setError("");
-                    }}
-                    disabled={pending}
-                  />
-                ) : null}
-                {attachment ? (
-                  <>
-                    <Image
-                      width="100%"
-                      src={attachment.previewUrl}
-                      alt={`${attachment.name} 首页原图`}
-                      className="reception-certificate-preview"
-                      fallback=""
-                    />
-                    <Typography.Text type="secondary">
-                      此处仅预览首页，点击可放大；识别按所选范围处理候选页面，全部页面请下载原件核对。
-                    </Typography.Text>
-                    {pageSelection ? (
-                      <Alert
-                        showIcon
-                        type="info"
-                        title="本次识别页面范围"
-                        description={
-                          <Flex vertical gap={4}>
-                            <span>
-                              {pageSelection.mode === "all" ? "全部页面" : "自动筛选合格证页"}；原件共{" "}
-                              {pageSelection.totalPages} 页。
-                            </span>
-                            <span>
-                              送识别页码：
-                              {pageSelection.selectedPages.length
-                                ? `第 ${pageSelection.selectedPages.join("、")} 页`
-                                : "无"}
-                              。
-                            </span>
-                            <span>
-                              {pageSelection.skippedPhotoPages.length
-                                ? `疑似照片跳过页码：第 ${pageSelection.skippedPhotoPages.join("、")} 页。`
-                                : "未跳过疑似照片页。"}
-                            </span>
-                            <span>送识别的候选页不代表所有合格证均已成功识别，请下载原件核对完整性。</span>
-                          </Flex>
-                        }
-                      />
-                    ) : attachment.pageCount > 1 && latestRun?.status === "completed" && latestRun.result ? (
-                      <Alert
-                        showIcon
-                        type="warning"
-                        title="旧识别结果仅包含首页"
-                        description="此多页 PDF 的旧识别结果仅依据首页。建议重新识别，核对后再保存登记。"
-                      />
-                    ) : null}
-                    {latestRun?.status === "failed" && !pendingRun ? (
-                      <Alert
-                        showIcon
-                        type="warning"
-                        title="上次识别失败"
-                        description={latestRun.error || "可重新识别或手工填写明细。"}
-                      />
-                    ) : null}
-                    {latestRun?.status === "running" && !recognize.isPending ? (
-                      <Alert
-                        showIcon
-                        type="info"
-                        title="此原件有进行中的识别记录"
-                        action={<Button onClick={() => void query.refetch()}>刷新状态</Button>}
-                      />
-                    ) : null}
-                  </>
-                ) : (
-                  <Empty description="尚未上传合格证原件" />
-                )}
+                <ReceptionCertificatePreview
+                  attachments={attachments}
+                  attachment={attachment}
+                  latestRun={latestRun}
+                  showFailure={!pendingRun}
+                  recognizing={recognize.isPending}
+                  canLoadResult={Boolean(unloadedResult && canWrite)}
+                  disabled={!writable || pending}
+                  pending={pending}
+                  applyingResult={applyingResult}
+                  onSelect={(id) => {
+                    setAttachmentId(id);
+                    setPendingRun(null);
+                    setError("");
+                  }}
+                  onRefresh={() => void query.refetch()}
+                  onLoadResult={() => void loadCompletedResult()}
+                />
               </Flex>
             </section>
             <section className="reception-certificate-editor" aria-label="独立接收登记编辑区">

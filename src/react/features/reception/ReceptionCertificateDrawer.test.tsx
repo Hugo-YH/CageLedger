@@ -688,6 +688,78 @@ it("discards a late recognition response after closing and prevents duplicate re
   expect(saved).not.toHaveBeenCalled();
 });
 
+it.each(["reopened", "local"] as const)(
+  "loads an already completed %s recognition after refresh without another recognition or save",
+  async (source) => {
+    const complete = completedRun(3);
+    const running: ReceptionRecognitionRun = { ...complete, status: "running", result: null };
+    detail = { ...detail, runs: source === "reopened" ? [running] : [] };
+    if (source === "local") mockRecognition(() => Promise.resolve({ run: running }));
+    render(view());
+    await screen.findByText("识别明细");
+    if (source === "local") fireEvent.click(screen.getByRole("button", { name: "识别" }));
+    const refresh = await screen.findByRole("button", { name: "刷新状态" });
+    detail = { ...detail, runs: [complete] };
+    fireEvent.click(refresh);
+    const load = await screen.findByRole("button", { name: "载入识别结果" });
+    expect(screen.queryByRole("textbox", { name: "明细1 合格证编号" })).not.toBeInTheDocument();
+    fireEvent.click(load);
+    expect(await screen.findByDisplayValue("CERT-1")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "明细1 证载数量" })).toHaveValue("3");
+    expect(screen.queryByRole("button", { name: "载入识别结果" })).not.toBeInTheDocument();
+    expect(vi.mocked(requestJson).mock.calls.filter(([url]) => String(url).endsWith("/recognize"))).toHaveLength(
+      source === "local" ? 1 : 0,
+    );
+    expect(vi.mocked(requestJson).mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    expect(requestMultipart).not.toHaveBeenCalled();
+    expect(saved).not.toHaveBeenCalled();
+  },
+);
+
+it("confirms replacing the selected original's draft and keeps another original's manual lines", async () => {
+  const old = { ...completedRun(2).result!.lines[0], runId: "old-run", certificateNo: "OLD" };
+  const other = { ...old, id: "other-line", attachmentId: "a2", certificateNo: "OTHER", runId: null };
+  saveCurrentLines([old, other]);
+  detail = { ...detail, attachments: [attachment, { ...attachment, id: "a2" }], runs: [completedRun(5)] };
+  render(view());
+  await screen.findByDisplayValue("OLD");
+  fireEvent.change(screen.getByDisplayValue("OLD"), { target: { value: "KEEP-EDIT" } });
+  fireEvent.click(screen.getByRole("button", { name: "载入识别结果" }));
+  await screen.findAllByText("载入并替换本原件的明细？");
+  fireEvent.click(screen.getByRole("button", { name: "保留当前明细" }));
+  expect(screen.getByDisplayValue("KEEP-EDIT")).toBeInTheDocument();
+  expect(screen.getByDisplayValue("OTHER")).toBeInTheDocument();
+  const reload = await screen.findByRole("button", { name: /载入识别结果$/ });
+  await waitFor(() => expect(reload).toBeEnabled());
+  await waitFor(() => expect(reload).not.toHaveClass(/ant-btn-loading/));
+  fireEvent.click(reload);
+  await screen.findAllByText("载入并替换本原件的明细？");
+  fireEvent.click(screen.getByRole("button", { name: "载入并替换" }));
+  expect(await screen.findByDisplayValue("CERT-1")).toBeInTheDocument();
+  expect(screen.getByDisplayValue("OTHER")).toBeInTheDocument();
+  expect(screen.queryByDisplayValue("KEEP-EDIT")).not.toBeInTheDocument();
+  expect(vi.mocked(requestJson).mock.calls.some(([, init]) => init?.method === "POST" || init?.method === "PUT")).toBe(
+    false,
+  );
+});
+
+it("retains the draft when source versions change during the result replacement confirmation", async () => {
+  saveCurrentLines([{ ...completedRun(2).result!.lines[0], runId: "old-run", certificateNo: "KEEP" }]);
+  detail = { ...detail, runs: [completedRun(5)] };
+  render(view());
+  await screen.findByDisplayValue("KEEP");
+  fireEvent.click(screen.getByRole("button", { name: "载入识别结果" }));
+  await screen.findAllByText("载入并替换本原件的明细？");
+  detail = { ...detail, batch: { ...record, updatedAt: "new-batch" } };
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: queryKeys.receptionRegistration("b1") });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "载入并替换" }));
+  await screen.findByText("来源资料或维护权限已变化，请刷新后重新核对。");
+  expect(screen.getByDisplayValue("KEEP")).toBeInTheDocument();
+  expect(screen.queryByDisplayValue("CERT-1")).not.toBeInTheDocument();
+});
+
 it("opens existing saved data without re-recognizing and preserves edits when source versions change", async () => {
   saveCurrentLines();
   render(view());

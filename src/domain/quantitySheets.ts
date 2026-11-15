@@ -184,18 +184,57 @@ export function calculateQuantityBalances(rows: QuantitySheetRow[], animalDetail
   });
 }
 
-export function validateQuantitySheet(sheet: QuantitySheet) {
-  const issues: string[] = [];
-  if (!sheet.month) issues.push("请选择月份");
-  if (!sheet.roomId) issues.push("请选择房间");
-  if (!sheet.iacuc) issues.push("请填写 IACUC 编号");
+export type QuantitySheetValidationIssue = {
+  message: string;
+  field:
+    | "month"
+    | "roomId"
+    | "iacuc"
+    | "customBillingSegments"
+    | "addedType"
+    | "removedType"
+    | "transferInFromIacuc"
+    | "transferOutToIacuc"
+    | "animalCount";
+  rowId?: string;
+  segmentId?: string;
+  segmentField?: "startDate" | "endDate" | "quantity" | "unitPrice";
+};
+
+export function quantitySheetValidationIssues(sheet: QuantitySheet) {
+  const issues: QuantitySheetValidationIssue[] = [];
+  if (!sheet.month) issues.push({ field: "month", message: "请选择月份" });
+  if (!sheet.roomId) issues.push({ field: "roomId", message: "请选择房间" });
+  if (!sheet.iacuc) issues.push({ field: "iacuc", message: "请填写 IACUC 编号" });
   for (const segment of sheet.customBillingSegments) {
     if (!isDateInMonth(segment.startDate, sheet.month) || !isDateInMonth(segment.endDate, sheet.month))
-      issues.push("自定义收费区间必须位于统计表月份内");
-    if (segment.startDate > segment.endDate) issues.push("自定义收费区间的结束日期应晚于开始日期");
+      issues.push({
+        field: "customBillingSegments",
+        segmentId: segment.id,
+        segmentField: !isDateInMonth(segment.startDate, sheet.month) ? "startDate" : "endDate",
+        message: "自定义收费区间必须位于统计表月份内",
+      });
+    if (segment.startDate > segment.endDate)
+      issues.push({
+        field: "customBillingSegments",
+        segmentId: segment.id,
+        segmentField: "endDate",
+        message: "自定义收费区间的结束日期应晚于开始日期",
+      });
     if (!customBillingUsesAllQuantity(segment) && (segment.quantity == null || segment.quantity <= 0))
-      issues.push("请填写自定义收费区间的每日适用数量");
-    if (segment.unitPrice == null || segment.unitPrice <= 0) issues.push("请填写大于 0 的自定义收费单价");
+      issues.push({
+        field: "customBillingSegments",
+        segmentId: segment.id,
+        segmentField: "quantity",
+        message: "请填写自定义收费区间的每日适用数量",
+      });
+    if (segment.unitPrice == null || segment.unitPrice <= 0)
+      issues.push({
+        field: "customBillingSegments",
+        segmentId: segment.id,
+        segmentField: "unitPrice",
+        message: "请填写大于 0 的自定义收费单价",
+      });
   }
   if (
     sheet.customBillingSegments.some((segment, index, segments) =>
@@ -209,17 +248,32 @@ export function validateQuantitySheet(sheet: QuantitySheet) {
         ),
     )
   )
-    issues.push("全部结余收费区间不能与其他自定义收费区间重叠");
+    issues.push({ field: "customBillingSegments", message: "全部结余收费区间不能与其他自定义收费区间重叠" });
   for (const row of sheet.rows) {
-    if (Number(row.addedCount || 0) > 0 && !row.addedType) issues.push(`${row.date || "未填日期"} 新增请选择类型`);
-    if (Number(row.removedCount || 0) > 0 && !row.removedType) issues.push(`${row.date || "未填日期"} 减少请选择类型`);
-    if (row.addedType === "转入" && !row.transferInFromIacuc) issues.push(`${row.date || "未填日期"} 转入请填写伦理号`);
+    if (Number(row.addedCount || 0) > 0 && !row.addedType)
+      issues.push({ field: "addedType", rowId: row.id, message: `${row.date || "未填日期"} 新增请选择类型` });
+    if (Number(row.removedCount || 0) > 0 && !row.removedType)
+      issues.push({ field: "removedType", rowId: row.id, message: `${row.date || "未填日期"} 减少请选择类型` });
+    if (row.addedType === "转入" && !row.transferInFromIacuc)
+      issues.push({
+        field: "transferInFromIacuc",
+        rowId: row.id,
+        message: `${row.date || "未填日期"} 转入请填写伦理号`,
+      });
     if (row.removedType === "转出" && !row.transferOutToIacuc)
-      issues.push(`${row.date || "未填日期"} 转出请填写伦理号`);
+      issues.push({
+        field: "transferOutToIacuc",
+        rowId: row.id,
+        message: `${row.date || "未填日期"} 转出请填写伦理号`,
+      });
   }
   if (sheet.billingUnit === "animal_day" && !sheet.rows.some((row) => Number(row.animalCount || 0) > 0))
-    issues.push("按只/天计费房间必须填写动物结余总数");
+    issues.push({ field: "animalCount", rowId: sheet.rows[0]?.id, message: "按只/天计费房间必须填写动物结余总数" });
   return issues;
+}
+
+export function validateQuantitySheet(sheet: QuantitySheet) {
+  return quantitySheetValidationIssues(sheet).map((issue) => issue.message);
 }
 
 function isDateInMonth(value: string, month: string) {

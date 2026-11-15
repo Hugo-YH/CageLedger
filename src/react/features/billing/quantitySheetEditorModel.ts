@@ -1,8 +1,32 @@
 import type { QuantitySheet, QuantitySheetRow } from "../../api/contracts";
 import { createQuantityRow } from "../../../domain/quantitySheets";
+import { formatPersonNames } from "../../../domain/personNames";
 
 export const todayMonth = new Date().toISOString().slice(0, 7);
 export const QUANTITY_ROWS_PER_PAGE = 31;
+
+export function quantityAutoFillState(
+  value: string,
+  source: string | undefined,
+  matched: boolean,
+  personNames = false,
+) {
+  const normalize = personNames ? formatPersonNames : (text: string) => text.trim();
+  const hasSource = matched && Boolean(source?.trim());
+  const differs = hasSource && normalize(value) !== normalize(source!);
+  return {
+    label: hasSource
+      ? differs
+        ? "已手动调整"
+        : "自动带入"
+      : value.trim()
+        ? "手动填写"
+        : matched
+          ? "来源未提供"
+          : "待匹配",
+    canRestore: Boolean(differs),
+  };
+}
 
 /** Display-only receipt for this account's entry session, not a cached business object. */
 export type QuantitySaveReceipt = Pick<QuantitySheet, "id" | "iacuc" | "month" | "roomName"> & { savedAt: string };

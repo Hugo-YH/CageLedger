@@ -4,11 +4,45 @@ import {
   createCustomBillingSegment,
   createQuantitySheet,
   normalizeQuantitySheet,
+  quantitySheetValidationIssues,
   roomBillingUnit,
   validateQuantitySheet,
 } from "./quantitySheets";
 
 describe("quantity sheet domain", () => {
+  it("identifies the specific row and missing transfer field even when two rows share the same date", () => {
+    const sheet = { ...createQuantitySheet("2026-06"), roomId: "room", iacuc: "Z1" };
+    sheet.rows = [
+      { ...sheet.rows[0], id: "row-one", addedCount: 2, addedType: "" },
+      { ...sheet.rows[0], id: "row-two", removedCount: 1, removedType: "转出", transferOutToIacuc: "" },
+    ];
+    expect(quantitySheetValidationIssues(sheet)).toEqual([
+      { field: "addedType", rowId: "row-one", message: "2026-06-01 新增请选择类型" },
+      { field: "transferOutToIacuc", rowId: "row-two", message: "2026-06-01 转出请填写伦理号" },
+    ]);
+    expect(validateQuantitySheet(sheet)).toEqual(["2026-06-01 新增请选择类型", "2026-06-01 转出请填写伦理号"]);
+  });
+
+  it("locates custom interval date, quantity and price errors without changing validation order", () => {
+    const sheet = { ...createQuantitySheet("2026-06"), roomId: "room", iacuc: "Z1" };
+    sheet.customBillingSegments = [
+      {
+        ...createCustomBillingSegment(sheet.month),
+        id: "segment-one",
+        startDate: "2026-05-01",
+        endDate: "2026-06-02",
+        quantity: null,
+        unitPrice: 0,
+      },
+    ];
+    const issues = quantitySheetValidationIssues(sheet);
+    expect(issues.map(({ field, segmentId, segmentField }) => ({ field, segmentId, segmentField }))).toEqual([
+      { field: "customBillingSegments", segmentId: "segment-one", segmentField: "startDate" },
+      { field: "customBillingSegments", segmentId: "segment-one", segmentField: "quantity" },
+      { field: "customBillingSegments", segmentId: "segment-one", segmentField: "unitPrice" },
+    ]);
+  });
+
   it("calculates animal balances from changes", () => {
     const sheet = createQuantitySheet("2026-06");
     expect(sheet.fullExemption).toBe(false);

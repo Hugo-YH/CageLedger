@@ -12,6 +12,9 @@ export function DateInput({
   required = false,
   disabled,
   picker = "date",
+  status,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   label: string;
   value: string;
@@ -21,6 +24,9 @@ export function DateInput({
   required?: boolean;
   disabled?: boolean;
   picker?: "date" | "month";
+  status?: "error" | "warning";
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }) {
   const format = picker === "month" ? "YYYY-MM" : "YYYY-MM-DD";
   // A new Dayjs reference resets rc-picker's in-progress calendar value.
@@ -32,6 +38,9 @@ export function DateInput({
       id={id}
       aria-label={label}
       aria-required={required || undefined}
+      aria-invalid={ariaInvalid}
+      aria-describedby={ariaDescribedBy}
+      status={status}
       disabled={disabled}
       allowClear={!required}
       picker={picker}

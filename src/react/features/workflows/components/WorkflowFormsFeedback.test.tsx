@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -8,7 +8,15 @@ import { WorkflowReimbursementRecordingModal } from "./WorkflowReimbursementReco
 import { WorkflowRevokeModal } from "./WorkflowRevokeModal";
 import { DialogActivityContext } from "../../../state/dialogActivity";
 
-const api = vi.hoisted(() => ({ advance: vi.fn(), record: vi.fn(), upload: vi.fn(), funding: vi.fn(), known: true }));
+const api = vi.hoisted(() => ({
+  advance: vi.fn(),
+  record: vi.fn(),
+  upload: vi.fn(),
+  funding: vi.fn(),
+  refetchFunding: vi.fn(),
+  fundingError: false,
+  known: true,
+}));
 const feedback = vi.hoisted(() => ({ success: vi.fn() }));
 vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => feedback }));
 vi.mock("../../../api/workflows", () => ({
@@ -18,13 +26,17 @@ vi.mock("../../../api/workflows", () => ({
   useWorkflowFundingBookOptions: (id: string, enabled = true) => {
     api.funding(id, enabled);
     return {
-      data: enabled
-        ? {
-            items: api.known ? [{ value: "FUND-1", label: "FUND-1" }] : [],
-            piFundingBookOptions: [],
-            piFundingBookNos: api.known ? ["FUND-1"] : [],
-          }
-        : undefined,
+      data:
+        enabled && !api.fundingError
+          ? {
+              items: api.known ? [{ value: "FUND-1", label: "FUND-1" }] : [],
+              piFundingBookOptions: [],
+              piFundingBookNos: api.known ? ["FUND-1"] : [],
+            }
+          : undefined,
+      isError: enabled && api.fundingError,
+      isFetching: false,
+      refetch: api.refetchFunding,
     };
   },
 }));
@@ -35,16 +47,43 @@ vi.mock("../../../components/ui/Modal", () => ({
     title,
     onOk,
     okText,
+    onCancel,
+    closable,
+    keyboard,
+    mask,
   }: {
     children: ReactNode;
     open: boolean;
     title: ReactNode;
     onOk?: () => void;
     okText?: string;
+    onCancel?: () => void;
+    closable?: boolean | { disabled?: boolean };
+    keyboard?: boolean;
+    mask?: boolean | { closable?: boolean };
   }) =>
     open ? (
       <section role="dialog">
         {title}
+        {onCancel ? (
+          <>
+            <button
+              type="button"
+              aria-label="关闭弹窗"
+              disabled={closable === false || (typeof closable === "object" && closable.disabled)}
+              onClick={onCancel}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && keyboard !== false) onCancel();
+              }}
+            />
+            <button
+              type="button"
+              aria-label="点击遮罩"
+              disabled={typeof mask === "object" && mask.closable === false}
+              onClick={onCancel}
+            />
+          </>
+        ) : null}
         {children}
         {onOk ? (
           <button type="button" onClick={onOk}>
@@ -72,7 +111,9 @@ class ResizeObserverMock {
 Object.defineProperty(globalThis, "ResizeObserver", { writable: true, value: ResizeObserverMock });
 beforeEach(() => {
   api.known = true;
+  api.fundingError = false;
   api.funding.mockClear();
+  api.refetchFunding.mockResolvedValue({});
 });
 afterEach(() => {
   cleanup();
@@ -90,6 +131,139 @@ const target = {
   reimbursementFormNote: "报销备注",
   reimbursementForms: [{ formNo: "BX-001", amount: 25.5, fundingBookNo: "FUND-1" }],
 } as BillingWorkflow;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+function renderWorkflowForm(kind: "registration" | "recording", cancel: () => void) {
+  return render(
+    kind === "registration" ? (
+      <WorkflowRegistrationModal target={target} onCancel={cancel} onRegistered={vi.fn()} />
+    ) : (
+      <WorkflowReimbursementRecordingModal target={target} onCancel={cancel} onRecorded={vi.fn()} />
+    ),
+  );
+}
+
+function expectCloseBlocked(cancel: ReturnType<typeof vi.fn>) {
+  const dialog = screen.getByRole("dialog");
+  for (const name of [/取\s*消/, "关闭弹窗", "点击遮罩"]) {
+    const button = within(dialog).getByRole("button", { name });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+  }
+  fireEvent.keyDown(within(dialog).getByRole("button", { name: "关闭弹窗" }), { key: "Escape" });
+  expect(cancel).not.toHaveBeenCalled();
+}
+
+it.each(["registration", "recording"] as const)(
+  "blocks every close path during %s saving and restores closing with the draft after a failure",
+  async (kind) => {
+    const write = deferred<unknown>();
+    const action = kind === "registration" ? api.advance : api.record;
+    action.mockReturnValueOnce(write.promise);
+    const cancel = vi.fn();
+    renderWorkflowForm(kind, cancel);
+    fireEvent.change(screen.getByPlaceholderText("报销单号"), { target: { value: "KEEP-DRAFT" } });
+    if (kind === "recording") {
+      fireEvent.change(screen.getByPlaceholderText("金额（元）"), { target: { value: "25.5" } });
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "FUND-1" } });
+    }
+    if (kind === "registration") {
+      const form = document.querySelector("form");
+      if (!form) throw new Error("缺少交回登记表单");
+      fireEvent.submit(form);
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: "保存补录" }));
+    }
+    expectCloseBlocked(cancel);
+    await waitFor(() => expect(action).toHaveBeenCalledOnce());
+    expectCloseBlocked(cancel);
+
+    await act(async () => {
+      write.reject(new Error("保存未完成，请重试"));
+      await write.promise.catch(() => undefined);
+    });
+    await screen.findByText("保存未完成，请重试");
+    expect(screen.getByPlaceholderText("报销单号")).toHaveValue("KEEP-DRAFT");
+    for (const name of [/取\s*消/, "关闭弹窗", "点击遮罩"]) {
+      expect(screen.getByRole("button", { name })).toBeEnabled();
+    }
+    fireEvent.keyDown(screen.getByRole("button", { name: "关闭弹窗" }), { key: "Escape" });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(feedback.success).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["registration", "recording"] as const)(
+  "blocks every close path during %s scan upload and restores closing after completion",
+  async (kind) => {
+    const write = deferred<{ originalName: string }>();
+    api.upload.mockReturnValueOnce(write.promise);
+    const cancel = vi.fn();
+    renderWorkflowForm(kind, cancel);
+    const input = document.querySelector('input[type="file"]');
+    if (!input) throw new Error("缺少扫描件输入");
+    const file = new File(["scan"], "待上传扫描件.pdf", { type: "application/pdf" });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(api.upload).toHaveBeenCalledOnce());
+    expectCloseBlocked(cancel);
+
+    await act(async () => {
+      write.resolve({ originalName: file.name });
+      await write.promise;
+    });
+    await screen.findByText(file.name);
+    expect(screen.getByRole("button", { name: /取\s*消/ })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "关闭弹窗" }));
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(feedback.success).toHaveBeenCalledOnce();
+    expect(api.advance).not.toHaveBeenCalled();
+    expect(api.record).not.toHaveBeenCalled();
+  },
+);
+
+it("retries recording funding options in place without replacing edited reimbursement fields", async () => {
+  api.fundingError = true;
+  const cancel = vi.fn();
+  const view = renderWorkflowForm("recording", cancel);
+  fireEvent.change(screen.getByPlaceholderText("报销单号"), { target: { value: "KEEP-RECORDING" } });
+  fireEvent.change(screen.getByPlaceholderText("金额（元）"), { target: { value: "39" } });
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "MANUAL-FUND" } });
+  api.refetchFunding.mockImplementationOnce(() => {
+    api.fundingError = false;
+    return Promise.resolve();
+  });
+  fireEvent.click(screen.getByRole("button", { name: "重试读取" }));
+  await waitFor(() => expect(api.refetchFunding).toHaveBeenCalledOnce());
+  view.rerender(<WorkflowReimbursementRecordingModal target={target} onCancel={cancel} onRecorded={vi.fn()} />);
+  expect(screen.queryByText("无法读取最新版实验申请汇总表；可手动填写经费本编号。")).not.toBeInTheDocument();
+  expect(screen.getByPlaceholderText("报销单号")).toHaveValue("KEEP-RECORDING");
+  expect(screen.getByPlaceholderText("金额（元）")).toHaveValue("39.00");
+  expect(screen.getByRole("combobox")).toHaveValue("MANUAL-FUND");
+  expect(api.record).not.toHaveBeenCalled();
+  expect(cancel).not.toHaveBeenCalled();
+});
+
+it("opens the reimbursement number help from a focusable button and dismisses it with Escape", async () => {
+  renderWorkflowForm("registration", vi.fn());
+  const help = screen.getByRole("button", { name: "报销单号生成说明" });
+  help.focus();
+  expect(help).toHaveFocus();
+  fireEvent.click(help);
+  expect(help).toHaveAttribute("aria-expanded", "true");
+  await screen.findByText("已按本月自动生成 BXD1001YYYYMM000，请核对是否正确并完善报销单号");
+  fireEvent.keyDown(help, { key: "Escape" });
+  expect(help).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByPlaceholderText("报销单号")).toHaveValue("BX-001");
+});
 
 it.each([
   { totalAmount: 0, reimbursementFormReturned: true },
@@ -175,7 +349,7 @@ it("does not save or report success before unknown funding book confirmation", a
   await screen.findByText("确认经费本信息");
   expect(api.advance).not.toHaveBeenCalled();
   expect(feedback.success).not.toHaveBeenCalled();
-  await screen.findByRole("button", { name: "保存登记" });
+  await waitFor(() => expect(screen.getByRole("button", { name: /保存登记/ })).not.toHaveClass(/ant-btn-loading/));
   fireEvent.click(screen.getByRole("button", { name: "确认继续" }));
   await waitFor(() => expect(feedback.success).toHaveBeenCalledOnce());
   expect(api.advance).toHaveBeenCalledOnce();

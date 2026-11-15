@@ -47,7 +47,7 @@
   align-content: start;
 }
 
-.react-quantity-layout .quantity-ant-field > span {
+.react-quantity-layout .quantity-ant-field > :is(span, label) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -83,6 +83,24 @@
 
 .react-quantity-layout .quantity-auto-field .ant-input {
   background: var(--surface-soft);
+}
+
+.react-quantity-layout .quantity-restore-source {
+  justify-self: start;
+  height: auto;
+  padding: 0;
+}
+
+.react-quantity-layout .quantity-field-error {
+  color: var(--danger-text);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.react-quantity-layout .quantity-entry-table .quantity-field-error {
+  padding: 2px 4px;
+  white-space: normal;
 }
 
 .react-quantity-layout .quantity-ant-field :is(.ant-input, .ant-select, .ant-picker),

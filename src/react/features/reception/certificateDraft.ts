@@ -22,6 +22,13 @@ export function certificateErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+export function latestCertificateRun(stored?: ReceptionRecognitionRun, local?: ReceptionRecognitionRun) {
+  return stored &&
+    (!local || (stored.id === local.id && stored.status !== "running") || stored.createdAt > local.createdAt)
+    ? stored
+    : local;
+}
+
 export function certificateFileError(file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase();
   const mime = certificateMimeTypes[extension ?? ""];

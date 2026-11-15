@@ -1,5 +1,7 @@
 import { InfoCircleOutlined, MinusCircleOutlined, PlusOutlined } from "@ant-design/icons";
-import { AutoComplete, Button, Form, Input, InputNumber, Tooltip, type AutoCompleteProps } from "antd";
+import { AutoComplete, Button, Form, Input, InputNumber, type AutoCompleteProps } from "antd";
+
+import { HelpPopover } from "../../../components/ui/HelpPopover";
 
 /** Shared by return registration and later reimbursement recording. */
 export function ReimbursementFormFields({
@@ -31,9 +33,9 @@ export function ReimbursementFormFields({
                   label={
                     <>
                       报销单号{" "}
-                      <Tooltip title="已按本月自动生成 BXD1001YYYYMM000，请核对是否正确并完善报销单号">
-                        <InfoCircleOutlined aria-label="报销单号生成说明" />
-                      </Tooltip>
+                      <HelpPopover label="报销单号生成说明" icon={<InfoCircleOutlined aria-hidden="true" />}>
+                        已按本月自动生成 BXD1001YYYYMM000，请核对是否正确并完善报销单号
+                      </HelpPopover>
                     </>
                   }
                   rules={[{ required: true, message: "请填写报销单号" }]}

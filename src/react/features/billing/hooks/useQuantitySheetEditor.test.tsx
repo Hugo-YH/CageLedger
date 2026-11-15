@@ -7,6 +7,7 @@ import type { QuantitySheet, SessionUser } from "../../../api/contracts";
 import { WorkspaceMemory } from "../../../state/workspaceMemory";
 import { createQuantityRow, normalizeQuantitySheet } from "../../../../domain/quantitySheets";
 import { useQuantitySheetEditor } from "./useQuantitySheetEditor";
+import { queryKeys } from "../../../api/queryKeys";
 
 const user: SessionUser = {
   id: "admin",
@@ -381,6 +382,101 @@ describe("quantity editor draft lifecycle", () => {
     act(() => result.current.setField("iacuc", "Z1"));
     await act(async () => result.current.iacucLookup.apply("Z1"));
     expect(result.current.draft).toMatchObject({ pi: "原PI", owner: "原负责人" });
+  });
+
+  it("restores one current source field and releases only its people edit protection", async () => {
+    lookupResponse = () =>
+      Promise.resolve(
+        Response.json({ items: [{ iacuc: "Z1", pi: "来源PI", owner: "来源负责人", project: "来源项目" }] }),
+      );
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    act(() => result.current.setField("iacuc", "Z1"));
+    await act(async () => result.current.iacucLookup.apply("Z1"));
+    // The fixture uses gcTime: 0; wait for the debounced search observer before
+    // editing so its source stays available through the following renders.
+    await waitFor(() =>
+      expect(result.current.iacucLookup.options.find((item) => item.iacuc === "Z1")?.pi).toBe("来源PI"),
+    );
+    act(() => {
+      result.current.setField("pi", "人工PI");
+      result.current.setField("owner", "人工负责人");
+      result.current.setField("funding", "没有来源的手填经费");
+    });
+    act(() => {
+      result.current.restoreSourceField("pi");
+      result.current.restoreSourceField("funding");
+    });
+    expect(result.current.draft).toMatchObject({ pi: "来源PI", owner: "人工负责人", funding: "没有来源的手填经费" });
+    act(() => {
+      client.setQueryData(queryKeys.iacucSearch("Z1", 20), {
+        items: [{ iacuc: "Z1", pi: "更新PI", owner: "更新负责人" }],
+      });
+    });
+    await waitFor(() => expect(result.current.iacucMatch?.pi).toBe("更新PI"));
+    await act(async () => result.current.iacucLookup.apply("Z1"));
+    expect(result.current.draft).toMatchObject({ pi: "更新PI", owner: "人工负责人" });
+    act(() => result.current.setField("iacuc", "UNKNOWN"));
+    act(() => result.current.restoreSourceField("pi"));
+    expect(result.current.draft.pi).toBe("更新PI");
+  });
+
+  it("reports missing root fields from the current draft and clears each edited field", async () => {
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    act(() => result.current.setField("month", ""));
+    act(() => result.current.requestSave(submitEvent()));
+    expect(result.current.validationIssues.map(({ field }) => field)).toEqual(["month", "roomId", "iacuc"]);
+    expect(result.current.confirmSave).toBeNull();
+    act(() => result.current.chooseRoom("mouse"));
+    expect(result.current.validationIssues.map(({ field }) => field)).toEqual(["month", "iacuc"]);
+    act(() => result.current.setField("month", "2026-09"));
+    act(() => result.current.setField("iacuc", "Z1"));
+    expect(result.current.validationIssues).toEqual([]);
+  });
+
+  it("sends row issues to live handles and expands their controls without persisting a display preference", async () => {
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    act(() => result.current.loadForEdit(savedSheet()));
+    const liveRow = { ...createQuantityRow("2026-09", true), addedCount: 2, removedType: "转出" };
+    const setValidationIssues = vi.fn();
+    result.current.rowRefs.current = [{ getRow: () => liveRow, setCalculated: vi.fn(), setValidationIssues }];
+    act(() => result.current.requestSave(submitEvent()));
+    expect(setValidationIssues).toHaveBeenLastCalledWith([
+      expect.objectContaining({ field: "addedType", rowId: liveRow.id }),
+      expect.objectContaining({ field: "transferOutToIacuc", rowId: liveRow.id }),
+    ]);
+    expect(result.current.validationIssues).toEqual([]);
+    expect(result.current.validationRowsExpanded).toBe(true);
+    expect(result.current.draft.animalDetailEnabled).toBe(false);
+    expect(result.current.confirmSave).toBeNull();
+  });
+
+  it("identifies custom segment fields and keeps unrelated errors while an individual field is edited", async () => {
+    const { result } = renderHook(() => useQuantitySheetEditor(user, "entry"), { wrapper });
+    await waitFor(() => expect(result.current.metadataReady).toBe(true));
+    act(() => result.current.loadForEdit(savedSheet()));
+    act(() => result.current.addCustomBillingSegment());
+    const segmentId = result.current.draft.customBillingSegments[0].id;
+    act(() =>
+      result.current.updateCustomBillingSegment(segmentId, {
+        startDate: "2026-08-01",
+        quantity: null,
+        unitPrice: null,
+      }),
+    );
+    act(() => result.current.setOptionsExpanded(false));
+    act(() => result.current.requestSave(submitEvent()));
+    expect(result.current.optionsExpanded).toBe(true);
+    expect(result.current.validationIssues).toEqual([
+      expect.objectContaining({ segmentId, segmentField: "startDate" }),
+      expect.objectContaining({ segmentId, segmentField: "quantity" }),
+      expect.objectContaining({ segmentId, segmentField: "unitPrice" }),
+    ]);
+    act(() => result.current.updateCustomBillingSegment(segmentId, { quantity: 2 }));
+    expect(result.current.validationIssues.map(({ segmentField }) => segmentField)).toEqual(["startDate", "unitPrice"]);
+    act(() => result.current.removeCustomBillingSegment(segmentId));
+    expect(result.current.validationIssues).toEqual([]);
   });
 
   it("keeps the people on a loaded sheet when its IACUC matches the index", async () => {
