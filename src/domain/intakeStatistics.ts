@@ -1,6 +1,7 @@
 import type { IacucIndexItem } from "../contracts/administration";
 import type { IntakeBatch, IntakeStatisticsPrincipal } from "../contracts/intake";
 import { isDirectSampling } from "./intake";
+import { formatPersonNames } from "./personNames";
 
 export interface IntakeStatisticsTotals {
   batches: number;
@@ -9,12 +10,24 @@ export interface IntakeStatisticsTotals {
   samplingBatches: number;
   animals: number;
   unknownAnimals: number;
+  housingAnimals: number;
+  unknownHousingAnimals: number;
+}
+
+interface IntakeStatisticsStrain extends IntakeStatisticsTotals {
+  name: string;
+}
+
+interface IntakeStatisticsProject extends IntakeStatisticsTotals {
+  code: string;
+  strains: IntakeStatisticsStrain[];
 }
 
 export interface IntakeStatisticsPerson extends IntakeStatisticsTotals {
   key: string;
   pi: string;
   iacucs: string[];
+  projects: IntakeStatisticsProject[];
 }
 
 export interface IntakeStatisticsRoom extends IntakeStatisticsTotals {
@@ -43,6 +56,8 @@ const totals = (): IntakeStatisticsTotals => ({
   samplingBatches: 0,
   animals: 0,
   unknownAnimals: 0,
+  housingAnimals: 0,
+  unknownHousingAnimals: 0,
 });
 
 export function resolveStatisticsPrincipal(
@@ -66,13 +81,69 @@ function validDate(value: string) {
 }
 
 function add(target: IntakeStatisticsTotals, source: IntakeStatisticsTotals) {
-  for (const key of Object.keys(source) as (keyof IntakeStatisticsTotals)[]) target[key] += source[key];
+  for (const key of Object.keys(totals()) as (keyof IntakeStatisticsTotals)[]) target[key] += source[key];
+}
+
+function addToDay(
+  days: IntakeStatisticsDay[],
+  item: { date: string; roomName: string; pi: string; iacuc: string; strain: string; direct: boolean },
+  amount: IntakeStatisticsTotals,
+) {
+  const { date, roomName, pi, iacuc, strain, direct } = item;
+  let day = days.find((entry) => entry.date === date);
+  if (!day) days.push((day = { ...totals(), date, rooms: [], sampling: [] }));
+  let people = day.sampling;
+  let room: IntakeStatisticsRoom | undefined;
+  if (!direct) {
+    const name = roomName || "饲养间未填写";
+    room = day.rooms.find((entry) => entry.name === name);
+    if (!room) day.rooms.push((room = { ...totals(), name, people: [] }));
+    people = room.people;
+  }
+  const key = pi ? `pi:${pi}` : `unknown:${iacuc}`;
+  let person = people.find((entry) => entry.key === key);
+  if (!person) people.push((person = { ...totals(), key, pi, iacucs: [], projects: [] }));
+  if (iacuc && !person.iacucs.includes(iacuc)) person.iacucs.push(iacuc);
+  let project = person.projects.find((entry) => entry.code === iacuc);
+  if (!project) person.projects.push((project = { ...totals(), code: iacuc, strains: [] }));
+  let strainGroup = project.strains.find((entry) => entry.name === strain);
+  if (!strainGroup) project.strains.push((strainGroup = { ...totals(), name: strain }));
+  for (const entry of [day, person, project, strainGroup, ...(room ? [room] : [])]) add(entry, amount);
+}
+
+function sortDays(days: IntakeStatisticsDay[]) {
+  days.sort((a, b) => (a.date ? (b.date ? a.date.localeCompare(b.date) : -1) : b.date ? 1 : 0));
+  for (const day of days) {
+    day.rooms.sort((a, b) => compare(a.name, b.name));
+    for (const people of [day.sampling, ...day.rooms.map((room) => room.people)]) {
+      people.sort((a, b) => (a.pi ? (b.pi ? compare(a.pi, b.pi) : -1) : b.pi ? 1 : compare(a.key, b.key)));
+      for (const person of people) {
+        person.iacucs.sort(compare);
+        person.projects.sort((a, b) => (a.code ? (b.code ? compare(a.code, b.code) : -1) : b.code ? 1 : 0));
+        for (const project of person.projects)
+          project.strains.sort((a, b) => (a.name ? (b.name ? compare(a.name, b.name) : -1) : b.name ? 1 : 0));
+      }
+    }
+  }
+}
+
+function knownCount(value: number | null): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 export function buildIntakeStatistics(
   items: Pick<
     IntakeBatch,
-    "id" | "batchNo" | "iacuc" | "intakeDate" | "roomName" | "intakePurpose" | "quantity" | "finalCardCount"
+    | "id"
+    | "batchNo"
+    | "iacuc"
+    | "intakeDate"
+    | "roomName"
+    | "intakePurpose"
+    | "quantity"
+    | "finalCardCount"
+    | "strainStandard"
+    | "strainRaw"
   >[],
   principals: Record<string, IntakeStatisticsPrincipal>,
 ): IntakeStatistics {
@@ -88,43 +159,28 @@ export function buildIntakeStatistics(
     if (!date) reasons.push("接收日期未填写或无效");
     if (!pi) reasons.push(!iacuc ? "IACUC 未填写" : principal?.issue || "项目负责人尚未匹配");
     if (!direct && !roomName) reasons.push("饲养间未填写");
-    const count = direct ? item.quantity : item.finalCardCount;
-    const determined = typeof count === "number" && Number.isSafeInteger(count) && count > 0;
-    if (!determined) reasons.push(direct ? "动物数量待确认" : "最终笼卡张数未确定，笼数待确认");
+    const animalCount = knownCount(item.quantity) ? item.quantity : 0;
+    const animalsDetermined = animalCount > 0;
+    const cagesDetermined = knownCount(item.finalCardCount);
+    if (!animalsDetermined) reasons.push("动物数量待确认");
+    if (!direct && !cagesDetermined) reasons.push("最终笼卡张数未确定，笼数待确认");
     const amount: IntakeStatisticsTotals = {
       ...totals(),
       batches: 1,
-      cages: !direct && determined ? count : 0,
-      unknownCages: !direct && !determined ? 1 : 0,
+      cages: !direct && cagesDetermined ? item.finalCardCount : 0,
+      unknownCages: !direct && !cagesDetermined ? 1 : 0,
       samplingBatches: direct ? 1 : 0,
-      animals: direct && determined ? count : 0,
-      unknownAnimals: direct && !determined ? 1 : 0,
+      animals: direct ? animalCount : 0,
+      unknownAnimals: direct && !animalsDetermined ? 1 : 0,
+      housingAnimals: !direct ? animalCount : 0,
+      unknownHousingAnimals: !direct && !animalsDetermined ? 1 : 0,
     };
-    let day = result.days.find((entry) => entry.date === date);
-    if (!day) result.days.push((day = { ...totals(), date, rooms: [], sampling: [] }));
-    let people = day.sampling;
-    let room: IntakeStatisticsRoom | undefined;
-    if (!direct) {
-      const name = roomName || "饲养间未填写";
-      room = day.rooms.find((entry) => entry.name === name);
-      if (!room) day.rooms.push((room = { ...totals(), name, people: [] }));
-      people = room.people;
-    }
-    const key = pi ? `pi:${pi}` : `unknown:${iacuc}`;
-    let person = people.find((entry) => entry.key === key);
-    if (!person) people.push((person = { ...totals(), key, pi, iacucs: [] }));
-    if (iacuc && !person.iacucs.includes(iacuc)) person.iacucs.push(iacuc);
-    for (const entry of [result, day, person, ...(room ? [room] : [])]) add(entry, amount);
+    const strain = [item.strainStandard, item.strainRaw].map(cleanName).find((name) => name && name !== "-") || "";
+    addToDay(result.days, { date, roomName, pi, iacuc, strain, direct }, amount);
+    add(result, amount);
     if (reasons.length) result.issues.push({ id: item.id, batchNo: item.batchNo || item.id, iacuc, reasons });
   }
-  result.days.sort((a, b) => (a.date ? (b.date ? a.date.localeCompare(b.date) : -1) : b.date ? 1 : 0));
-  for (const day of result.days) {
-    day.rooms.sort((a, b) => compare(a.name, b.name));
-    for (const people of [day.sampling, ...day.rooms.map((room) => room.people)]) {
-      people.sort((a, b) => (a.pi ? (b.pi ? compare(a.pi, b.pi) : -1) : b.pi ? 1 : compare(a.key, b.key)));
-      people.forEach((person) => person.iacucs.sort(compare));
-    }
-  }
+  sortDays(result.days);
   return result;
 }
 
@@ -146,27 +202,103 @@ export function intakeStatisticsPersonName(value: IntakeStatisticsPerson) {
   return value.pi || `项目负责人待确认（${value.iacucs.join("、") || "IACUC 未填写"}）`;
 }
 
-export function intakeStatisticsText(report: IntakeStatistics) {
-  const lines = ["接收批次统计", `已选 ${report.batches} 批｜饲养 ${intakeStatisticsCages(report)}`];
-  if (report.samplingBatches)
-    lines.push(`直接取材 ${report.samplingBatches} 批｜${intakeStatisticsAnimals(report)}（不计笼数）`);
-  for (const day of report.days) {
-    lines.push("", `${intakeStatisticsDate(day.date)}　${intakeStatisticsCages(day)}`);
-    for (const room of day.rooms) {
-      lines.push("", `${room.name}　${intakeStatisticsCages(room)}`);
-      for (const person of room.people)
-        lines.push(`- ${intakeStatisticsPersonName(person)}　${intakeStatisticsCages(person)}（${person.batches} 批）`);
+export function intakePlannedTransferDate(date: string) {
+  if (!validDate(date)) return "";
+  const parsed = new Date(`${date}T00:00:00Z`);
+  const weekday = parsed.getUTCDay();
+  parsed.setUTCDate(parsed.getUTCDate() + (weekday === 0 ? 1 : 8 - weekday));
+  return parsed.toISOString().slice(0, 10);
+}
+
+function briefingCount(value: number, unknown: number, unit: string, label: string) {
+  if (!unknown) return `${value} ${unit}`;
+  return value > 0 ? `已知 ${value} ${unit}（另有${label}待确认）` : `${label}待确认`;
+}
+
+function briefingTotals(value: IntakeStatisticsTotals, sampling = false) {
+  const unknownAnimals = sampling ? value.unknownAnimals : value.unknownHousingAnimals;
+  const animals = briefingCount(sampling ? value.animals : value.housingAnimals, unknownAnimals, "只", "只数");
+  if (sampling) return `${unknownAnimals ? "" : "共 "}${animals}`;
+  const cages = briefingCount(value.cages, value.unknownCages, "笼", "笼数");
+  return `${unknownAnimals || value.unknownCages ? "" : "共 "}${animals}，${cages}`;
+}
+
+function briefingPeople(people: IntakeStatisticsPerson[], sampling = false) {
+  return people.flatMap((person) => {
+    const name = person.pi ? formatPersonNames(person.pi) : intakeStatisticsPersonName(person);
+    const lines = [`- ${name}　${briefingTotals(person, sampling)}`];
+    for (const project of person.projects) {
+      const code = project.code ? `伦理 ${project.code}` : "伦理待确认";
+      if (project.strains.length === 1) {
+        const strain = project.strains[0];
+        lines.push(
+          `  · ${code}｜${strain.name ? `品系 ${strain.name}` : "品系待确认"}　${briefingTotals(strain, sampling)}`,
+        );
+      } else {
+        lines.push(`  · ${code}　${briefingTotals(project, sampling)}`);
+        for (const strain of project.strains)
+          lines.push(
+            `    - ${strain.name ? `品系 ${strain.name}` : "品系待确认"}　${briefingTotals(strain, sampling)}`,
+          );
+      }
     }
-    if (day.samplingBatches) {
-      lines.push("", `直接取材　${day.samplingBatches} 批｜${intakeStatisticsAnimals(day)}（不计笼数）`);
-      for (const person of day.sampling)
-        lines.push(`- ${intakeStatisticsPersonName(person)}　${person.batches} 批｜${intakeStatisticsAnimals(person)}`);
+    return lines;
+  });
+}
+
+export function intakeStatisticsText(report: IntakeStatistics) {
+  const days: IntakeStatisticsDay[] = [];
+  for (const day of report.days) {
+    for (const room of day.rooms) {
+      for (const person of room.people) {
+        for (const project of person.projects) {
+          for (const strain of project.strains)
+            addToDay(
+              days,
+              {
+                date: intakePlannedTransferDate(day.date),
+                roomName: room.name,
+                pi: person.pi,
+                iacuc: project.code,
+                strain: strain.name,
+                direct: false,
+              },
+              strain,
+            );
+        }
+      }
+    }
+  }
+  sortDays(days);
+  const lines = ["饲养间接收简报"];
+  if (days.length) lines.push("以下动物预计由检疫间转入各饲养间。", `饲养合计：${briefingTotals(report)}`);
+  else lines.push("本次未选择转入饲养间的动物。");
+  for (const day of days) {
+    lines.push("", day.date ? `预计转入：${intakeStatisticsDate(day.date)}` : "预计转入日期待确认");
+    for (const room of day.rooms)
+      lines.push(
+        "",
+        `${room.name}${room.name === "饲养间未填写" ? "" : " 饲养间"}　${briefingTotals(room)}`,
+        ...briefingPeople(room.people),
+      );
+  }
+  if (report.samplingBatches) {
+    lines.push("", "直接取材（不转入饲养间）", `合计：${briefingTotals(report, true)}`);
+    for (const day of report.days) {
+      if (day.samplingBatches)
+        lines.push("", `预约接收：${intakeStatisticsDate(day.date)}`, ...briefingPeople(day.sampling, true));
     }
   }
   if (report.issues.length) {
     lines.push("", "待确认信息");
-    for (const issue of report.issues)
-      lines.push(`- ${issue.batchNo}（${issue.iacuc || "IACUC 未填写"}）：${issue.reasons.join("；")}`);
+    const issues = new Map<string, Set<string>>();
+    for (const issue of report.issues) {
+      const reasons = issues.get(issue.iacuc) ?? new Set<string>();
+      issue.reasons.forEach((reason) => reasons.add(reason));
+      issues.set(issue.iacuc, reasons);
+    }
+    for (const [code, reasons] of issues)
+      lines.push(`- ${code ? `伦理 ${code}` : "伦理待确认（IACUC 未填写）"}：${[...reasons].join("；")}`);
   }
   return lines.join("\n");
 }

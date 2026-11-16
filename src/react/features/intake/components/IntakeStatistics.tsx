@@ -69,7 +69,7 @@ function IntakeStatisticsModal({ items, onClose }: { items: IntakeBatchListItem[
     try {
       const copied = await copyTextToClipboard(intakeStatisticsText(report));
       if (!isCurrent()) return;
-      if (copied) void message.success("统计结果已复制");
+      if (copied) void message.success("接收简报已复制");
       else void message.error("复制失败，请允许浏览器访问剪贴板后重试。");
     } finally {
       copying.current = false;
@@ -101,7 +101,7 @@ function IntakeStatisticsModal({ items, onClose }: { items: IntakeBatchListItem[
               loading={copyPending}
               onClick={() => void copyReport()}
             >
-              复制统计结果
+              复制接收简报
             </Button>
           </Space>
         </Flex>
@@ -249,7 +249,7 @@ function IntakeStatisticsModal({ items, onClose }: { items: IntakeBatchListItem[
               />
             ) : null}
             <Typography.Text type="secondary" className="intake-statistics-note">
-              项目负责人以项目汇总表为准。复制内容包含全部日期分组及待确认信息。
+              项目负责人以项目汇总表为准。接收简报以预约接收日期的下一周周一为预计转入日，列出伦理、品系、只数和笼数，不含批次数量；直接取材按原预约日期单列，注明不转入饲养间。
             </Typography.Text>
           </>
         )}

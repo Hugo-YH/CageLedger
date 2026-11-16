@@ -71,9 +71,13 @@ async function prepare(page: Page, rows = sampleRows()) {
   return rows;
 }
 
-test("statistics includes cross-page selection and copies authoritative date-room-PI totals", async ({ page }) => {
+test("statistics includes cross-page selection and copies a next-week housing brief by IACUC and strain", async ({
+  page,
+}, info) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await prepare(page);
+  const rows = sampleRows();
+  rows[1] = { ...rows[1], iacuc: rows[0].iacuc };
+  await prepare(page, rows);
   const trigger = page.getByRole("button", { name: "统计", exact: true });
   await expect(trigger).toBeDisabled();
   for (const index of [0, 1, 2, 3, 4, 5])
@@ -83,7 +87,7 @@ test("statistics includes cross-page selection and copies authoritative date-roo
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "接收批次统计", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "复制统计结果", exact: true })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: "复制接收简报", exact: true })).toBeEnabled();
   await expect(dialog.locator(".intake-statistics-metric").nth(0)).toContainText("30");
   await expect(dialog.locator(".intake-statistics-metric").nth(1)).toContainText("8");
   await expect(dialog.locator(".intake-statistics-metric").nth(2)).toContainText("12");
@@ -92,14 +96,24 @@ test("statistics includes cross-page selection and copies authoritative date-roo
   await expect(firstRoom.locator("li")).toHaveCount(2);
   await expect(firstRoom.locator("li").filter({ hasText: "负责人甲" })).toContainText("15 笼");
   await expect(dialog).not.toContainText("批次旧项目负责人");
-  await dialog.getByRole("button", { name: "复制统计结果", exact: true }).click();
-  await expect(page.getByText("统计结果已复制", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "复制接收简报", exact: true }).click();
+  await expect(page.getByText("接收简报已复制", { exact: true })).toBeVisible();
   const text = await page.evaluate(() => navigator.clipboard.readText());
-  expect(text).toContain("已选 8 批｜饲养 30 笼");
-  expect(text).toContain("2026年10月10日　27 笼");
-  expect(text).toContain("2026年10月11日　3 笼");
-  expect(text).toContain("直接取材 2 批｜12 只（不计笼数）");
-  expect(text).toContain("- 负责人甲　15 笼");
+  await info.attach("reception-briefing", { body: text, contentType: "text/plain;charset=utf-8" });
+  await dialog.screenshot({ path: info.outputPath("reception-briefing-copy.png"), animations: "disabled" });
+  expect(text).toContain("饲养间接收简报");
+  expect(text).toContain("饲养合计：共 48 只，30 笼");
+  expect(text).toContain("预计转入：2026年10月12日");
+  expect(text).toContain("8014 饲养间　共 32 只，20 笼");
+  expect(text).toContain("- 负责人甲　共 16 只，15 笼");
+  expect(text).toContain("  · 伦理 Z2099000｜品系 BALB/c　共 16 只，15 笼");
+  expect(text.match(/伦理 Z2099000｜品系 BALB\/c/g)).toHaveLength(1);
+  expect(text).toContain("直接取材");
+  expect(text).toContain("不转入饲养间");
+  expect(text).toContain("2026年10月10日");
+  expect(text).toContain("2026年10月11日");
+  expect(text).not.toMatch(/\d+\s*批/);
+  expect(text).not.toContain("已选");
   expect(text).not.toContain("\t");
   expect(text).not.toContain("批次旧项目负责人");
   await page.keyboard.press("Escape");
@@ -137,7 +151,7 @@ test("statistics preserves unknown records and supports retry after a project lo
     });
     document.execCommand = () => false;
   });
-  await dialog.getByRole("button", { name: "复制统计结果", exact: true }).click();
+  await dialog.getByRole("button", { name: "复制接收简报", exact: true }).click();
   await expect(page.getByText("复制失败，请允许浏览器访问剪贴板后重试。", { exact: true })).toBeVisible();
 });
 
@@ -150,7 +164,7 @@ test("statistics report keeps totals and actions readable across themes and four
     await page.getByRole("checkbox", { name: `选择 STAT-${index}`, exact: true }).check();
   await page.getByRole("button", { name: "统计", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "接收批次统计", exact: true });
-  const copy = dialog.getByRole("button", { name: "复制统计结果", exact: true });
+  const copy = dialog.getByRole("button", { name: "复制接收简报", exact: true });
   await expect(copy).toBeEnabled();
   const evidence: unknown[] = [];
   for (const [width, height, scheme] of [
@@ -234,7 +248,7 @@ test("selected intake toolbar stays above fixed columns during vertical and hori
   await toolbar.getByRole("button", { name: "统计", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "接收批次统计", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "复制统计结果", exact: true })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: "复制接收简报", exact: true })).toBeEnabled();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(toolbar.getByRole("button", { name: "统计", exact: true })).toBeFocused();
