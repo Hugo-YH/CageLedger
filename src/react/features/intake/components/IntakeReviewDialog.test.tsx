@@ -10,8 +10,10 @@ import type {
 } from "../../../../contracts/intake";
 import { createIntakeDraft } from "../../../../domain/intake";
 import { IntakeReviewDialog } from "./IntakeReviewDialog";
+import type * as WorkspaceUi from "../../../components/WorkspaceUi";
 
-vi.mock("../../../components/WorkspaceUi", () => ({
+vi.mock("../../../components/WorkspaceUi", async (importOriginal) => ({
+  ...(await importOriginal<typeof WorkspaceUi>()),
   ModalShell: ({ children, ariaLabel }: { children: ReactNode; ariaLabel: string }) => (
     <section role="dialog" aria-label={ariaLabel}>
       {children}
@@ -119,6 +121,8 @@ it("defaults to a read-only registered acknowledgement and keeps supplement an e
     expect(within(sources).getByText("原预约原文")).toBeVisible();
     expect(within(sources).getByText("本次采购原文")).toBeVisible();
   });
+  expect(within(screen.getByRole("region", { name: "预约字段核对" })).queryByRole("table")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "查看全部字段（2）" }));
   expect(screen.getAllByText("一致")).toHaveLength(2);
   expect(actions.onConfirm).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "已登记，结束本次录入" }));
@@ -182,7 +186,7 @@ it("previews retained image values and text additions before explicitly suppleme
   };
   const actions = setup(preview);
   const rowValues = (name: RegExp) =>
-    within(screen.getByRole("row", { name }))
+    within(within(screen.getByRole("region", { name: "预约字段核对" })).getByRole("row", { name }))
       .getAllByRole("cell")
       .map((cell) => cell.textContent);
   expect(screen.getByRole("columnheader", { name: "合并后" })).toBeInTheDocument();
@@ -573,11 +577,12 @@ it.each([
 });
 it("does not choose the first of multiple ambiguous candidates", async () => {
   const preview = response();
+  preview.items[0].item = { ...preview.items[0].item, batchNo: "", orderNo: "DC1", purchaseOrderNo: "C-SHARED" };
   preview.items = [
     preview.items[0],
     {
       ...preview.items[0],
-      item: { ...preview.items[0].item, id: "second", batchNo: "B2", rawMessage: "第二条已保存预约原文" },
+      item: { ...preview.items[0].item, id: "second", orderNo: "DC2", rawMessage: "第二条已保存预约原文" },
     },
   ];
   preview.total = 2;
@@ -588,7 +593,11 @@ it("does not choose the first of multiple ambiguous candidates", async () => {
   expect(within(sources).queryByRole("button", { name: /原预约原文与图片/ })).not.toBeInTheDocument();
   fireEvent.click(within(sources).getByRole("button", { name: /本次原文与图片/ }));
   await waitFor(() => expect(within(sources).getByText("本次采购原文")).toBeVisible());
-  fireEvent.click(screen.getAllByRole("button", { name: "查看此预约" })[1]);
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择核对预约" }));
+  // Popup visibility needs real geometry; the browser case covers it while
+  // this ResizeObserver stub leaves Ant's popup in its preparation phase.
+  expect(await screen.findByText("订单：DC1 · 采购：C-SHARED")).toBeInTheDocument();
+  fireEvent.click(await screen.findByText("订单：DC2 · 采购：C-SHARED"));
   fireEvent.click(within(sources).getByRole("button", { name: /原预约原文与图片/ }));
   await waitFor(() => expect(within(sources).getByText("第二条已保存预约原文")).toBeVisible());
   fireEvent.click(screen.getByRole("button", { name: "编辑已保存的预约" }));

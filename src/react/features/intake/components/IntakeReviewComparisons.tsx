@@ -1,4 +1,5 @@
-import { Alert, Flex, Radio, Table, Tag, Tooltip, Typography, type TableProps } from "antd";
+import { Flex, Radio, Table, Tag, Tooltip, Typography, type TableProps } from "antd";
+import { useId, useState } from "react";
 
 import type {
   IntakeBatch,
@@ -9,6 +10,7 @@ import type {
 } from "../../../../contracts/intake";
 import { intakePurposeLabel, speciesLabel } from "../../../../domain/intake";
 import { tagColors } from "../../../../theme/visual-system.mjs";
+import { ActionButton, HelpPopover } from "../../../components/ui";
 
 type Comparison = IntakeReviewCandidate["comparisons"][number];
 const STATUS: Record<Comparison["status"], string> = {
@@ -73,7 +75,11 @@ function mergedFieldValue(merged: IntakeBatch, field: string) {
 }
 
 function MergedValue({ row, merged }: { row: Comparison; merged: IntakeBatch }) {
-  return <Typography.Text>{valueText(mergedFieldValue(merged, row.field), row.field)}</Typography.Text>;
+  return (
+    <Typography.Text className="intake-review-merged-value">
+      {valueText(mergedFieldValue(merged, row.field), row.field)}
+    </Typography.Text>
+  );
 }
 
 function ComparisonStatus({ row, merged }: { row: Comparison; merged: IntakeBatch | null | undefined }) {
@@ -115,9 +121,22 @@ export function IntakeReviewComparisons({
   requestedResolutions?: IntakeReviewResolutions;
   onResolve?: (field: string, value: IntakeReviewResolution) => void;
 }) {
+  const detailsId = useId();
+  const [expandedCandidates, setExpandedCandidates] = useState(() => new Set<string>());
+  const showAll = expandedCandidates.has(candidate.item.id);
   const merged = candidate.canMerge ? candidate.mergedItem : null;
   const notice = candidate.canMerge && candidate.mergeStrategy ? STRATEGY_NOTICES[candidate.mergeStrategy] : null;
   const choosing = Boolean(onResolve && candidate.resolutionFields?.length);
+  const reviewRows = candidate.comparisons.filter(
+    (row) =>
+      row.status !== "same" ||
+      row.placeholder?.before ||
+      row.placeholder?.incoming ||
+      candidate.resolutionFields?.includes(row.field) ||
+      requestedResolutions?.[row.field] !== undefined,
+  );
+  const allSame = candidate.comparisons.length > 0 && reviewRows.length === 0;
+  const hasHiddenRows = reviewRows.length < candidate.comparisons.length;
   function selectedResolution(row: Comparison): IntakeReviewResolution | undefined {
     const requested = requestedResolutions?.[row.field];
     if (requested !== undefined) return requested;
@@ -150,6 +169,7 @@ export function IntakeReviewComparisons({
           {
             title: "合并后",
             key: "after",
+            className: "intake-review-merged-cell",
             render: (_value: unknown, row: Comparison) => <MergedValue row={row} merged={merged} />,
           },
         ]
@@ -202,27 +222,68 @@ export function IntakeReviewComparisons({
     },
   ];
   return (
-    <Flex vertical gap={12}>
+    <Flex vertical gap={12} className="intake-review-comparisons" role="region" aria-label="预约字段核对">
+      <Flex align="center" justify="space-between" gap={8} wrap className="intake-review-comparison-toolbar">
+        <Typography.Text
+          className={`intake-review-comparison-summary${allSame ? " intake-review-comparison-matched" : ""}`}
+          type={allSame ? "success" : undefined}
+          strong
+        >
+          {allSame
+            ? `全部 ${candidate.comparisons.length} 项字段一致`
+            : candidate.comparisons.length
+              ? `待核对字段（${reviewRows.length}）`
+              : "暂无可对比的字段信息"}
+        </Typography.Text>
+        {hasHiddenRows ? (
+          <ActionButton
+            size="small"
+            aria-expanded={showAll}
+            aria-controls={detailsId}
+            onClick={() => {
+              setExpandedCandidates((current) => {
+                const next = new Set(current);
+                if (next.has(candidate.item.id)) next.delete(candidate.item.id);
+                else next.add(candidate.item.id);
+                return next;
+              });
+            }}
+          >
+            {showAll
+              ? `只看待核对字段（${reviewRows.length}）`
+              : `${allSame ? "查看" : "显示"}全部字段（${candidate.comparisons.length}）`}
+          </ActionButton>
+        ) : null}
+      </Flex>
       {notice ? (
-        <Alert
-          showIcon
-          type="warning"
-          title={notice.title}
-          description={
-            choosing ? `${notice.description} 可在“核对结果”列逐项调整，最终以“合并后”取值为准。` : notice.description
-          }
-        />
+        <Flex align="center" gap={6} wrap className="intake-review-strategy-note">
+          <Typography.Text type="secondary">{notice.title}</Typography.Text>
+          <HelpPopover label="字段合并策略说明">
+            <Flex vertical gap={8}>
+              <Typography.Text>{notice.description}</Typography.Text>
+              {choosing ? <Typography.Text>可在“核对结果”列逐项调整，最终以“合并后”取值为准。</Typography.Text> : null}
+            </Flex>
+          </HelpPopover>
+          {choosing ? <Typography.Text type="secondary">可在核对结果列调整。</Typography.Text> : null}
+        </Flex>
       ) : choosing ? (
-        <Alert showIcon type="info" title="在核对结果列选择各差异字段的取值，再确认合并" />
+        <Typography.Text type="secondary" className="intake-review-strategy-note">
+          在核对结果列选择各差异字段的取值，再确认合并。
+        </Typography.Text>
       ) : null}
-      <Table
-        columns={columns}
-        dataSource={candidate.comparisons}
-        rowKey="field"
-        pagination={false}
-        scroll={{ x: merged ? (choosing ? 1000 : 850) : choosing ? 850 : 700 }}
-        size="small"
-      />
+      <div id={detailsId}>
+        {!allSame || showAll ? (
+          <Table
+            className="intake-review-comparison-table"
+            columns={columns}
+            dataSource={showAll ? candidate.comparisons : reviewRows}
+            rowKey="field"
+            pagination={false}
+            scroll={{ x: merged ? (choosing ? 1000 : 850) : choosing ? 850 : 700 }}
+            size="small"
+          />
+        ) : null}
+      </div>
     </Flex>
   );
 }

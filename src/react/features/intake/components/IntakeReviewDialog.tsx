@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Alert, Card, Col, Collapse, Flex, Image, Row, Typography } from "antd";
+import { Alert, Descriptions, Empty, Flex, Select, Spin, Tag, Typography } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 
 import type {
   IntakeBatch,
@@ -9,42 +10,13 @@ import type {
   IntakeReviewResolutions,
 } from "../../../../contracts/intake";
 import { intakeStatusLabel } from "../../../../domain/intake";
-import { ActionButton } from "../../../components/ui";
-import { ModalShell } from "../../../components/WorkspaceUi";
-import { IntakeRecognitionReview } from "./IntakeRecognitionReview";
-import { RecognitionSources } from "./IntakeRecognitionImages";
+import { formatPersonNames } from "../../../../domain/personNames";
+import { ActionButton, HelpPopover } from "../../../components/ui";
+import { formatDateTime, ModalShell } from "../../../components/WorkspaceUi";
 import { IntakeReviewComparisons } from "./IntakeReviewComparisons";
+import { IntakeReviewEvidence } from "./IntakeReviewEvidence";
+import { INTAKE_REVIEW_LABELS as LABELS } from "./intakeReviewLabels";
 
-const LABELS: Record<string, string> = {
-  purchaseOrderNo: "采购单号",
-  orderNo: "订单编号",
-  batchNo: "需求单号",
-  identifiers: "完整编号集合",
-  iacuc: "IACUC",
-  quantity: "动物数量",
-  strainRaw: "原始品系",
-  strainStandard: "标准品系",
-  strain: "品系/商品名",
-  specification: "规格",
-  sex: "性别",
-  species: "物种",
-  intakePurpose: "接收用途",
-  intakeDate: "接收日期",
-  roomName: "房间",
-  supplier: "供应商",
-  pi: "项目负责人",
-  owner: "实验负责人",
-  project: "项目",
-  notes: "备注",
-  rawMessage: "预约原文",
-  recognition: "识别依据",
-  husbandryDays: "饲养天数",
-  husbandryMonths: "饲养月数",
-  endDate: "结束日期",
-  finalCardCount: "打印张数",
-  receiverName: "接收人",
-  vetPhone: "联系电话",
-};
 const OUTCOME = {
   unmatched: "未发现已登记预约",
   registered: "已登记",
@@ -53,114 +25,12 @@ const OUTCOME = {
   related: "发现相关预约，请核对完整编号",
   insufficient: "信息不足，暂不能确认一致",
 };
+type ReviewOption = { value: string; label: string; item: IntakeBatch };
 function initialSelection(preview: IntakeReviewPreview) {
   if (preview.items.length === 1) return preview.items[0].item.id;
   const clear = preview.items.filter((item) => item.canAcknowledge || item.canMerge);
   return clear.length === 1 ? clear[0].item.id : "";
 }
-function OriginalEvidence({ item }: { item: IntakeBatch }) {
-  const images = item.recognition?.images || [];
-  const rounds = item.recognition?.recognitionRounds || [];
-  return (
-    <Collapse
-      items={[
-        {
-          key: "original",
-          label: "原预约原文与图片",
-          children: (
-            <Flex vertical gap={8}>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {item.rawMessage || "无原文"}
-              </Typography.Paragraph>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {item.recognition?.extractedText || ""}
-              </Typography.Paragraph>
-              {item.recognition ? <IntakeRecognitionReview evidence={item.recognition} /> : null}
-              {item.recognition?.sources?.length ? (
-                <RecognitionSources
-                  sources={item.recognition.sources}
-                  imageNames={
-                    item.recognition.imageIds?.map((id) => images.find((image) => image.id === id)?.name || "") || []
-                  }
-                />
-              ) : null}
-              <Image.PreviewGroup>
-                <Flex gap={8} wrap>
-                  {images.map((image) => (
-                    <Image key={image.id} width={140} src={image.url} alt={`原预约图片：${image.name}`} />
-                  ))}
-                </Flex>
-              </Image.PreviewGroup>
-            </Flex>
-          ),
-        },
-        ...rounds.map((round, index) => ({
-          key: `round-${index}`,
-          label: `识别依据 ${index + 1} · ${round.at}`,
-          children: (
-            <Flex vertical gap={8}>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {round.rawMessage || "无原文"}
-              </Typography.Paragraph>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {round.evidence.extractedText || ""}
-              </Typography.Paragraph>
-              <IntakeRecognitionReview evidence={round.evidence} />
-              {round.evidence.sources?.length ? (
-                <RecognitionSources
-                  sources={round.evidence.sources}
-                  imageNames={round.imageIds.map((id) => images.find((image) => image.id === id)?.name || "")}
-                />
-              ) : null}
-              <Typography.Text>
-                本轮图片：
-                {round.imageIds.map((id) => images.find((image) => image.id === id)?.name || id).join("、") || "无"}
-              </Typography.Text>
-              <Typography.Text>
-                补充字段：{round.appliedFields.map((field) => LABELS[field] || field).join("、") || "仅留档依据"}
-              </Typography.Text>
-            </Flex>
-          ),
-        })),
-      ]}
-    />
-  );
-}
-
-function IncomingEvidence({ item, images }: { item: IntakeBatch; images: IntakeRecognitionImageInput[] }) {
-  return (
-    <Collapse
-      items={[
-        {
-          key: "incoming",
-          label: "本次原文与图片",
-          children: (
-            <Flex vertical gap={8}>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {item.rawMessage || "无原文"}
-              </Typography.Paragraph>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {item.recognition?.extractedText || ""}
-              </Typography.Paragraph>
-              {item.recognition ? <IntakeRecognitionReview evidence={item.recognition} /> : null}
-              {item.recognition?.sources?.length ? (
-                <RecognitionSources sources={item.recognition.sources} imageNames={images.map((image) => image.name)} />
-              ) : null}
-              <Image.PreviewGroup>
-                <Flex gap={8} wrap>
-                  {images.map((image, index) => (
-                    <Image key={index} width={140} src={image.dataUrl} alt={`本次图片：${image.name}`} />
-                  ))}
-                </Flex>
-              </Image.PreviewGroup>
-            </Flex>
-          ),
-        },
-      ]}
-    />
-  );
-}
-
 export function IntakeReviewDialog({
   preview,
   incoming,
@@ -204,26 +74,39 @@ export function IntakeReviewDialog({
     if (!pending) onClose();
   };
   return (
-    <ModalShell ariaLabel="核对已有预约" width="min(1100px, calc(100vw - 32px))" onClose={close}>
+    <ModalShell
+      ariaLabel="核对已有预约"
+      className="intake-review-dialog"
+      width="min(1200px, calc(100vw - 32px))"
+      onClose={close}
+    >
       <div className="modal-shell-head">
         <div>
-          <h2>核对已有预约</h2>
-          <p>对比已保存的预约和本次录入；关闭后保留本次录入，补充需确认。</p>
+          <Flex gap={8} align="center">
+            <h2>核对已有预约</h2>
+            <HelpPopover label="预约核对说明" icon={<ExclamationCircleOutlined aria-hidden />}>
+              数量、品系、规格及完整编号需核对，空缺或无法识别不代表一致。
+              字段取值和日期联动以“合并后”为准，确认后才更新已保存预约。关闭会保留本次录入。
+            </HelpPopover>
+          </Flex>
+          <p>先核对差异与合并结果，再确认是否补充原预约。</p>
         </div>
-        <ActionButton disabled={pending} onClick={close}>
+        <ActionButton aria-label="关闭" disabled={pending} onClick={close}>
           关闭
         </ActionButton>
       </div>
       <div className="modal-shell-body">
-        <Flex vertical gap={16}>
+        <div data-feature="intake" className="intake-review-content">
           <Alert
             showIcon
-            type={preview.outcome === "registered" ? "success" : "warning"}
+            type={preview.outcome === "registered" ? "success" : preview.outcome === "conflict" ? "warning" : "info"}
             title={OUTCOME[preview.outcome]}
             description={
               preview.total > 1
-                ? `找到 ${preview.total} 条相关记录，请选择要查看的原预约；不会自动选择或合并其他记录。`
-                : "数量、标准品系、规格及完整编号需核对；空缺和无法识别的信息不代表一致。补充前请查看“合并后”取值及日期计算依据，确认后才更新已保存预约。"
+                ? `找到 ${preview.total} 条相关记录，请先选择本次要核对的预约。`
+                : preview.outcome === "registered"
+                  ? "可结束本次录入；如需追加资料，请核对后选择补充原预约。"
+                  : "请核对下方重点字段，最终以“合并后”取值为准。"
             }
           />
           {preview.sourceIssues.length ? (
@@ -232,7 +115,7 @@ export function IntakeReviewDialog({
               type="error"
               title="本次来源之间仍有待核对项"
               description={
-                <ul>
+                <ul className="intake-review-issues">
                   {preview.sourceIssues.map((issue, index) => (
                     <li key={`${issue.field}-${index}`}>
                       {LABELS[issue.field] || issue.field}：{issue.message}
@@ -242,120 +125,171 @@ export function IntakeReviewDialog({
               }
             />
           ) : null}
-          {checking ? (
-            <Alert
-              showIcon
-              type="info"
-              title="正在按字段选择重新核对…"
-              description="合并结果仍显示上次预览，完成后才可确认。"
-            />
-          ) : null}
-          <section aria-label="预约来源材料">
-            <Card size="small" title="来源材料">
-              <Row gutter={[16, 16]}>
-                <Col xs={24} md={12}>
-                  <Flex vertical gap={8}>
-                    <Typography.Text strong>已保存的预约</Typography.Text>
-                    {selected ? (
-                      <OriginalEvidence key={selected.item.id} item={selected.item} />
-                    ) : (
-                      <Typography.Text type="secondary">
-                        {preview.items.length ? "请选择要核对的已保存预约。" : "暂无匹配的已保存预约。"}
-                      </Typography.Text>
-                    )}
-                  </Flex>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Flex vertical gap={8}>
-                    <Typography.Text strong>本次录入</Typography.Text>
-                    <IncomingEvidence item={incoming} images={images} />
-                  </Flex>
-                </Col>
-              </Row>
-            </Card>
-          </section>
-          {preview.items.map((candidate) => (
-            <Card
-              key={candidate.item.id}
-              size="small"
-              title={`${candidate.item.batchNo || "无需求单号"} · ${candidate.item.purchaseOrderNo || "无采购单号"}`}
-              extra={
-                preview.items.length > 1 ? (
-                  <ActionButton disabled={pending} onClick={() => setSelectedId(candidate.item.id)}>
-                    {candidate.item.id === selectedId ? "当前查看" : "查看此预约"}
-                  </ActionButton>
-                ) : undefined
-              }
-            >
-              <Flex vertical gap={12}>
-                <Typography.Text>
-                  订单编号：{candidate.item.orderNo || "未填写"}；状态：{intakeStatusLabel(candidate.item.status)}
-                </Typography.Text>
-                <Typography.Text type="secondary">更新时间：{candidate.item.updatedAt || "未知"}</Typography.Text>
-                <Typography.Text>{candidate.reason}</Typography.Text>
-                {selectedId === candidate.item.id ? (
-                  <IntakeReviewComparisons
-                    candidate={candidate}
-                    labels={LABELS}
-                    pending={pending}
-                    blocked={blocked}
-                    requestedResolutions={
-                      requestedResolutions?.candidateId === candidate.item.id ? requestedResolutions.values : undefined
-                    }
-                    onResolve={onResolve ? (field, value) => onResolve(candidate.item.id, field, value) : undefined}
-                  />
-                ) : null}
-              </Flex>
-            </Card>
-          ))}
           {error ? (
-            <Alert
-              showIcon
-              type="error"
-              title={error}
-              description="本次草稿、图片及字段选择已保留。请重新核对后确认，不会自动覆盖新版本。"
-            />
+            <Alert showIcon type="error" title={error} description="草稿、图片及字段选择已保留，请重新核对后确认。" />
+          ) : null}
+          <section aria-label="当前核对预约" className="intake-review-current">
+            {preview.items.length > 1 ? (
+              <div className="intake-review-candidate-picker">
+                <Typography.Text strong>选择要核对的预约</Typography.Text>
+                <Select<string, ReviewOption>
+                  aria-label="选择核对预约"
+                  placeholder="请选择已保存的预约"
+                  value={selectedId || undefined}
+                  disabled={pending}
+                  onChange={setSelectedId}
+                  options={preview.items.map(({ item }) => ({
+                    value: item.id,
+                    label: item.orderNo || item.batchNo || item.purchaseOrderNo || "无编号预约",
+                    item,
+                  }))}
+                  optionRender={({ data: { item } }) => (
+                    <div data-feature="intake" className="intake-review-candidate-option">
+                      <Typography.Text strong>{item.batchNo || "无需求单号"}</Typography.Text>
+                      <Typography.Text>
+                        订单：{item.orderNo || "未填写"} · 采购：{item.purchaseOrderNo || "未填写"}
+                      </Typography.Text>
+                      <Typography.Text type="secondary">
+                        {item.iacuc || "伦理未填写"} · {item.intakeDate || "日期待定"} ·{" "}
+                        {intakeStatusLabel(item.status)}
+                      </Typography.Text>
+                    </div>
+                  )}
+                />
+              </div>
+            ) : null}
+            {selected ? (
+              <>
+                <div className="intake-review-record">
+                  <Flex justify="space-between" align="start" gap={12} wrap>
+                    <div className="intake-review-record-title">
+                      <Typography.Text strong>已保存预约 · {selected.item.batchNo || "无需求单号"}</Typography.Text>
+                      <Typography.Text type="secondary">
+                        采购单号：{selected.item.purchaseOrderNo || "未填写"}
+                      </Typography.Text>
+                    </div>
+                    <Flex gap={8} align="center">
+                      <Tag>{intakeStatusLabel(selected.item.status)}</Tag>
+                      <HelpPopover label="预约匹配说明" icon={<ExclamationCircleOutlined aria-hidden />}>
+                        <Flex vertical gap={8}>
+                          <span>{selected.reason}</span>
+                          <span>订单编号：{selected.item.orderNo || "未填写"}</span>
+                          <span>
+                            更新时间：{selected.item.updatedAt ? formatDateTime(selected.item.updatedAt) : "未知"}
+                          </span>
+                        </Flex>
+                      </HelpPopover>
+                    </Flex>
+                  </Flex>
+                  <Descriptions
+                    size="small"
+                    column={{ xs: 1, sm: 2, md: 3 }}
+                    items={[
+                      { key: "iacuc", label: "IACUC", children: selected.item.iacuc || "未填写" },
+                      { key: "pi", label: "项目负责人", children: formatPersonNames(selected.item.pi) || "未填写" },
+                      {
+                        key: "quantity",
+                        label: "动物数量",
+                        children: selected.item.quantity == null ? "未确定" : `${selected.item.quantity} 只`,
+                      },
+                      {
+                        key: "strain",
+                        label: "品系",
+                        children: selected.item.strainStandard || selected.item.strainRaw || "未填写",
+                      },
+                      { key: "room", label: "饲养房间", children: selected.item.roomName || "未填写" },
+                      { key: "date", label: "接收日期", children: selected.item.intakeDate || "未填写" },
+                    ]}
+                  />
+                </div>
+                <div className="intake-review-section-head">
+                  <Typography.Title level={4}>字段核对</Typography.Title>
+                  {checking ? (
+                    <Flex role="status" gap={8} align="center">
+                      <Spin size="small" />
+                      <Typography.Text>正在按字段选择重新核对…</Typography.Text>
+                    </Flex>
+                  ) : null}
+                </div>
+                {checking ? (
+                  <Typography.Text type="secondary">合并结果仍显示上次预览，完成后才可确认。</Typography.Text>
+                ) : null}
+                <IntakeReviewComparisons
+                  key={selected.item.id}
+                  candidate={selected}
+                  labels={LABELS}
+                  pending={pending}
+                  blocked={blocked}
+                  requestedResolutions={
+                    requestedResolutions?.candidateId === selected.item.id ? requestedResolutions.values : undefined
+                  }
+                  onResolve={onResolve ? (field, value) => onResolve(selected.item.id, field, value) : undefined}
+                />
+              </>
+            ) : preview.items.length ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="选择一条已保存预约后，查看字段差异与合并结果。"
+              />
+            ) : null}
+          </section>
+          <IntakeReviewEvidence
+            saved={selected?.item}
+            incoming={incoming}
+            images={images}
+            hasCandidates={preview.items.length > 0}
+          />
+        </div>
+      </div>
+      <div
+        className="modal-shell-actions intake-review-actions"
+        data-feature="intake"
+        role="group"
+        aria-label="预约核对操作"
+      >
+        <Flex gap={8} wrap className="intake-review-secondary-actions">
+          <ActionButton disabled={pending} onClick={close}>
+            返回本次录入
+          </ActionButton>
+          {selected ? (
+            <ActionButton
+              tone="tertiary"
+              disabled={pending}
+              title="打开先前保存的预约；保存后会更新该记录。"
+              onClick={() => onEdit(selected.item.id)}
+            >
+              编辑已保存的预约
+            </ActionButton>
+          ) : null}
+          {error || blocked ? (
+            <ActionButton disabled={pending} onClick={onRefresh}>
+              重新核对
+            </ActionButton>
           ) : null}
         </Flex>
-      </div>
-      <div className="modal-shell-actions" role="group" aria-label="预约核对操作">
-        <ActionButton disabled={pending} onClick={close}>
-          返回本次录入
-        </ActionButton>
-        {selected ? (
-          <ActionButton
-            disabled={pending}
-            title="打开先前保存的预约；保存后会更新该记录。"
-            onClick={() => onEdit(selected.item.id)}
-          >
-            编辑已保存的预约
-          </ActionButton>
-        ) : null}
-        {error || blocked ? (
-          <ActionButton disabled={pending} onClick={onRefresh}>
-            重新核对
-          </ActionButton>
-        ) : null}
-        {canCreateAnother ? (
-          <ActionButton disabled={pending || blocked} loading={createAnotherPending} onClick={onCreateAnother}>
-            确认为另一预约，另行保存
-          </ActionButton>
-        ) : null}
-        {selected?.canMerge ? (
-          <ActionButton
-            aria-label="确认补充原预约"
-            disabled={pending || blocked}
-            loading={pending}
-            onClick={() => onConfirm(selected.item.id)}
-          >
-            确认补充原预约
-          </ActionButton>
-        ) : null}
-        {selected?.canAcknowledge ? (
-          <ActionButton tone="primary" disabled={pending || blocked} onClick={() => onAcknowledge(selected.item.id)}>
-            已登记，结束本次录入
-          </ActionButton>
-        ) : null}
+        <Flex gap={8} wrap className="intake-review-confirm-actions">
+          {canCreateAnother ? (
+            <ActionButton disabled={pending || blocked} loading={createAnotherPending} onClick={onCreateAnother}>
+              确认为另一预约，另行保存
+            </ActionButton>
+          ) : null}
+          {selected?.canMerge ? (
+            <ActionButton
+              tone={selected.canAcknowledge ? "secondary" : "primary"}
+              aria-label="确认补充原预约"
+              disabled={pending || blocked}
+              loading={pending}
+              onClick={() => onConfirm(selected.item.id)}
+            >
+              确认补充原预约
+            </ActionButton>
+          ) : null}
+          {selected?.canAcknowledge ? (
+            <ActionButton tone="primary" disabled={pending || blocked} onClick={() => onAcknowledge(selected.item.id)}>
+              已登记，结束本次录入
+            </ActionButton>
+          ) : null}
+        </Flex>
       </div>
     </ModalShell>
   );

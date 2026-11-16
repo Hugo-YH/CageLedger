@@ -257,6 +257,45 @@ test("a text-only appointment with conflicting quantity returns to the same revi
   expect((await saved(page, item.id)).updatedAt).toBe(item.updatedAt);
 });
 
+test("ambiguous appointments with one purchase number remain distinguishable by their full order numbers", async ({
+  page,
+}, info) => {
+  await setup(page);
+  const nonce = Date.now();
+  const purchaseOrderNo = `C${nonce}`;
+  const first = await original(page, false, {
+    batchNo: "",
+    purchaseOrderNo,
+    orderNo: `DC${nonce}01`,
+    rawMessage: "第一条订单原文",
+  });
+  const second = await original(page, false, {
+    batchNo: "",
+    purchaseOrderNo,
+    orderNo: `DC${nonce}02`,
+    rawMessage: "第二条订单原文",
+  });
+  await page.getByLabel("预约消息", { exact: true }).fill(`采购单号：${purchaseOrderNo}`);
+  await ai(page, first, false, { batchNo: "", orderNo: "" });
+  const dialog = review(page);
+  const picker = dialog.getByRole("combobox", { name: "选择核对预约", exact: true });
+  await expect(picker).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "编辑已保存的预约", exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 760, height: 900 });
+  await picker.click();
+  await expect(page.getByText(`订单：${first.orderNo} · 采购：${purchaseOrderNo}`, { exact: true })).toBeVisible();
+  const secondOption = page.getByText(`订单：${second.orderNo} · 采购：${purchaseOrderNo}`, { exact: true });
+  await expect(secondOption).toBeVisible();
+  await page.screenshot({ path: info.outputPath("review-candidate-orders.png"), animations: "disabled" });
+  await secondOption.click();
+  await expect(dialog.getByTitle(second.orderNo, { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "编辑已保存的预约", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(second.rawMessage);
+  expect(await saved(page, first.id)).toEqual(first);
+  expect(await saved(page, second.id)).toEqual(second);
+});
+
 test("later local text without sex supplements the saved image appointment while retaining image values", async ({
   page,
 }, info) => {
@@ -406,6 +445,60 @@ test("field choices resolve a text conflict and save the recalculated period in 
   ).toBeChecked();
   expect(await saved(page, item.id)).toEqual(item);
   await page.screenshot({ path: info.outputPath("field-resolution-preview.png"), animations: "disabled" });
+  const dateChoice = dialog
+    .getByRole("radiogroup", { name: "接收日期取值", exact: true })
+    .getByRole("radio", { name: "2026-11-11", exact: true });
+  await dateChoice.focus();
+  for (const viewport of [
+    { width: 1440, height: 900, scheme: "light" },
+    { width: 1180, height: 820, scheme: "dark" },
+    { width: 760, height: 900, scheme: "light" },
+    { width: 844, height: 390, scheme: "dark" },
+  ] as const) {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ colorScheme: viewport.scheme, reducedMotion: "reduce" });
+    await expect(dateChoice).toBeFocused();
+    await expect(dateChoice).toBeChecked();
+    await expect(confirm).toBeInViewport();
+    const layout = await dialog.evaluate((element) => {
+      const body = element.querySelector<HTMLElement>(".modal-shell-body")!;
+      const comparison = element.querySelector<HTMLElement>(".intake-review-comparisons")!;
+      const table = element.querySelector<HTMLElement>(".intake-review-comparison-table")!;
+      const footer = element.querySelector<HTMLElement>(".modal-shell-actions")!;
+      const merged = element.querySelector<HTMLElement>(".intake-review-merged-cell")!;
+      const styles = (node: HTMLElement) => {
+        const css = getComputedStyle(node);
+        return {
+          display: css.display,
+          grid: css.gridTemplateColumns,
+          minWidth: css.minWidth,
+          gap: css.gap,
+          overflow: css.overflow,
+          position: css.position,
+          zIndex: css.zIndex,
+        };
+      };
+      return {
+        pageOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+        bodyOverflow: body.scrollWidth > body.clientWidth + 1,
+        bodyOverflowY: getComputedStyle(body).overflowY,
+        comparison: styles(comparison),
+        table: styles(table),
+        footer: styles(footer),
+        mergedBackground: getComputedStyle(merged).backgroundColor,
+      };
+    });
+    expect(layout.pageOverflow).toBe(false);
+    expect(layout.bodyOverflow).toBe(false);
+    expect(layout.bodyOverflowY).toBe("auto");
+    expect(layout.footer.position).toBe("sticky");
+    expect(layout.mergedBackground).not.toBe("rgba(0, 0, 0, 0)");
+    await info.attach(`review-comparison-${viewport.width}`, {
+      body: JSON.stringify({ viewport, layout, owner: "src/styles/features/intake.css" }),
+      contentType: "application/json",
+    });
+    await page.screenshot({ path: info.outputPath(`review-comparison-${viewport.width}.png`), animations: "disabled" });
+  }
   const write = page.waitForRequest(
     (request) => request.method() === "PUT" && new URL(request.url()).pathname === `/api/intake-batches/${item.id}`,
   );
