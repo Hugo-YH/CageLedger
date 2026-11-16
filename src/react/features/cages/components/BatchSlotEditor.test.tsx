@@ -9,6 +9,7 @@ import { useBatchSlotOperation } from "./useBatchSlotOperation";
 const { save, refresh } = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn().mockResolvedValue(undefined) }));
 const feedback = vi.hoisted(() => ({ warning: vi.fn() }));
 vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => feedback }));
+vi.mock("../../../hooks/useUnsavedChanges", () => ({ useUnsavedChanges: () => () => Promise.resolve(true) }));
 vi.mock("../../../api/cages", () => ({
   useSaveOccupancy: () => ({ mutateAsync: save, isPending: false }),
   useRefreshCageRoom: () => refresh,
@@ -40,6 +41,8 @@ vi.mock("./CageFormControls", () => ({
 vi.mock("antd", () => ({
   Alert: ({ title }: { title: ReactNode }) => <div role="alert">{title}</div>,
   Input: { TextArea: () => null },
+  Progress: ({ percent }: { percent: number }) => <div role="progressbar" aria-valuenow={percent} />,
+  Typography: { Text: ({ children }: { children: ReactNode }) => <span>{children}</span> },
 }));
 afterEach(() => {
   cleanup();
@@ -219,4 +222,54 @@ it("ends occupied slots using their original versions and refreshes once while s
     deferInvalidate: true,
   });
   expect(refresh).toHaveBeenCalledOnce();
+});
+
+it("blocks closing during a batch and reports confirmed progress instead of estimated progress", async () => {
+  let first!: (value: unknown) => void;
+  let second!: (value: unknown) => void;
+  save
+    .mockReset()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          first = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          second = resolve;
+        }),
+    );
+  const close = vi.fn();
+  const done = vi.fn();
+  render(
+    <BatchSlotEditor
+      slots={slots.slice(0, 2)}
+      rack={rack}
+      roomName="房间"
+      roomId="room"
+      occupancies={[]}
+      onClose={close}
+      onDone={done}
+      beginOperation={() => () => true}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "批量保存" }));
+  expect(screen.getByRole("button", { name: "关闭" })).toBeDisabled();
+  expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+  fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+  expect(close).not.toHaveBeenCalled();
+  await act(async () => {
+    first({});
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50"));
+  expect(screen.getByText("已处理 1/2 个笼位")).toBeInTheDocument();
+  expect(done).not.toHaveBeenCalled();
+  await act(async () => {
+    second({});
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(done).toHaveBeenCalledWith("已批量保存 2 个笼位。"));
 });

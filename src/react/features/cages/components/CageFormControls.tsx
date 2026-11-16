@@ -87,12 +87,23 @@ export function SlotStatusSelect({
   );
 }
 
-export function SexSelect({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+export function SexSelect({
+  id,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
   return (
     <label htmlFor={id}>
       性别
       <Select
         aria-label="性别"
+        disabled={disabled}
         id={id}
         options={[
           { value: "unknown", label: "请选择" },

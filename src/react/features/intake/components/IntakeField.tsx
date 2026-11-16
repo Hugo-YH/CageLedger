@@ -1,6 +1,7 @@
 import { Form, Input } from "antd";
 import { DateInput } from "../../../components/ui";
 import { PersonNamesInput } from "../../../components/ui/PersonNamesInput";
+import { useId } from "react";
 
 export function IntakeField({
   label,
@@ -11,6 +12,7 @@ export function IntakeField({
   extra,
   tooltip,
   personNames = false,
+  error,
 }: {
   personNames?: boolean;
   label: string;
@@ -20,9 +22,18 @@ export function IntakeField({
   required?: boolean;
   extra?: string;
   tooltip?: string;
+  error?: string;
 }) {
+  const errorId = useId();
   return (
-    <Form.Item label={label} required={required} extra={extra} tooltip={tooltip}>
+    <Form.Item
+      label={label}
+      required={required}
+      extra={extra}
+      tooltip={tooltip}
+      validateStatus={error ? "error" : undefined}
+      help={error ? <span id={errorId}>{error}</span> : undefined}
+    >
       {type === "date" ? (
         <DateInput label={label} value={String(value)} onChange={onChange} required={required} />
       ) : personNames ? (
@@ -30,6 +41,8 @@ export function IntakeField({
       ) : (
         <Input
           aria-label={label}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           type={type}
           value={value}
           min={type === "number" ? 0 : undefined}

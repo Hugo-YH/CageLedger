@@ -105,11 +105,18 @@ export function BatchEditor({
     setManual(value);
     setDirty(true);
   }
+  const [manualErrors, setManualErrors] = useState(false);
   function addManual() {
     if (!manual.supplier.trim() || !manual.species.trim()) {
-      setError("手工来源请填写供应商和动物种类");
+      setManualErrors(true);
+      requestAnimationFrame(() => {
+        const field = document.querySelector<HTMLElement>('.quarantine-batch-form [aria-invalid="true"]');
+        field?.scrollIntoView({ block: "center" });
+        field?.focus();
+      });
       return;
     }
+    setManualErrors(false);
     updateDraft({
       ...draft,
       sources: [...draft.sources, { ...manual, id: id(), intakeId: "", iacuc: "", batchNo: "", manual: true }],
@@ -259,9 +266,22 @@ export function BatchEditor({
                   children: (
                     <>
                       <div className="quarantine-fields">
-                        <Form.Item label="供应商">
+                        <Form.Item
+                          label="供应商"
+                          required
+                          validateStatus={manualErrors && !manual.supplier.trim() ? "error" : undefined}
+                          help={
+                            manualErrors && !manual.supplier.trim() ? (
+                              <span id="manual-supplier-error">请填写手工来源供应商</span>
+                            ) : undefined
+                          }
+                        >
                           <AutoComplete
                             aria-label="手工供应商"
+                            aria-invalid={manualErrors && !manual.supplier.trim()}
+                            aria-describedby={
+                              manualErrors && !manual.supplier.trim() ? "manual-supplier-error" : undefined
+                            }
                             value={manual.supplier}
                             options={[
                               ...new Set([...(suppliers.data?.items ?? []), ...draft.sources.map((s) => s.supplier)]),
@@ -277,9 +297,27 @@ export function BatchEditor({
                             ["notes", "来源说明"],
                           ] as const
                         ).map(([key, label]) => (
-                          <Form.Item label={label} key={key}>
+                          <Form.Item
+                            label={label}
+                            key={key}
+                            required={key === "species"}
+                            validateStatus={
+                              key === "species" && manualErrors && !manual.species.trim() ? "error" : undefined
+                            }
+                            help={
+                              key === "species" && manualErrors && !manual.species.trim() ? (
+                                <span id="manual-species-error">请填写动物种类</span>
+                              ) : undefined
+                            }
+                          >
                             <Input
                               aria-label={`手工${label}`}
+                              aria-invalid={key === "species" && manualErrors && !manual.species.trim()}
+                              aria-describedby={
+                                key === "species" && manualErrors && !manual.species.trim()
+                                  ? "manual-species-error"
+                                  : undefined
+                              }
                               value={manual[key]}
                               onChange={(e) => updateManual({ ...manual, [key]: e.target.value })}
                             />

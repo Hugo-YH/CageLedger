@@ -1,7 +1,6 @@
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../../domain/personNames";
-import { UploadOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, Form, Input, Space, Switch, Tag, Typography, Upload } from "antd";
+import { Alert, Button, Flex, Form, Input, Space, Switch, Tag } from "antd";
 import { Modal } from "../../../components/ui/Modal";
 import { useContext, useRef, useState } from "react";
 import { tagColors } from "../../../../theme/visual-system.mjs";
@@ -11,8 +10,10 @@ import { defaultReimbursementFormNo } from "../../../../domain/reimbursementForm
 import type { BillingWorkflow, BillingWorkflowAttachment } from "../../../api/workflows";
 import { uploadWorkflowAttachment, useAdvanceWorkflow, useWorkflowFundingBookOptions } from "../../../api/workflows";
 import { FundingBookConfirmationModal } from "./FundingBookConfirmationModal";
+import { validateAndFocus } from "../../../utils/validateAndFocus";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
 import { ReimbursementFormFields } from "./ReimbursementFormFields";
+import { WorkflowScanUpload } from "./WorkflowScanUpload";
 import { DialogActivityContext } from "../../../state/dialogActivity";
 
 interface RegistrationValues {
@@ -48,6 +49,9 @@ function registrationInitialValues(target: BillingWorkflow): RegistrationValues 
 
 function RegistrationSwitch({
   checked,
+  id,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
   label,
   onChange,
   returnedLabel,
@@ -55,6 +59,9 @@ function RegistrationSwitch({
   unreturnedLabel,
 }: {
   checked?: boolean;
+  id?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
   label: string;
   onChange?: (checked: boolean) => void;
   returnedLabel: string;
@@ -63,7 +70,14 @@ function RegistrationSwitch({
 }) {
   return (
     <Space size={8}>
-      <Switch aria-label={label} checked={checked} onChange={onChange} />
+      <Switch
+        id={id}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+        aria-label={label}
+        checked={checked}
+        onChange={onChange}
+      />
       <span>{label}</span>
       <Tag color={checked ? returnedColor : tagColors.status.default}>{checked ? returnedLabel : unreturnedLabel}</Tag>
     </Space>
@@ -169,7 +183,7 @@ function WorkflowRegistrationForm({
     await runOperation(() =>
       save.run(
         async () => {
-          const values = await form.validateFields();
+          const values = await validateAndFocus(form);
           const reimbursementForms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
           if (values.reimbursementFormReturned && !reimbursementForms.length) return;
           const review = fundingBookOptions.data
@@ -217,10 +231,12 @@ function WorkflowRegistrationForm({
   }
 
   async function handleUpload(kind: "settlement" | "reimbursement", file: File) {
+    let uploaded: BillingWorkflowAttachment | undefined;
     await runOperation(() =>
       upload.run(
         () => uploadWorkflowAttachment(target.id, kind, file),
         (attachment) => {
+          uploaded = attachment;
           if (kind === "settlement") setSettlementAttachment(attachment ?? null);
           else setReimbursementAttachment(attachment ?? null);
           feedback.success(
@@ -230,32 +246,16 @@ function WorkflowRegistrationForm({
         },
       ),
     );
-    return false;
+    return uploaded;
   }
 
-  const attachmentField = (
-    label: string,
-    attachment: BillingWorkflowAttachment | null,
-    kind: "settlement" | "reimbursement",
-  ) => (
-    <Flex vertical gap={4}>
-      <Space>
-        <Upload
-          accept=".pdf,.jpg,.jpeg,.png"
-          maxCount={1}
-          showUploadList={false}
-          beforeUpload={(file) => handleUpload(kind, file)}
-        >
-          <Button icon={<UploadOutlined aria-hidden />} loading={upload.pending} size="small">
-            上传扫描件
-          </Button>
-        </Upload>
-        {attachment ? <Typography.Text type="secondary">{attachment.originalName}</Typography.Text> : null}
-      </Space>
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {label}
-      </Typography.Text>
-    </Flex>
+  const attachmentField = (attachment: BillingWorkflowAttachment | null, kind: "settlement" | "reimbursement") => (
+    <WorkflowScanUpload
+      attachment={attachment}
+      disabled={save.pending || upload.pending}
+      pending={upload.pending}
+      onUpload={(file) => handleUpload(kind, file)}
+    />
   );
 
   return (
@@ -294,10 +294,10 @@ function WorkflowRegistrationForm({
       {signedStatementReturned ? (
         <>
           <Form.Item label={`${settlementLabel}扫描件`}>
-            {attachmentField("非必填", settlementAttachment, "settlement")}
+            {attachmentField(settlementAttachment, "settlement")}
           </Form.Item>
           <Form.Item label={`${settlementLabel}备注`} name="signedStatementNote">
-            <Input.TextArea maxLength={500} placeholder="选填，记录交回相关信息" rows={2} />
+            <Input.TextArea showCount maxLength={500} placeholder="选填，记录交回相关信息" rows={2} />
           </Form.Item>
         </>
       ) : null}
@@ -331,10 +331,10 @@ function WorkflowRegistrationForm({
                 <Alert role="alert" showIcon style={{ marginBottom: 8 }} title="请填写报销单号和金额" type="error" />
               ) : null}
               <Form.Item label="报销单扫描件" style={{ marginTop: 12 }}>
-                {attachmentField("非必填", reimbursementAttachment, "reimbursement")}
+                {attachmentField(reimbursementAttachment, "reimbursement")}
               </Form.Item>
               <Form.Item label="报销单备注" name="reimbursementFormNote">
-                <Input.TextArea maxLength={500} placeholder="选填，记录交回相关信息" rows={2} />
+                <Input.TextArea showCount maxLength={500} placeholder="选填，记录交回相关信息" rows={2} />
               </Form.Item>
             </>
           ) : null}

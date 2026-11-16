@@ -69,6 +69,7 @@ export function ReceptionCertificateDrawer({
   const [appliedRunIds, setAppliedRunIds] = useState<Set<string>>(() => new Set());
   const [applyingResult, setApplyingResult] = useState(false);
   const [error, setError] = useState("");
+  const [retryUpload, setRetryUpload] = useState<File | null>(null);
   const [retryRecognitionId, setRetryRecognitionId] = useState("");
   const [recognitionModes, setRecognitionModes] = useState<Record<string, "auto" | "all">>({});
   const recognitionRequests = useRef(new Map<string, ReceptionRecognitionRequest>());
@@ -79,7 +80,7 @@ export function ReceptionCertificateDrawer({
   const [phase, setPhase] = useState<"upload" | "recognize" | null>(null);
   const { begin, invalidate } = useLatestRequest();
   const pending = Boolean(phase) || save.isPending || applyingResult;
-  const confirmLeave = useUnsavedChanges(dirty, upload.isPending || save.isPending);
+  const confirmLeave = useUnsavedChanges(dirty || Boolean(retryUpload), upload.isPending || save.isPending);
 
   useEffect(() => {
     if (!active || snapshot || !query.data) return;
@@ -259,6 +260,7 @@ export function ReceptionCertificateDrawer({
     busy.current = true;
     const isCurrent = begin();
     const mode = recognitionMode;
+    setRetryUpload(file);
     setError("");
     setPhase("upload");
     let uploaded = false;
@@ -270,12 +272,13 @@ export function ReceptionCertificateDrawer({
       });
       uploaded = true;
       if (!isCurrent()) return;
+      setRetryUpload(null);
       setAttachmentId(result.attachment.id);
       setRecognitionModes((current) => ({ ...current, [result.attachment.id]: mode }));
       setPendingRun(null);
       await recognizeAttachment(result.attachment, isCurrent, mode, { deferRegistrationRefresh: true });
     } catch (reason) {
-      if (isCurrent()) setError(errorMessage(reason, "上传失败，请重新选择合格证原件重试。当前登记草稿已保留。"));
+      if (isCurrent()) setError(errorMessage(reason, "上传失败，原文件已暂存，可重试上传。当前登记草稿已保留。"));
     } finally {
       if (uploaded)
         void queryClient.invalidateQueries({ queryKey: queryKeys.receptionRegistration(record.batchId), exact: true });
@@ -405,6 +408,18 @@ export function ReceptionCertificateDrawer({
             error={error}
             onRetry={() => void query.refetch()}
           />
+          {retryUpload && !pending ? (
+            <Flex align="center" gap={8} wrap>
+              <Typography.Text type="secondary">待重试：{retryUpload.name}</Typography.Text>
+              <Button
+                disabled={!writable}
+                icon={<ActionIcon name="refresh" />}
+                onClick={() => void uploadFile(retryUpload)}
+              >
+                重试上传
+              </Button>
+            </Flex>
+          ) : null}
           <div className="reception-certificate-layout">
             <section className="reception-certificate-original" aria-label="合格证原件">
               <Flex vertical gap={12}>

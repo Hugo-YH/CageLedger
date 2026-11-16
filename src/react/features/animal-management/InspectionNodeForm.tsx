@@ -1,4 +1,4 @@
-import { Button, Form, Input, InputNumber, Popconfirm, Space, Tag, Typography } from "antd";
+import { Button, Form, Input, InputNumber, Popconfirm, Space, Tag, Tooltip, Typography } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 
 import { Drawer } from "../../components/ui/Drawer";
@@ -123,13 +123,16 @@ export function InspectionNodeForm({
                       <Form.Item name={[field.name, "nameEn"]}>
                         <Input placeholder="英文名（可选）" style={{ width: 140 }} />
                       </Form.Item>
-                      <Button
-                        className="inspection-scoring-remove"
-                        type="text"
-                        danger
-                        icon={<DeleteOutlined aria-hidden="true" />}
-                        onClick={() => remove(field.name)}
-                      />
+                      <Tooltip title={`删除第 ${field.name + 1} 个异常类型`}>
+                        <Button
+                          aria-label={`删除第 ${field.name + 1} 个异常类型`}
+                          className="inspection-scoring-remove"
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined aria-hidden="true" />}
+                          onClick={() => remove(field.name)}
+                        />
+                      </Tooltip>
                     </div>
                   ))}
                 </div>

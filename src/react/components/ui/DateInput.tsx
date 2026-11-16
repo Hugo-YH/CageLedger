@@ -8,6 +8,7 @@ export function DateInput({
   value,
   onChange,
   id,
+  min,
   max,
   required = false,
   disabled,
@@ -20,6 +21,7 @@ export function DateInput({
   value: string;
   onChange: (value: string) => void;
   id?: string;
+  min?: string;
   max?: string;
   required?: boolean;
   disabled?: boolean;
@@ -32,6 +34,7 @@ export function DateInput({
   // A new Dayjs reference resets rc-picker's in-progress calendar value.
   // Feedback renders must not replace text that has not been submitted yet.
   const dateValue = useMemo(() => (value ? dayjs(value) : null), [value]);
+  const minDateValue = useMemo(() => (min ? dayjs(min) : undefined), [min]);
   const maxDateValue = useMemo(() => (max ? dayjs(max) : undefined), [max]);
   return (
     <DatePicker
@@ -46,6 +49,7 @@ export function DateInput({
       picker={picker}
       format={format}
       value={dateValue}
+      minDate={minDateValue}
       maxDate={maxDateValue}
       style={{ width: "100%" }}
       onChange={(date) => onChange(date?.format(format) || "")}

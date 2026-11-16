@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { useFeedbackImportPreview, useFeedbackIntegration, useFeedbackList } from "../../api/feedback";
 import type { FeedbackDetail, FeedbackItem } from "../../../contracts/feedback";
+import { UiProvider } from "../../state/ui";
+import { AntdProvider } from "../../components/ui";
 import { FeedbackCreateDrawer } from "./FeedbackCreateDrawer";
 import { FeedbackDetailPanel } from "./FeedbackDetailDrawer";
 import { FeedbackImportDrawer } from "./FeedbackImportDrawer";
@@ -89,8 +91,12 @@ function mount(drawer: React.ReactNode, observers = true) {
   clients.push(client);
   return render(
     <QueryClientProvider client={client}>
-      {observers ? <ListObservers /> : null}
-      {drawer}
+      <UiProvider>
+        <AntdProvider>
+          {observers ? <ListObservers /> : null}
+          {drawer}
+        </AntdProvider>
+      </UiProvider>
     </QueryClientProvider>,
   );
 }

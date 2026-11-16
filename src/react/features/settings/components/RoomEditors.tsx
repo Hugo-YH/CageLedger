@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useUnsavedChanges } from "../../../hooks/useUnsavedChanges";
 import type { CageRack, CageRoom } from "../../../api/contracts";
 import { Alert, Button, Form, Input, Select as AntSelect } from "antd";
 import { ModalShell } from "../../../components/WorkspaceUi";
@@ -43,20 +45,30 @@ export function RoomEditor({
   onSave: () => Promise<unknown>;
 }) {
   const action = useAsyncFormAction("饲养间保存失败，请重试");
+  const [initial] = useState(() => JSON.stringify(draft));
+  const busy = pending || action.pending;
+  const confirmLeave = useUnsavedChanges(JSON.stringify(draft) !== initial, busy);
+  const close = () => {
+    if (pending || action.isPending()) return;
+    void confirmLeave().then((leave) => {
+      if (leave && !action.isPending()) onClose();
+    });
+  };
   const update = (key: keyof RoomDraft, value: string | number) => onChange({ ...draft, [key]: value });
   return (
     <ModalShell
       ariaLabel={draft.name ? "编辑饲养间" : "新增饲养间"}
       className="settings-editor-modal"
-      onClose={onClose}
+      busy={busy}
+      onClose={close}
     >
       <div className="modal-shell-head">
         <h2>{draft.name ? "编辑饲养间" : "新增饲养间"}</h2>
-        <Button aria-label="关闭" size="small" onClick={onClose}>
+        <Button aria-label="关闭" size="small" disabled={busy} onClick={close}>
           关闭
         </Button>
       </div>
-      <div className="modal-shell-body form">
+      <Form component="div" className="modal-shell-body form" disabled={busy}>
         {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
         <Field label="饲养间名称" value={draft.name} onChange={(value) => update("name", value)} />
         <Field label="区域" value={draft.area || ""} onChange={(value) => update("area", value)} />
@@ -98,12 +110,14 @@ export function RoomEditor({
             onChange={(value) => update("defaultAnimalCount", Math.max(Number(value), 1))}
           />
         </div>
-      </div>
+      </Form>
       <div className="modal-shell-actions">
-        <Button onClick={onClose}>取消</Button>
+        <Button disabled={busy} onClick={close}>
+          取消
+        </Button>
         <Button
-          disabled={pending || !draft.name.trim()}
-          loading={pending || action.pending}
+          disabled={busy || !draft.name.trim()}
+          loading={busy}
           type="primary"
           onClick={() => void action.run(onSave, onClose)}
         >
@@ -129,6 +143,15 @@ export function RackEditor({
   onSave: () => Promise<unknown>;
 }) {
   const action = useAsyncFormAction("笼架保存失败，请重试");
+  const [initial] = useState(() => JSON.stringify(draft));
+  const busy = pending || action.pending;
+  const confirmLeave = useUnsavedChanges(JSON.stringify(draft) !== initial, busy);
+  const close = () => {
+    if (pending || action.isPending()) return;
+    void confirmLeave().then((leave) => {
+      if (leave && !action.isPending()) onClose();
+    });
+  };
   const update = (key: keyof CageRack, value: string | number) => onChange({ ...draft, [key]: value });
   const rackName = (roomId: string, index: number) => {
     const room = rooms.find((item) => item.id === roomId);
@@ -140,19 +163,20 @@ export function RackEditor({
     onChange({ ...draft, index, name: rackName(draft.roomId, index) });
   };
   return (
-    <ModalShell ariaLabel="编辑笼架" className="settings-editor-modal" onClose={onClose}>
+    <ModalShell ariaLabel="编辑笼架" className="settings-editor-modal" busy={busy} onClose={close}>
       <div className="modal-shell-head">
         <h2>编辑笼架</h2>
-        <Button aria-label="关闭" size="small" onClick={onClose}>
+        <Button aria-label="关闭" size="small" disabled={busy} onClick={close}>
           关闭
         </Button>
       </div>
-      <div className="modal-shell-body form">
+      <Form component="div" className="modal-shell-body form" disabled={busy}>
         {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
         <Form component={false} layout="vertical">
           <Form.Item label="所属饲养间">
             <AntSelect
               aria-label="所属饲养间"
+              showSearch={{ optionFilterProp: "label" }}
               options={rooms.map((room) => ({ label: room.name, value: room.id }))}
               value={draft.roomId}
               onChange={(value) => updateRoom(value)}
@@ -179,15 +203,12 @@ export function RackEditor({
             onChange={(value) => update("cols", Math.max(Number(value), 1))}
           />
         </div>
-      </div>
+      </Form>
       <div className="modal-shell-actions">
-        <Button onClick={onClose}>取消</Button>
-        <Button
-          disabled={pending}
-          loading={pending || action.pending}
-          type="primary"
-          onClick={() => void action.run(onSave, onClose)}
-        >
+        <Button disabled={busy} onClick={close}>
+          取消
+        </Button>
+        <Button disabled={busy} loading={busy} type="primary" onClick={() => void action.run(onSave, onClose)}>
           保存笼架
         </Button>
       </div>

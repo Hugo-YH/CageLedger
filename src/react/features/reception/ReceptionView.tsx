@@ -22,6 +22,7 @@ import type {
   ReceptionRecord,
   ReceptionSortKey,
 } from "../../../contracts/reception";
+import { CellText } from "../../components/ui/CellText";
 import { formatPersonNames } from "../../../domain/personNames";
 import { abbreviateSupplier, normalizeIntakeOrderIdentifiers } from "../../../domain/intake";
 import { queryKeys } from "../../api/queryKeys";
@@ -185,10 +186,15 @@ export function ReceptionView() {
             : key === "pi" || key === "owner"
               ? formatPersonNames(String(value || ""))
               : value;
+        const displayText = String(
+          text === "" || text == null ? (key === "purchaseOrderNo" || key === "orderNo" ? "-" : "—") : text,
+        );
         return (
-          <span className="table-cell-text" title={String((key === "supplier" ? value : text) ?? "")}>
-            {text === "" || text == null ? (key === "purchaseOrderNo" || key === "orderNo" ? "-" : "—") : text}
-          </span>
+          <CellText
+            text={displayText}
+            fullText={key === "supplier" && value ? String(value) : displayText}
+            copyable={Boolean(value) && ["purchaseOrderNo", "orderNo", "batchNo", "iacuc"].includes(key)}
+          />
         );
       },
     })),

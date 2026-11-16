@@ -1,7 +1,10 @@
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as renderBase, renderHook, screen, waitFor } from "@testing-library/react";
 import { Form } from "antd";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { UiProvider } from "../../state/ui";
+import { AntdProvider } from "../../components/ui";
+import type { ReactElement } from "react";
 import { FeedbackCreateDrawer } from "./FeedbackCreateDrawer";
 
 const operationFeedback = vi.hoisted(() => ({
@@ -144,3 +147,13 @@ it("finishes an initiated write and its attachments without opening a stale deta
   expect(api.upload).toHaveBeenCalledTimes(1);
   expect(created).not.toHaveBeenCalled();
 });
+
+function render(ui: ReactElement) {
+  return renderBase(ui, {
+    wrapper: ({ children }) => (
+      <UiProvider>
+        <AntdProvider>{children}</AntdProvider>
+      </UiProvider>
+    ),
+  });
+}

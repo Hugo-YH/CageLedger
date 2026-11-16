@@ -269,3 +269,53 @@ describe("user management save boundaries", () => {
     });
   });
 });
+
+describe("account refresh draft", () => {
+  beforeEach(() => api.mutateAsync.mockReset());
+  afterEach(cleanup);
+  it("retains a dirty account draft when a newer server version arrives until explicitly reloaded", async () => {
+    const view = (user: ManagedUser) => (
+      <UserSaveProvider>
+        <UserList currentUserId="none" items={[user]} rooms={rooms} onDelete={vi.fn()} />
+      </UserSaveProvider>
+    );
+    const rendered = render(view(users[1]));
+    fireEvent.change(screen.getByDisplayValue("200"), { target: { value: "未保存电话" } });
+    rendered.rerender(view({ ...users[1], phone: "服务器新电话", updatedAt: "version-new" }));
+    expect(screen.getByDisplayValue("未保存电话")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("当前输入已保留");
+    expect(screen.getByRole("button", { name: "保存账号" })).toBeDisabled();
+    expect(api.mutateAsync).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "放弃修改并载入最新资料" }));
+    expect(screen.getByDisplayValue("服务器新电话")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("服务器新电话"), { target: { value: "核对后的电话" } });
+    api.mutateAsync.mockResolvedValueOnce({ user: users[1] });
+    fireEvent.click(screen.getByRole("button", { name: "保存账号" }));
+    await waitFor(() =>
+      expect(api.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expectedUpdatedAt: "version-new",
+          user: expect.objectContaining({ phone: "核对后的电话" }),
+        }),
+      ),
+    );
+  });
+  it("keeps the just-saved values while the list still contains its older response", async () => {
+    const savedUser = { ...users[1], phone: "已保存电话", updatedAt: "version-new" };
+    const view = (user: ManagedUser) => (
+      <UserSaveProvider>
+        <UserList currentUserId="none" items={[user]} rooms={rooms} onDelete={vi.fn()} />
+      </UserSaveProvider>
+    );
+    const rendered = render(view(users[1]));
+    fireEvent.change(screen.getByDisplayValue("200"), { target: { value: savedUser.phone } });
+    api.mutateAsync.mockResolvedValueOnce({ user: savedUser });
+    fireEvent.click(screen.getByRole("button", { name: "保存账号" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存账号" })).toBeEnabled());
+    expect(screen.getByDisplayValue(savedUser.phone)).toBeInTheDocument();
+    rendered.rerender(view(savedUser));
+    expect(screen.getByDisplayValue(savedUser.phone)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});

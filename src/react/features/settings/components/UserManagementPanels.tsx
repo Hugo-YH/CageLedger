@@ -26,6 +26,16 @@ const emptyDraft = {
   billingLockAllowed: false,
 };
 type UserDraft = typeof emptyDraft;
+type UserErrors = Partial<Record<keyof UserDraft, string>>;
+function userErrors(draft: UserDraft, creating = false): UserErrors {
+  return {
+    ...(!draft.username.trim() ? { username: "请填写登录名" } : {}),
+    ...(creating && !draft.password ? { password: "请填写初始密码" } : {}),
+  };
+}
+function focusError(root: HTMLDivElement | null) {
+  requestAnimationFrame(() => root?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+}
 
 export function UserSaveProvider({ children }: { children: ReactNode }) {
   const feedback = useOperationFeedback();
@@ -178,21 +188,70 @@ function UserEditor({
   onDelete: (user: ManagedUser) => void;
 }) {
   const [draft, setDraft] = useState<UserDraft>(() => userDraft(user));
+  const [baseline, setBaseline] = useState(user);
+  const [serverSnapshot, setServerSnapshot] = useState(user);
+  const [errors, setErrors] = useState<UserErrors>({});
+  const editor = useRef<HTMLDivElement>(null);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(userDraft(baseline));
   const action = useAsyncFormAction("账号保存失败，请重试");
   const saveUser = useUserSaveAction();
   const phoneId = useId();
-  useEffect(() => setDraft(userDraft(user)), [user]);
-  const save = () =>
-    action.run(() =>
-      saveUser(user.id, {
-        id: user.id,
-        user: current ? { phone: draft.phone } : draft,
-        expectedUpdatedAt: user.updatedAt,
-      }),
+  useEffect(() => {
+    if (!dirty && !action.pending && user !== serverSnapshot) {
+      setBaseline(user);
+      setDraft(userDraft(user));
+      setServerSnapshot(user);
+    }
+  }, [user, serverSnapshot, dirty, action.pending]);
+  const conflict = dirty && user.updatedAt !== baseline.updatedAt;
+  const conflictNotice = conflict ? (
+    <Alert
+      showIcon
+      type="warning"
+      title="账号资料已更新，当前输入已保留"
+      description="请核对最新资料后重新编辑，避免覆盖其他管理员的修改。"
+      action={
+        <Button
+          disabled={action.pending}
+          onClick={() => {
+            setBaseline(user);
+            setServerSnapshot(user);
+            setDraft(userDraft(user));
+            setErrors({});
+            action.setError("");
+          }}
+        >
+          放弃修改并载入最新资料
+        </Button>
+      }
+    />
+  ) : null;
+  const save = () => {
+    if (conflict) return;
+    const nextErrors = current ? {} : userErrors(draft);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) {
+      focusError(editor.current);
+      return;
+    }
+    return action.run(
+      () =>
+        saveUser(user.id, {
+          id: user.id,
+          user: current ? { phone: draft.phone } : draft,
+          expectedUpdatedAt: baseline.updatedAt,
+        }),
+      () => {
+        setBaseline({ ...baseline, ...draft });
+        setServerSnapshot(user);
+        setDraft({ ...draft, password: "" });
+      },
     );
+  };
   if (current)
     return (
-      <div className="settings-user-editor">
+      <div ref={editor} className="settings-user-editor">
+        {conflictNotice}
         {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
         <Typography.Text type="secondary">
           当前登录账号仅可维护联系电话，登录名、显示姓名与角色由其他管理员账号管理。
@@ -201,6 +260,8 @@ function UserEditor({
           <Form.Item htmlFor={phoneId} label="联系电话">
             <Input
               id={phoneId}
+              type="tel"
+              autoComplete="tel"
               disabled={action.pending}
               value={draft.phone}
               placeholder="用于预约消息识别的联系电话"
@@ -209,18 +270,20 @@ function UserEditor({
           </Form.Item>
         </Form>
         <Space className="form-actions">
-          <UserSaveButton pendingId={user.id} disabled={action.pending} onClick={() => void save()}>
+          <UserSaveButton pendingId={user.id} disabled={conflict || action.pending} onClick={() => void save()}>
             保存联系电话
           </UserSaveButton>
         </Space>
       </div>
     );
   return (
-    <div className="settings-user-editor">
+    <div ref={editor} className="settings-user-editor">
+      {conflictNotice}
       {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
       <UserFields
         disabled={action.pending}
         draft={draft}
+        errors={errors}
         rooms={rooms}
         roomsReady={roomsReady}
         roomsError={roomsError}
@@ -228,12 +291,12 @@ function UserEditor({
         onChange={setDraft}
       />
       <Space className="form-actions">
-        <Button danger onClick={() => onDelete(user)}>
+        <Button danger disabled={action.pending} onClick={() => onDelete(user)}>
           删除账号
         </Button>
         <UserSaveButton
           pendingId={user.id}
-          disabled={action.pending || (draft.role === "room_admin" && !roomsReady)}
+          disabled={conflict || action.pending || (draft.role === "room_admin" && !roomsReady)}
           onClick={() => void save()}
         >
           保存账号
@@ -255,35 +318,49 @@ export function UserCreateForm({
   onRetryRooms?: () => void;
 }) {
   const [draft, setDraft] = useState<UserDraft>(emptyDraft);
+  const [errors, setErrors] = useState<UserErrors>({});
+  const editor = useRef<HTMLDivElement>(null);
   const action = useAsyncFormAction("创建账号失败，请重试");
   const saveUser = useUserSaveAction();
   return (
     <Card className="settings-side-panel" size="small" title="创建账号">
-      {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
-      <UserFields
-        creating
-        disabled={action.pending}
-        draft={draft}
-        rooms={rooms}
-        roomsReady={roomsReady}
-        roomsError={roomsError}
-        onRetryRooms={onRetryRooms}
-        onChange={setDraft}
-      />
-      <UserSaveButton
-        pendingId={CREATE_SAVE_ID}
-        block
-        icon={<ActionIcon name="create" />}
-        disabled={!draft.username || !draft.password || action.pending || (draft.role === "room_admin" && !roomsReady)}
-        onClick={() =>
-          void action.run(
-            () => saveUser(CREATE_SAVE_ID, { user: draft }),
-            () => setDraft(emptyDraft),
-          )
-        }
-      >
-        创建账号
-      </UserSaveButton>
+      <div ref={editor}>
+        {action.error ? <Alert role="alert" showIcon title={action.error} type="error" /> : null}
+        <UserFields
+          creating
+          disabled={action.pending}
+          draft={draft}
+          errors={errors}
+          rooms={rooms}
+          roomsReady={roomsReady}
+          roomsError={roomsError}
+          onRetryRooms={onRetryRooms}
+          onChange={setDraft}
+        />
+        <UserSaveButton
+          pendingId={CREATE_SAVE_ID}
+          block
+          icon={<ActionIcon name="create" />}
+          disabled={action.pending || (draft.role === "room_admin" && !roomsReady)}
+          onClick={() => {
+            const nextErrors = userErrors(draft, true);
+            setErrors(nextErrors);
+            if (Object.keys(nextErrors).length) {
+              focusError(editor.current);
+              return;
+            }
+            void action.run(
+              () => saveUser(CREATE_SAVE_ID, { user: draft }),
+              () => {
+                setDraft(emptyDraft);
+                setErrors({});
+              },
+            );
+          }}
+        >
+          创建账号
+        </UserSaveButton>
+      </div>
     </Card>
   );
 }
@@ -302,6 +379,7 @@ function userDraft(user: ManagedUser): UserDraft {
 
 function UserFields({
   draft,
+  errors = {},
   rooms,
   roomsReady,
   roomsError,
@@ -311,6 +389,7 @@ function UserFields({
   disabled = false,
 }: {
   draft: UserDraft;
+  errors?: UserErrors;
   rooms: CageRoom[];
   roomsReady: boolean;
   roomsError: boolean;
@@ -323,16 +402,33 @@ function UserFields({
   const update = <K extends keyof UserDraft>(key: K, value: UserDraft[K]) => onChange({ ...draft, [key]: value });
   return (
     <Form disabled={disabled} className="user-fields-react" layout="vertical" requiredMark={false}>
-      <Form.Item htmlFor={`${id}-username`} label="登录名" required={creating}>
+      <Form.Item
+        help={errors.username ? <span id={`${id}-username_help`}>{errors.username}</span> : undefined}
+        validateStatus={errors.username ? "error" : undefined}
+        htmlFor={`${id}-username`}
+        label="登录名"
+        required={creating}
+      >
         <Input
           id={`${id}-username`}
+          aria-invalid={Boolean(errors.username)}
+          aria-describedby={errors.username ? `${id}-username_help` : undefined}
+          autoComplete="username"
           value={draft.username}
           onChange={(event) => update("username", event.target.value)}
         />
       </Form.Item>
-      <Form.Item htmlFor={`${id}-display-name`} label="显示姓名" required={creating}>
+      <Form.Item
+        help={errors.displayName ? <span id={`${id}-display-name_help`}>{errors.displayName}</span> : undefined}
+        validateStatus={errors.displayName ? "error" : undefined}
+        htmlFor={`${id}-display-name`}
+        label="显示姓名"
+        extra="留空时使用登录名"
+      >
         <Input
           id={`${id}-display-name`}
+          aria-invalid={Boolean(errors.displayName)}
+          aria-describedby={errors.displayName ? `${id}-display-name_help` : undefined}
           value={draft.displayName}
           onChange={(event) => update("displayName", event.target.value)}
         />
@@ -340,14 +436,25 @@ function UserFields({
       <Form.Item htmlFor={`${id}-phone`} label="联系电话">
         <Input
           id={`${id}-phone`}
+          type="tel"
+          autoComplete="tel"
           value={draft.phone}
           placeholder="用于预约消息识别的联系电话"
           onChange={(event) => update("phone", event.target.value)}
         />
       </Form.Item>
-      <Form.Item htmlFor={`${id}-password`} label={creating ? "初始密码" : "新密码（留空保持）"} required={creating}>
+      <Form.Item
+        help={errors.password ? <span id={`${id}-password_help`}>{errors.password}</span> : undefined}
+        validateStatus={errors.password ? "error" : undefined}
+        htmlFor={`${id}-password`}
+        label={creating ? "初始密码" : "新密码（留空保持）"}
+        required={creating}
+      >
         <Input.Password
           id={`${id}-password`}
+          aria-invalid={Boolean(errors.password)}
+          aria-describedby={errors.password ? `${id}-password_help` : undefined}
+          autoComplete="new-password"
           value={draft.password}
           onChange={(event) => update("password", event.target.value)}
         />

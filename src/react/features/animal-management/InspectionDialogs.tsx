@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Form, Image, Input, Select, Space, Upload } from "antd";
 import { Modal } from "../../components/ui/Modal";
 import type { UploadFile } from "antd";
+import type { RcFile } from "antd/es/upload/interface";
+import { UploadOutlined } from "@ant-design/icons";
 
 import type { InspectionAnswer, InspectionCatalogNode } from "../../api/contracts";
 
@@ -30,6 +32,14 @@ export function FindingCaptureDialog({
   const [note, setNote] = useState(answer?.note || "");
   const [subOption, setSubOption] = useState(answer?.subOption || "");
   const [files, setFiles] = useState<File[]>([]);
+  const [photoError, setPhotoError] = useState("");
+  const [preview, setPreview] = useState("");
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
   const images = node.config?.referenceImages || [];
   const confirmFinding = () =>
     onConfirm({
@@ -125,18 +135,42 @@ export function FindingCaptureDialog({
               />
             </Form.Item>
           ) : null}
-          <Form.Item extra="最多 3 张，单张不超过 10 MB。" label="现场照片">
+          <Form.Item
+            extra="支持 JPEG、PNG、WebP；最多 3 张，单张不超过 10 MiB。"
+            label="现场照片"
+            validateStatus={photoError ? "error" : undefined}
+            help={photoError}
+          >
             <Upload
               accept="image/jpeg,image/png,image/webp"
-              beforeUpload={() => false}
+              beforeUpload={(file, selected) => {
+                if (files.length + selected.indexOf(file) >= 3) {
+                  setPhotoError("最多选择 3 张现场照片；请先移除不需要的照片。");
+                  return Upload.LIST_IGNORE;
+                }
+                if (
+                  !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+                  file.size > 10 * 1024 * 1024 ||
+                  !file.size
+                ) {
+                  setPhotoError("请选择非空的 JPEG、PNG 或 WebP 图片，单张不超过 10 MiB。");
+                  return Upload.LIST_IGNORE;
+                }
+                setPhotoError("");
+                return false;
+              }}
               fileList={
                 files.map((file) => ({
-                  uid: `${file.name}-${file.lastModified}`,
+                  uid: (file as RcFile).uid || `${file.name}-${file.lastModified}`,
+                  originFileObj: file as RcFile,
                   name: file.name,
                   status: "done",
                 })) as UploadFile[]
               }
-              listType="text"
+              listType="picture"
+              onPreview={(file) => {
+                if (file.originFileObj) setPreview(URL.createObjectURL(file.originFileObj));
+              }}
               maxCount={3}
               multiple
               onChange={({ fileList }) =>
@@ -149,7 +183,24 @@ export function FindingCaptureDialog({
                     .slice(0, 3),
                 )
               }
-            />
+            >
+              <Button icon={<UploadOutlined aria-hidden />} disabled={files.length >= 3}>
+                选择现场照片
+              </Button>
+            </Upload>
+            {preview ? (
+              <Image
+                alt="现场照片预览"
+                src={preview}
+                style={{ display: "none" }}
+                preview={{
+                  open: true,
+                  onOpenChange: (open) => {
+                    if (!open) setPreview("");
+                  },
+                }}
+              />
+            ) : null}
           </Form.Item>
         </Form>
         {node.config?.suggestionMeasure ? (

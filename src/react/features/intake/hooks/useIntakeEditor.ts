@@ -32,6 +32,9 @@ export function useIntakeEditor({
     revision.current += 1;
   }
   const [draft, setDraft] = useState(() => createIntakeDraft(user.displayName, user.phone));
+  const [baseline, setBaseline] = useState(() => JSON.stringify(draft));
+  const draftMode = useRef(mode);
+  const [fieldErrors, setFieldErrors] = useState<{ roomName?: string; quantity?: string }>({});
   const [editing, setEditing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState("");
@@ -41,8 +44,21 @@ export function useIntakeEditor({
   }, []);
   const recognition = useIntakeRecognition(invalidate);
   const { reset: resetRecognition, invalidate: invalidateRecognition } = recognition;
-  const editRead = useIntakeEditorRead(roomsReady, (item) => replaceDraft(normalizeIntakeBatch(item, roomNames)), mode);
+  const editRead = useIntakeEditorRead(
+    roomsReady,
+    (item) => replaceDraft(normalizeIntakeBatch(item, roomNames), true),
+    mode,
+  );
   const cancelEditorRead = editRead.cancel;
+  useEffect(() => {
+    if (draftMode.current === mode) return;
+    draftMode.current = mode;
+    const fresh = createIntakeDraft(user.displayName, user.phone);
+    setDraft(fresh);
+    setBaseline(JSON.stringify(fresh));
+    setFieldErrors({});
+    setNotice("");
+  }, [mode, user.displayName, user.phone]);
   useEffect(() => {
     resetRecognition();
     cancelEditorRead();
@@ -65,23 +81,27 @@ export function useIntakeEditor({
     setNotice("房间信息尚未就绪，请先重试加载。");
     return false;
   }
-  function replaceDraft(item: IntakeBatch) {
+  function replaceDraft(item: IntakeBatch, accepted = false) {
     recognition.invalidate();
     invalidate();
     setDraft(item);
+    setFieldErrors({});
+    if (accepted) setBaseline(JSON.stringify(item));
   }
   function update<K extends keyof IntakeBatch>(key: K, value: IntakeBatch[K]) {
+    setFieldErrors((current) => ({ ...current, [key]: undefined }));
     recognition.invalidate();
     invalidate();
     setDraft((current) => updateIntakeDraft(current, key, value, roomNames));
   }
   function startNew() {
     recognition.reset();
-    replaceDraft(createIntakeDraft(user.displayName, user.phone));
+    replaceDraft(createIntakeDraft(user.displayName, user.phone), true);
     setEditing(false);
     setNotice("");
   }
   function edit(item: IntakeBatchListItem) {
+    setBaseline(JSON.stringify(draft));
     recognition.reset();
     invalidate();
     setNotice("");
@@ -94,11 +114,12 @@ export function useIntakeEditor({
     invalidate();
     setDialogOpen(false);
     editRead.cancel();
+    setBaseline(JSON.stringify(draft));
   }
   function editReviewed(item: IntakeBatch) {
     editRead.cancel();
     recognition.reset();
-    replaceDraft(normalizeIntakeBatch(item, roomNames));
+    replaceDraft(normalizeIntakeBatch(item, roomNames), true);
     setEditing(true);
     setNotice("正在编辑原预约；本次保存仍会校验原记录版本。");
     setDialogOpen(mode === "batches");
@@ -107,8 +128,17 @@ export function useIntakeEditor({
     if (!requireRooms() || recognition.reading) return null;
     const item = normalizeIntakeBatch(draft, roomNames);
     const missing = missingIntakeRequiredFields(item);
+    setFieldErrors({
+      ...(missing.includes("房间") ? { roomName: "请选择饲养间" } : {}),
+      ...(missing.includes("数量（只）") ? { quantity: "直接取材数量须为大于 0 的整数" } : {}),
+    });
     if (missing.length) {
       setNotice(`请填写必填项目：${missing.join("、")}。`);
+      requestAnimationFrame(() => {
+        const field = document.querySelector<HTMLElement>('#intake-entry-panel [aria-invalid="true"]');
+        field?.scrollIntoView({ block: "center" });
+        field?.focus();
+      });
       return null;
     }
     return item;
@@ -118,11 +148,11 @@ export function useIntakeEditor({
     recognition.reset();
     if (intent.exists) {
       updateSelection([item]);
-      replaceDraft(normalizeIntakeBatch(item, roomNames));
+      replaceDraft(normalizeIntakeBatch(item, roomNames), true);
       setNotice("");
       feedback.success("待接收批次已更新", item.batchNo);
     } else {
-      replaceDraft(createIntakeDraft(user.displayName, user.phone));
+      replaceDraft(createIntakeDraft(user.displayName, user.phone), true);
       setEditing(false);
       setNotice("");
       feedback.success(title || "待接收批次已保存", `${item.batchNo}，可继续录入下一批。`);
@@ -131,12 +161,14 @@ export function useIntakeEditor({
   function adoptPrintedDraft(item: IntakeBatch) {
     const saved = normalizeIntakeBatch(item, roomNames);
     recognition.reset();
-    replaceDraft(saved);
+    replaceDraft(saved, true);
     setEditing(true);
     return saved;
   }
   return {
     draft,
+    dirty: JSON.stringify(draft) !== baseline,
+    fieldErrors,
     editing,
     dialogOpen,
     revision,

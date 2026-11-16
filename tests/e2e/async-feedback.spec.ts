@@ -111,11 +111,13 @@ for (const recording of [false, true]) {
     await expect(formNo).toHaveValue("BX-RETRY-001");
     await submit.click();
     await expect.poll(() => writes).toBe(2);
+    await expect(dialog.getByRole("button", { name: "取消", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await pending?.fulfill({ json: { ok: true, item: workflow } });
     await expect(dialog).toHaveCount(0);
     await openForm();
     await expect(dialog.getByRole("alert")).toHaveCount(0);
-    await pending?.fulfill({ json: { ok: true, item: workflow } });
     await expect(dialog).toBeVisible();
     if (recording) await expect(dialog.getByRole("textbox", { name: /报销单号/ })).not.toHaveValue("BX-RETRY-001");
     else await expect(dialog.getByRole("switch", { name: "饲养费结算单", exact: true })).not.toBeChecked();

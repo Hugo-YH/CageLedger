@@ -398,3 +398,49 @@ it("keeps a revoke failure in the modal, then emits success only for the success
     note: "重核金额",
   });
 });
+
+it("blocks all revoke close paths while saving and preserves its reason on failure", async () => {
+  const pending = deferred<unknown>();
+  api.advance.mockReturnValueOnce(pending.promise);
+  const cancel = vi.fn();
+  render(<WorkflowRevokeModal target={{ workflow: target, toStatus: "statement_generated" }} onCancel={cancel} />);
+  fireEvent.change(screen.getByPlaceholderText("请填写撤回原因"), { target: { value: "需要重新核对" } });
+  fireEvent.click(screen.getByRole("button", { name: /确认撤回/ }));
+  expectCloseBlocked(cancel);
+  await act(async () => {
+    pending.reject(new Error("临时失败"));
+    await pending.promise.catch(() => {});
+  });
+  expect(await screen.findByRole("alert")).toHaveTextContent("临时失败");
+  expect(screen.getByPlaceholderText("请填写撤回原因")).toHaveValue("需要重新核对");
+  expect(screen.getByRole("button", { name: /取\s*消/ })).toBeEnabled();
+  expect(cancel).not.toHaveBeenCalled();
+});
+
+it("retries the failed scan without opening the file picker or repeating registration", async () => {
+  api.upload
+    .mockRejectedValueOnce(new Error("上传连接中断"))
+    .mockResolvedValueOnce({ id: "scan", originalName: "重试扫描件.pdf" });
+  renderWorkflowForm("registration", vi.fn());
+  const file = new File(["scan"], "重试扫描件.pdf", { type: "application/pdf" });
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("缺少上传入口");
+  fireEvent.change(input, { target: { files: [file] } });
+  const retry = await screen.findByRole("button", { name: "重试上传" });
+  expect(api.upload).toHaveBeenCalledOnce();
+  fireEvent.click(retry);
+  await waitFor(() => expect(api.upload).toHaveBeenCalledTimes(2));
+  expect(api.upload.mock.calls[1]).toEqual(["workflow", "settlement", file]);
+  expect(api.advance).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole("button", { name: "重试上传" })).not.toBeInTheDocument());
+});
+
+it("focuses the first invalid Ant field after validation releases the submission lock", async () => {
+  renderWorkflowForm("recording", vi.fn());
+  const amount = screen.getByPlaceholderText("金额（元）");
+  fireEvent.click(screen.getByRole("button", { name: "保存补录" }));
+  await screen.findByText("请填写金额");
+  await waitFor(() => expect(amount).toHaveFocus());
+  expect(amount).toBeEnabled();
+  expect(api.record).not.toHaveBeenCalled();
+});

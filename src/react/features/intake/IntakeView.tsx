@@ -22,6 +22,7 @@ import { useIntakeSelection } from "./hooks/useIntakeSelection";
 import { useIntakeRecognitionMerge } from "./hooks/useIntakeRecognitionMerge";
 import { useIntakeMessageRecognition } from "./hooks/useIntakeMessageRecognition";
 import type { IntakeSaveIntent } from "./intakeViewTypes";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 
 export function IntakeView({
   user,
@@ -96,6 +97,17 @@ export function IntakeView({
     setNotice: editor.setNotice,
     onTextRecognized: merge.preview,
   });
+  const editorBusy = saves.mutation.isPending || printer.preparing;
+  const confirmLeave = useUnsavedChanges(
+    (mode === "entry" || editor.dialogOpen) && (editor.dirty || editor.recognition.images.length > 0),
+    editorBusy,
+  );
+  function discardThen(action: () => void) {
+    if (saves.inFlight.current || editorBusy) return;
+    void confirmLeave().then((leave) => {
+      if (leave && !saves.inFlight.current) action();
+    });
+  }
   useSelectionScope(
     page.scope,
     () => {
@@ -151,6 +163,7 @@ export function IntakeView({
     draft: editor.draft,
     roomNames,
     notice: editor.notice,
+    fieldErrors: editor.fieldErrors,
     saving: saves.mutation.isPending || editor.recognition.reading || printer.preparing,
     aiPending: editor.recognition.pending || editor.recognition.reading,
     recognitionImages: editor.recognition.images,
@@ -187,8 +200,8 @@ export function IntakeView({
               actions={
                 <ActionButton
                   icon={<ActionIcon name="create" />}
-                  disabled={saves.mutation.isPending}
-                  onClick={editor.startNew}
+                  disabled={editorBusy}
+                  onClick={() => discardThen(editor.startNew)}
                 >
                   新建批次
                 </ActionButton>
@@ -238,6 +251,7 @@ export function IntakeView({
               params={page.params}
               filters={page.filters}
               onClearSelection={selection.clear}
+              onClearFilters={page.clearFilters}
               onToggleAll={() => void selection.toggleAll(page.params)}
               onToggleItem={selection.toggle}
               onSort={page.onSort}
@@ -245,7 +259,7 @@ export function IntakeView({
               onPrint={(targets) => printer.requestPrint(targets)}
               onMarkPrinted={(targets) => void actions.markPrinted(targets)}
               onReceive={actions.beginReceive}
-              onEdit={editor.edit}
+              onEdit={(item) => discardThen(() => editor.edit(item))}
               onDelete={actions.setDeleteTarget}
               onPage={page.setPage}
               onPageSize={page.onPageSize}
@@ -254,11 +268,11 @@ export function IntakeView({
         </section>
       </div>
       <IntakeEditorDialog
-        editor={editor}
+        editor={{ ...editor, close: () => discardThen(editor.close) }}
         form={form}
         roomFeedback={roomFeedback}
         mergeFeedback={mergeFeedback}
-        saving={saves.mutation.isPending}
+        saving={editorBusy}
         roomsReady={roomsReady}
       />
       <IntakeActionDialogs actions={actions} printer={printer} saves={saves} merge={merge} />

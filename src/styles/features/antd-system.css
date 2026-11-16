@@ -130,12 +130,17 @@
   border-top: 1px solid var(--app-border);
 }
 
-.inspection-finding-modal .ant-modal-content {
+.inspection-finding-modal .ant-modal-container {
+  display: flex;
+  max-height: calc(100dvh - 32px);
+  flex-direction: column;
+  padding: 0;
   overflow: hidden;
   border-radius: 8px;
 }
 
 .inspection-finding-modal .ant-modal-header {
+  flex-shrink: 0;
   margin-bottom: 0;
   padding: 20px 24px 16px;
   border-bottom: 1px solid var(--app-border);
@@ -177,12 +182,15 @@
 }
 
 .inspection-finding-modal .ant-modal-body {
-  max-height: min(620px, calc(100dvh - 240px));
+  min-height: 0;
+  max-height: 620px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px 24px;
 }
 
 .inspection-finding-modal .ant-modal-footer {
+  flex-shrink: 0;
   margin-top: 0;
   padding: 12px 24px;
   border-top: 1px solid var(--app-border);
@@ -1152,7 +1160,6 @@
   }
 
   .inspection-finding-modal .ant-modal-body {
-    max-height: calc(100dvh - 212px);
     padding: 16px;
   }
 

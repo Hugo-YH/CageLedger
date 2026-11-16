@@ -395,20 +395,17 @@
   white-space: nowrap;
 }
 
-.inspection-finding-modal .ant-modal-content,
 .inspection-detail-modal .ant-modal-content,
 .inspection-image-dialog .ant-modal-content {
   border-radius: 8px;
   box-shadow: var(--shadow-pop);
 }
 
-.inspection-finding-modal .ant-modal-header,
 .inspection-detail-modal .ant-modal-header,
 .inspection-image-dialog .ant-modal-header {
   margin-bottom: 16px;
 }
 
-.inspection-finding-modal .ant-modal-footer,
 .inspection-detail-modal .ant-modal-footer {
   margin-top: 20px;
 }

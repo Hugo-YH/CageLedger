@@ -1,5 +1,5 @@
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Input } from "antd";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { useSaveOccupancy } from "../../../api/cages";
@@ -7,6 +7,7 @@ import { ModalShell } from "../../../components/WorkspaceUi";
 import { ActionButton, ReadOnlyInput } from "../../../components/ui";
 import { animalAgeText, cageCode, emptyOccupancy } from "../../../../domain/cages";
 import { Field, SexSelect, SlotStatusSelect } from "./CageFormControls";
+import { useUnsavedChanges } from "../../../hooks/useUnsavedChanges";
 import { today } from "./cageWorkspaceDate";
 
 export function SlotEditor({
@@ -37,10 +38,21 @@ export function SlotEditor({
   const showMonkeyFields = roomSpecies === "monkey";
   const ageText = animalAgeText(draft.birthDate, today);
   const save = useSaveOccupancy(roomId);
+  const [original] = useState(() => JSON.stringify(draft));
+  const writing = useRef(false);
+  const confirmLeave = useUnsavedChanges(JSON.stringify(draft) !== original, save.isPending);
+  const close = () => {
+    if (writing.current) return;
+    void confirmLeave().then((leave) => {
+      if (leave && !writing.current) onClose();
+    });
+  };
   const update = (key: keyof Occupancy, value: string | number | null) =>
     setDraft((current) => ({ ...current, [key]: value }));
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (writing.current) return;
+    writing.current = true;
     const isCurrent = beginOperation();
     setError("");
     try {
@@ -50,13 +62,17 @@ export function SlotEditor({
       onClose();
     } catch (error) {
       if (isCurrent()) setError(error instanceof Error ? error.message : "保存失败");
+    } finally {
+      writing.current = false;
     }
   }
   async function clear() {
+    if (writing.current) return;
     if (!occupancy) {
       onClose();
       return;
     }
+    writing.current = true;
     const isCurrent = beginOperation();
     setError("");
     try {
@@ -66,6 +82,8 @@ export function SlotEditor({
       onClose();
     } catch (cause) {
       if (isCurrent()) setError(cause instanceof Error ? cause.message : "设为空失败，请重试");
+    } finally {
+      writing.current = false;
     }
   }
   return (
@@ -73,23 +91,35 @@ export function SlotEditor({
       ariaLabel={`编辑笼位 ${cageCode(slot, rack.index, roomName)}`}
       className="cage-slot-modal"
       width={640}
-      onClose={onClose}
+      busy={save.isPending}
+      onClose={close}
     >
       <div className="modal-shell-head">
         <div>
           <h2 id="slot-editor-title">编辑笼位 {cageCode(slot, rack.index, roomName)}</h2>
           <p>{occupancy ? "维护当前占用记录" : "录入新的占用记录"}</p>
         </div>
-        <ActionButton aria-label="关闭" onClick={onClose}>
+        <ActionButton aria-label="关闭" disabled={save.isPending} onClick={close}>
           关闭
         </ActionButton>
       </div>
       <form className="modal-shell-body form compact-slot-form" onSubmit={submit}>
         {error ? <Alert showIcon type="error" title={error} /> : null}
         <div className="compact-form-row third">
-          <SlotStatusSelect id="cage-slot-status" value={draft.status} onChange={(value) => update("status", value)} />
-          <Field label="笼位编号" value={draft.cageCode} onChange={(value) => update("cageCode", value)} />
+          <SlotStatusSelect
+            disabled={save.isPending}
+            id="cage-slot-status"
+            value={draft.status}
+            onChange={(value) => update("status", value)}
+          />
           <Field
+            disabled={save.isPending}
+            label="笼位编号"
+            value={draft.cageCode}
+            onChange={(value) => update("cageCode", value)}
+          />
+          <Field
+            disabled={save.isPending}
             label="动物数量"
             type="number"
             value={draft.animalCount || ""}
@@ -101,11 +131,13 @@ export function SlotEditor({
             <legend>猴个体信息</legend>
             <div className="compact-form-row third">
               <SexSelect
+                disabled={save.isPending}
                 id="cage-slot-sex"
                 value={draft.animalSex || "unknown"}
                 onChange={(value) => update("animalSex", value)}
               />
               <Field
+                disabled={save.isPending}
                 label="出生日期"
                 type="date"
                 value={draft.birthDate || ""}
@@ -127,31 +159,62 @@ export function SlotEditor({
           </fieldset>
         ) : null}
         <div className="compact-form-row half">
-          <Field label="IACUC 编号" value={draft.iacuc} onChange={(value) => update("iacuc", value)} />
-          <Field label="项目名称" value={draft.project} onChange={(value) => update("project", value)} />
+          <Field
+            disabled={save.isPending}
+            label="IACUC 编号"
+            value={draft.iacuc}
+            onChange={(value) => update("iacuc", value)}
+          />
+          <Field
+            disabled={save.isPending}
+            label="项目名称"
+            value={draft.project}
+            onChange={(value) => update("project", value)}
+          />
         </div>
         <div className="compact-form-row half">
-          <Field personNames label="项目负责人" value={draft.pi} onChange={(value) => update("pi", value)} />
-          <Field personNames label="实验负责人" value={draft.owner} onChange={(value) => update("owner", value)} />
+          <Field
+            disabled={save.isPending}
+            personNames
+            label="项目负责人"
+            value={draft.pi}
+            onChange={(value) => update("pi", value)}
+          />
+          <Field
+            disabled={save.isPending}
+            personNames
+            label="实验负责人"
+            value={draft.owner}
+            onChange={(value) => update("owner", value)}
+          />
         </div>
         <div className="compact-form-row third">
           <Field
+            disabled={save.isPending}
             label="开始日期"
             type="date"
             value={draft.startDate}
             onChange={(value) => update("startDate", value)}
           />
           <Field
+            disabled={save.isPending}
             label="饲养周期（天）"
             type="number"
             value={draft.feedingDays || ""}
             onChange={(value) => update("feedingDays", value ? Number(value) : null)}
           />
-          <Field label="结束日期" type="date" value={draft.endDate} onChange={(value) => update("endDate", value)} />
+          <Field
+            disabled={save.isPending}
+            label="结束日期"
+            type="date"
+            value={draft.endDate}
+            onChange={(value) => update("endDate", value)}
+          />
         </div>
         <label htmlFor="cage-slot-notes">
           备注
           <Input.TextArea
+            disabled={save.isPending}
             aria-label="备注"
             id="cage-slot-notes"
             rows={3}
@@ -160,7 +223,11 @@ export function SlotEditor({
           />
         </label>
         <div className="modal-shell-actions">
-          <ActionButton tone="destructive" onClick={() => (confirmClear ? void clear() : setConfirmClear(true))}>
+          <ActionButton
+            disabled={save.isPending}
+            tone="destructive"
+            onClick={() => (confirmClear ? void clear() : setConfirmClear(true))}
+          >
             {confirmClear ? "再次点击确认设为空" : "设为空"}
           </ActionButton>
           <ActionButton disabled={save.isPending} loading={save.isPending} tone="primary" type="submit">

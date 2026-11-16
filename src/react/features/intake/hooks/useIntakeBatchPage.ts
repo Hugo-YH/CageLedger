@@ -50,6 +50,10 @@ export function useIntakeBatchPage(mode: "entry" | "batches") {
       setSort((current) => ({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" }));
       setPage(1);
     },
+    clearFilters: () => {
+      setFilters({});
+      setPage(1);
+    },
     onFilter: (key: string, values: string[]) => {
       setFilters((current) => ({ ...current, [key]: values }));
       setPage(1);

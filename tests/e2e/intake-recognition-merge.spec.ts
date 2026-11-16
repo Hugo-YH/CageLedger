@@ -288,7 +288,7 @@ test("ambiguous appointments with one purchase number remain distinguishable by 
   await expect(secondOption).toBeVisible();
   await page.screenshot({ path: info.outputPath("review-candidate-orders.png"), animations: "disabled" });
   await secondOption.click();
-  await expect(dialog.getByTitle(second.orderNo, { exact: true })).toBeVisible();
+  await expect(dialog.getByTitle(String(second.orderNo), { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "编辑已保存的预约", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByLabel("预约消息", { exact: true })).toHaveValue(second.rawMessage);

@@ -155,7 +155,7 @@ test("room background refresh failure keeps the open dialog and typed values", a
   await ensureTestInfrastructure(page);
   await openSettingsView(page, "房间管理");
   await page.getByRole("button", { name: "新增饲养间", exact: true }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: /^(新增|编辑)饲养间$/ });
   await dialog.getByLabel("饲养间名称", { exact: true }).fill("网络恢复期间保留的房间名称");
   let failed = true;
   await page.route("**/api/infrastructure/structure", (route) =>
@@ -167,6 +167,8 @@ test("room background refresh failure keeps the open dialog and typed values", a
   await expect(dialog.getByLabel("饲养间名称", { exact: true })).toHaveValue("网络恢复期间保留的房间名称");
   await captureFormEvidence(page, testInfo, "room-refresh-error", dialog);
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "放弃修改并离开", exact: true }).click();
+  await expect(dialog).toBeHidden();
   failed = false;
   await page.getByRole("button", { name: "重试", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "基础设施更新失败" })).toBeHidden();

@@ -13,6 +13,8 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { ActionIcon, CommandBar, DataTable, DateInput, ReadOnlyInput } from "../../components/ui";
 import { useQuantityIacuc } from "../billing/hooks/useQuantityIacuc";
 import { ServiceTotals } from "./ServiceTotals";
+import { serviceRowErrors } from "./serviceValidation";
+import dayjs from "dayjs";
 
 function newServiceSheet(): TechnicalServiceSheet {
   const month = new Date().toISOString().slice(0, 7);
@@ -68,6 +70,7 @@ export function ServiceEditor({
   }, [reducedMotion]);
   const catalog = useServiceCatalog();
   const mutation = useServiceMutation();
+  const saving = useRef(false);
   const [baseline, setBaseline] = useState(() => JSON.stringify(draft));
   useUnsavedChanges(JSON.stringify(draft) !== baseline, mutation.isPending);
   const applyIacuc = useCallback(
@@ -88,6 +91,14 @@ export function ServiceEditor({
       ? draft.priceSnapshot
       : catalog.data?.items.find((item) => item.id === draft.serviceId);
   const price = selected ? (draft.customerType === "external" ? selected.externalPrice : selected.internalPrice) : 0;
+  const rowErrors = serviceRowErrors(draft, selected?.unit || "");
+  const saveHint = initial?.protected
+    ? "该明细已进入结算流程，当前不可编辑。"
+    : !draft.pi
+      ? "请先填写并匹配有效的 IACUC，带入项目负责人。"
+      : !selected
+        ? "请选择技术服务项目；读取失败时可重试加载收费标准。"
+        : "";
   const quantity = draft.rows.reduce((sum, row) => sum + row.quantity, 0);
   const amount =
     draft.rows.reduce((sum, row) => sum + Math.round(technicalServiceAmount(row.quantity, price) * 100), 0) / 100;
@@ -112,9 +123,13 @@ export function ServiceEditor({
     const id = createClientId();
     pendingRowFocus.current = draft.rows.length;
     if (!reducedMotion) setAddedRowIds((current) => new Set(current).add(id));
+    const available = Array.from(
+      { length: dayjs(`${draft.month}-01`).daysInMonth() },
+      (_, index) => `${draft.month}-${String(index + 1).padStart(2, "0")}`,
+    ).find((date) => !draft.rows.some((row) => row.date === date));
     setDraft((previous) => ({
       ...previous,
-      rows: [...previous.rows, { id, date: `${previous.month}-01`, quantity: 0 }],
+      rows: [...previous.rows, { id, date: available || "", quantity: 0 }],
     }));
   }
 
@@ -135,6 +150,13 @@ export function ServiceEditor({
   }
 
   async function save() {
+    if (saving.current || mutation.isPending || initial?.protected || !draft.pi || !selected) return;
+    if (rowErrors.some((error) => error.date || error.quantity)) {
+      setNotice({ error: true, text: "请核对标红的服务日期与计费数量。" });
+      editorRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+      return;
+    }
+    saving.current = true;
     setNotice(null);
     try {
       await mutation.mutateAsync({ kind: "save", sheet: draft, editing: Boolean(initial) });
@@ -151,6 +173,8 @@ export function ServiceEditor({
       }
     } catch (error) {
       setNotice({ error: true, text: error instanceof Error ? error.message : "保存失败，请重试" });
+    } finally {
+      saving.current = false;
     }
   }
 
@@ -195,6 +219,7 @@ export function ServiceEditor({
           }
         />
         <div className={initial ? "technical-service-form-panel" : "panel large technical-service-form-panel"}>
+          {saveHint ? <Typography.Paragraph type="secondary">{saveHint}</Typography.Paragraph> : null}
           {notice ? (
             <Alert
               role={notice.error ? "alert" : "status"}
@@ -385,8 +410,18 @@ export function ServiceEditor({
                         label={`服务日期 ${index + 1}`}
                         value={row.date}
                         required
+                        min={`${draft.month}-01`}
+                        max={dayjs(`${draft.month}-01`).endOf("month").format("YYYY-MM-DD")}
+                        status={rowErrors[index]?.date ? "error" : undefined}
+                        aria-invalid={Boolean(rowErrors[index]?.date)}
+                        aria-describedby={rowErrors[index]?.date ? `service-date-${index}-error` : undefined}
                         onChange={(date) => updateRow(index, { date })}
                       />
+                      {rowErrors[index]?.date ? (
+                        <Typography.Text id={`service-date-${index}-error`} type="danger">
+                          {rowErrors[index].date}
+                        </Typography.Text>
+                      ) : null}
                     </div>
                   ),
                 },
@@ -403,10 +438,19 @@ export function ServiceEditor({
                       <InputNumber
                         aria-label={`计费数量 ${index + 1}`}
                         min={0}
+                        max={1_000_000}
+                        status={rowErrors[index]?.quantity ? "error" : undefined}
+                        aria-invalid={Boolean(rowErrors[index]?.quantity)}
+                        aria-describedby={rowErrors[index]?.quantity ? `service-quantity-${index}-error` : undefined}
                         step={selected?.unit === "小时" ? 0.5 : 1}
                         value={row.quantity}
                         onChange={(value) => updateRow(index, { quantity: Number(value ?? 0) })}
                       />
+                      {rowErrors[index]?.quantity ? (
+                        <Typography.Text id={`service-quantity-${index}-error`} type="danger">
+                          {rowErrors[index].quantity}
+                        </Typography.Text>
+                      ) : null}
                     </div>
                   ),
                 },

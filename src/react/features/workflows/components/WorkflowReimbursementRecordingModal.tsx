@@ -1,7 +1,6 @@
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { formatPersonNames } from "../../../../domain/personNames";
-import { UploadOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, Form, Space, Typography, Upload } from "antd";
+import { Alert, Button, Flex, Form, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
 import { useRef, useState } from "react";
 
@@ -14,7 +13,9 @@ import {
   useWorkflowFundingBookOptions,
 } from "../../../api/workflows";
 import { FundingBookConfirmationModal } from "./FundingBookConfirmationModal";
+import { validateAndFocus } from "../../../utils/validateAndFocus";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
+import { WorkflowScanUpload } from "./WorkflowScanUpload";
 import { ReimbursementFormFields } from "./ReimbursementFormFields";
 
 interface RecordingValues {
@@ -106,7 +107,7 @@ function WorkflowReimbursementRecordingForm({
     await runOperation(() =>
       save.run(
         async () => {
-          const values = await form.validateFields();
+          const values = await validateAndFocus(form);
           const forms = (values.reimbursementForms || []).filter((entry) => entry.formNo.trim());
           if (!forms.length) {
             throw new Error("请填写报销单号和金额");
@@ -143,16 +144,18 @@ function WorkflowReimbursementRecordingForm({
   }
 
   async function handleUpload(file: File) {
+    let result: BillingWorkflowAttachment | undefined;
     await runOperation(() =>
       upload.run(
         () => uploadWorkflowAttachment(target.id, "reimbursement", file),
         (uploaded) => {
+          result = uploaded;
           setAttachment(uploaded ?? null);
           feedback.success("报销单扫描件已上传", uploaded?.originalName || file.name);
         },
       ),
     );
-    return false;
+    return result;
   }
 
   return (
@@ -194,24 +197,12 @@ function WorkflowReimbursementRecordingForm({
       >
         <ReimbursementFormFields options={fundingOptions} loading={fundingBookOptions.isLoading} />
         <Form.Item label="报销单扫描件">
-          <Flex vertical gap={4}>
-            <Space>
-              <Upload
-                accept=".pdf,.jpg,.jpeg,.png"
-                maxCount={1}
-                showUploadList={false}
-                beforeUpload={(file) => handleUpload(file)}
-              >
-                <Button icon={<UploadOutlined aria-hidden />} loading={upload.pending} size="small">
-                  上传扫描件
-                </Button>
-              </Upload>
-              {attachment ? <Typography.Text type="secondary">{attachment.originalName}</Typography.Text> : null}
-            </Space>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              非必填
-            </Typography.Text>
-          </Flex>
+          <WorkflowScanUpload
+            attachment={attachment}
+            disabled={save.pending || upload.pending}
+            pending={upload.pending}
+            onUpload={handleUpload}
+          />
         </Form.Item>
       </Form>
       <Flex justify="flex-end" gap={8} style={{ marginTop: 16 }}>

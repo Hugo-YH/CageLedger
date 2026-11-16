@@ -203,6 +203,20 @@ function ResearcherEditor({
               <Form.Item key={field} label={label}>
                 <Input
                   aria-label={label}
+                  inputMode={
+                    field === "mobile" || field === "telephone"
+                      ? "tel"
+                      : field === "email" || field === "enterpriseEmail"
+                        ? "email"
+                        : undefined
+                  }
+                  autoComplete={
+                    field === "mobile" || field === "telephone"
+                      ? "tel"
+                      : field === "email" || field === "enterpriseEmail"
+                        ? "email"
+                        : undefined
+                  }
                   value={draft[field]}
                   onChange={(event) =>
                     setDraft((previous: ResearcherEditable) => ({ ...previous, [field]: event.target.value }))

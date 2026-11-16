@@ -25,13 +25,21 @@ export function IntakeEditorDialog({
   return (
     <ModalPresence>
       {editor.dialogOpen ? (
-        <ModalShell key="intake-editor" ariaLabel="编辑待接收批次" className="intake-edit-modal" onClose={editor.close}>
+        <ModalShell
+          key="intake-editor"
+          ariaLabel="编辑待接收批次"
+          className="intake-edit-modal"
+          busy={saving}
+          onClose={editor.close}
+        >
           <div className="modal-shell-head">
             <div>
               <h2>编辑待接收批次</h2>
               <p>{editor.editRead.target?.batchNo || editor.draft.batchNo}</p>
             </div>
-            <ActionButton onClick={editor.close}>关闭</ActionButton>
+            <ActionButton disabled={saving} onClick={editor.close}>
+              关闭
+            </ActionButton>
           </div>
           <div className="modal-shell-body">
             {roomFeedback}

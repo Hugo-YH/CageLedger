@@ -49,6 +49,10 @@ test("feedback drawer retains draft and focus across viewports and live motion c
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await drawer.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "继续编辑", exact: true }).click();
+  await expect(title).toHaveValue("长标题草稿".repeat(20));
+  await drawer.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "放弃修改并离开", exact: true }).click();
   await expect(drawer).toHaveCount(0);
   await expect(page.locator(".ant-drawer-mask:visible")).toHaveCount(0);
   await expect(trigger).toBeFocused();
@@ -183,5 +187,6 @@ test("feedback submission locks controls while pending and recovers after failur
   await expect(drawer.getByLabel("标题", { exact: true })).toBeEnabled();
   await expect(drawer.getByLabel("标题", { exact: true })).toHaveValue("测试提交");
   await drawer.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "放弃修改并离开", exact: true }).click();
   await expect(drawer).toHaveCount(0);
 });

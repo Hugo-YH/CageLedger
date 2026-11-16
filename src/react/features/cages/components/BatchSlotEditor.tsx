@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Alert, Input } from "antd";
+import { Alert, Input, Progress, Typography } from "antd";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { ModalShell } from "../../../components/WorkspaceUi";
 import { ActionButton } from "../../../components/ui";
 import { cageCode, currentOccupancyIndex, emptyOccupancy, slotPosition } from "../../../../domain/cages";
 import { Field, SlotStatusSelect } from "./CageFormControls";
+import { useUnsavedChanges } from "../../../hooks/useUnsavedChanges";
 import { today } from "./cageWorkspaceDate";
 import { useBatchSlotOperation, type BatchSlotWrite } from "./useBatchSlotOperation";
 
@@ -45,6 +46,14 @@ export function BatchSlotEditor({
   });
   const [confirmClear, setConfirmClear] = useState(false);
   const operation = useBatchSlotOperation(roomId, beginOperation, onDone);
+  const [original] = useState(() => JSON.stringify(draft));
+  const confirmLeave = useUnsavedChanges(JSON.stringify(draft) !== original || Boolean(operation.job), operation.busy);
+  const close = () => {
+    if (operation.isBusy()) return;
+    void confirmLeave().then((leave) => {
+      if (leave && !operation.isBusy()) onClose();
+    });
+  };
   const frozen = operation.busy || Boolean(operation.job);
   const update = (key: keyof typeof draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   function prepare(kind: "save" | "clear"): BatchSlotWrite[] {
@@ -63,17 +72,39 @@ export function BatchSlotEditor({
     });
   }
   return (
-    <ModalShell ariaLabel={`批量编辑 ${slots.length} 个笼位`} className="cage-slot-modal" width={720} onClose={onClose}>
+    <ModalShell
+      ariaLabel={`批量编辑 ${slots.length} 个笼位`}
+      className="cage-slot-modal"
+      width={720}
+      busy={operation.busy}
+      onClose={close}
+    >
       <div className="modal-shell-head">
         <div>
           <h2 id="batch-slot-title">批量编辑 {slots.length} 个笼位</h2>
           <p>{slots.map(slotPosition).join("、")}</p>
         </div>
-        <ActionButton aria-label="关闭" onClick={onClose}>
+        <ActionButton aria-label="关闭" disabled={operation.busy} onClick={close}>
           关闭
         </ActionButton>
       </div>
       <div className="modal-shell-body form compact-slot-form">
+        {operation.job ? (
+          <div role="status" aria-live="polite">
+            <Typography.Text>
+              已处理 {operation.job.completed}/{operation.job.items.length} 个笼位
+            </Typography.Text>
+            <Progress
+              aria-label="笼位批量处理进度"
+              percent={
+                operation.job.items.length
+                  ? Math.round((operation.job.completed / operation.job.items.length) * 100)
+                  : 0
+              }
+              status={operation.error ? "exception" : "active"}
+            />
+          </div>
+        ) : null}
         {operation.error ? (
           <Alert
             showIcon

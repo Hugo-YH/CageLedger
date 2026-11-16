@@ -824,3 +824,25 @@ it("shows original evidence and saved lines as read-only and never uploads an in
   expect(screen.getByRole("textbox", { name: "明细1 合格证编号" })).toBeDisabled();
   expect(requestMultipart).not.toHaveBeenCalled();
 });
+
+it("retains a failed original and retries the same file without reconfirming registration", async () => {
+  const file = new File(["synthetic pdf"], "需重试.pdf", { type: "application/pdf" });
+  vi.mocked(requestMultipart)
+    .mockRejectedValueOnce(new Error("连接中断"))
+    .mockResolvedValueOnce({ attachment, reused: false });
+  mockRecognition(() => Promise.resolve({ run: completedRun() }));
+  render(view());
+  await screen.findByRole("button", { name: "上传" });
+  const input = screen.getByLabelText("上传合格证文件");
+  fireEvent.change(input, { target: { files: [file] } });
+  const retry = await screen.findByRole("button", { name: "重试上传" });
+  expect(vi.mocked(requestMultipart)).toHaveBeenCalledOnce();
+  fireEvent.click(retry);
+  await waitFor(() => expect(vi.mocked(requestMultipart)).toHaveBeenCalledTimes(2));
+  const firstData = vi.mocked(requestMultipart).mock.calls[0][1];
+  const retriedData = vi.mocked(requestMultipart).mock.calls[1][1];
+  expect(firstData.get("file")).toBe(file);
+  expect(retriedData.get("file")).toBe(file);
+  await waitFor(() => expect(screen.queryByRole("button", { name: "重试上传" })).not.toBeInTheDocument());
+  expect(saved).not.toHaveBeenCalled();
+});

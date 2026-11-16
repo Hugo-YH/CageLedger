@@ -26,6 +26,7 @@ export function IntakeEntryPanel({
   draft,
   roomNames,
   notice,
+  fieldErrors = {},
   saving,
   roomsReady = true,
   onSubmit,
@@ -48,6 +49,7 @@ export function IntakeEntryPanel({
   draft: IntakeBatch;
   roomNames: string[];
   notice: string;
+  fieldErrors?: { roomName?: string; quantity?: string };
   saving: boolean;
   roomsReady?: boolean;
   onSubmit: React.FormEventHandler<HTMLFormElement>;
@@ -191,7 +193,11 @@ export function IntakeEntryPanel({
         <Form component={false} layout="vertical" requiredMark>
           <Row gutter={[16, 16]}>
             <Col md={directSampling ? 24 : 12} xs={24}>
-              <Form.Item label="接收用途" required>
+              <Form.Item
+                label="接收用途"
+                required
+                extra={purposeLocked ? "已打印、已接收或已有接收记录，用途已锁定。" : undefined}
+              >
                 <Select<IntakePurpose>
                   aria-label="接收用途"
                   value={draft.intakePurpose || "housing"}
@@ -206,9 +212,17 @@ export function IntakeEntryPanel({
             </Col>
             {!directSampling && (
               <Col md={12} xs={24}>
-                <Form.Item label="房间" required>
+                <Form.Item
+                  label="房间"
+                  required
+                  validateStatus={fieldErrors.roomName ? "error" : undefined}
+                  help={fieldErrors.roomName ? <span id="intake-room-error">{fieldErrors.roomName}</span> : undefined}
+                >
                   <Select
                     aria-label="房间"
+                    aria-invalid={Boolean(fieldErrors.roomName)}
+                    aria-describedby={fieldErrors.roomName ? "intake-room-error" : undefined}
+                    showSearch={{ optionFilterProp: "label" }}
                     id="intake-room"
                     disabled={!roomsReady}
                     options={[
@@ -306,6 +320,7 @@ export function IntakeEntryPanel({
             <Col lg={5} md={12} xs={24}>
               <Field
                 label="数量（只）"
+                error={fieldErrors.quantity}
                 required={directSampling}
                 type="number"
                 value={draft.quantity ?? ""}
@@ -384,7 +399,14 @@ export function IntakeEntryPanel({
               </Col>
             )}
             <Col lg={directSampling ? 24 : 12} md={directSampling ? 24 : 12} xs={24}>
-              <Form.Item label="状态">
+              <Form.Item
+                label="状态"
+                extra={
+                  directSampling && draft.status === "received"
+                    ? "该取材预约已确认接收，不能在预约编辑中退回状态。"
+                    : undefined
+                }
+              >
                 <Select<IntakeBatchStatus, { value: IntakeBatchStatus; label: string }>
                   aria-label="状态"
                   value={draft.status}

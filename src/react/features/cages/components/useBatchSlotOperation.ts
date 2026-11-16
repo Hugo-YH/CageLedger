@@ -81,5 +81,5 @@ export function useBatchSlotOperation(
     }
   }
 
-  return { run, job, busy, error };
+  return { run, job, busy, error, isBusy: () => locked.current };
 }

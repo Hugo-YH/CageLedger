@@ -103,7 +103,12 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
             onChange={setProjectIds}
           />
           <Upload
-            disabled={busy || uploading || write.isPending}
+            disabled={
+              busy ||
+              uploading ||
+              write.isPending ||
+              (test.method === "parasite" && !test.samples.some((s) => s.id === sampleId))
+            }
             accept=".png,.jpg,.jpeg,.tif,.tiff,.pdf,.xlsx,.xls"
             showUploadList={false}
             beforeUpload={(file) => {
@@ -125,7 +130,11 @@ export function RecordAttachments({ test, attachments, persist, onVersion, busy,
               上传原始资料
             </Button>
           </Upload>
-          <Typography.Text type="secondary">上传时保存当前草稿；图片可关联多个项目。</Typography.Text>
+          <Typography.Text type="secondary">
+            {test.method === "parasite" && !test.samples.some((s) => s.id === sampleId)
+              ? "请先添加有效样本并选择关联样本，再上传原始资料。"
+              : "上传时保存当前草稿；图片可关联多个项目。"}
+          </Typography.Text>
         </Space>
       )}
       {!items.length && (

@@ -1,7 +1,7 @@
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { Alert, Button, Flex, Input, Typography } from "antd";
 import { Modal } from "../../../components/ui/Modal";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { type BillingWorkflow, useAdvanceWorkflow } from "../../../api/workflows";
 import { useAsyncFormAction } from "../../../hooks/useAsyncFormAction";
@@ -18,6 +18,15 @@ export function WorkflowRevokeModal({
   target: WorkflowRevokeTarget | null;
   onCancel: () => void;
 }) {
+  const busy = useRef(false);
+  const [pending, setPending] = useState(false);
+  const cancel = () => {
+    if (!busy.current) onCancel();
+  };
+  const pendingChanged = (value: boolean) => {
+    busy.current = value;
+    setPending(value);
+  };
   return (
     <Modal
       destroyOnHidden
@@ -25,32 +34,56 @@ export function WorkflowRevokeModal({
       open={Boolean(target)}
       title="撤回结算流程"
       rootClassName="app-modal-root workflow-revoke-modal"
-      onCancel={onCancel}
+      closable={pending ? { disabled: true } : true}
+      keyboard={!pending}
+      mask={{ closable: !pending }}
+      onCancel={cancel}
     >
-      {target ? <WorkflowRevokeForm key={target.workflow.id} target={target} onCancel={onCancel} /> : null}
+      {target ? (
+        <WorkflowRevokeForm
+          key={target.workflow.id}
+          target={target}
+          onCancel={cancel}
+          onDone={onCancel}
+          onPendingChange={pendingChanged}
+        />
+      ) : null}
     </Modal>
   );
 }
 
-function WorkflowRevokeForm({ target, onCancel }: { target: WorkflowRevokeTarget; onCancel: () => void }) {
+function WorkflowRevokeForm({
+  target,
+  onCancel,
+  onDone,
+  onPendingChange,
+}: {
+  target: WorkflowRevokeTarget;
+  onCancel: () => void;
+  onDone: () => void;
+  onPendingChange: (value: boolean) => void;
+}) {
   const feedback = useOperationFeedback();
   const [reason, setReason] = useState("");
   const advance = useAdvanceWorkflow();
   const action = useAsyncFormAction("撤回失败，请重试");
   function submit() {
-    if (!reason.trim()) return;
-    void action.run(
-      () =>
-        advance.mutateAsync({
-          workflowId: target.workflow.id,
-          toStatus: target.toStatus,
-          note: reason.trim(),
-        }),
-      () => {
-        feedback.success("结算流程已撤回", `${target.workflow.month} · ${target.workflow.pi}`);
-        onCancel();
-      },
-    );
+    if (!reason.trim() || action.isPending()) return;
+    onPendingChange(true);
+    void action
+      .run(
+        () =>
+          advance.mutateAsync({
+            workflowId: target.workflow.id,
+            toStatus: target.toStatus,
+            note: reason.trim(),
+          }),
+        () => {
+          feedback.success("结算流程已撤回", `${target.workflow.month} · ${target.workflow.pi}`);
+          onDone();
+        },
+      )
+      .finally(() => onPendingChange(false));
   }
   return (
     <>
@@ -65,13 +98,16 @@ function WorkflowRevokeForm({ target, onCancel }: { target: WorkflowRevokeTarget
         id="workflow-revoke-reason"
         disabled={action.pending}
         maxLength={500}
+        showCount
         placeholder="请填写撤回原因"
         rows={3}
         value={reason}
         onChange={(event) => setReason(event.target.value)}
       />
       <Flex justify="flex-end" gap={8} style={{ marginTop: 16 }}>
-        <Button onClick={onCancel}>取消</Button>
+        <Button disabled={action.pending} onClick={onCancel}>
+          取消
+        </Button>
         <Button danger type="primary" loading={action.pending} disabled={!reason.trim()} onClick={submit}>
           确认撤回
         </Button>

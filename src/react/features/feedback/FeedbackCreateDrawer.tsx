@@ -13,6 +13,8 @@ import { APP_VERSION } from "../../version";
 import { FeedbackDiagnosticsPreview } from "./FeedbackDiagnosticsPreview";
 import { ScreenshotPicker } from "./ScreenshotPicker";
 import { KIND_LABEL } from "./feedbackPresentation";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
+import { validateAndFocus } from "../../utils/validateAndFocus";
 
 type Draft = { title: string; kind: FeedbackKind; module: string; description: string };
 
@@ -48,6 +50,14 @@ export function FeedbackCreateDrawer({
   const [submissionLocked, setSubmissionLocked] = useState(false);
   const environment = { appVersion: APP_VERSION, build, page, browser: navigator.userAgent };
   const pending = create.isPending || busy;
+  const [changed, setChanged] = useState(false);
+  const confirmLeave = useUnsavedChanges(open && ((!createdId && changed) || files.length > 0), pending);
+  const close = () => {
+    if (saving.current || pending) return;
+    void confirmLeave().then((leave) => {
+      if (leave && !saving.current) onClose();
+    });
+  };
   async function save() {
     if (saving.current || !open) return;
     saving.current = true;
@@ -58,7 +68,7 @@ export function FeedbackCreateDrawer({
     let writeStarted = false;
     let complete = false;
     try {
-      const values = submission.current ? null : await form.validateFields();
+      const values = submission.current ? null : await validateAndFocus(form);
       // Validation may finish after navigation or a parent closes the drawer.
       // Only a still-active form may start a new business write.
       if (!isCurrent()) return;
@@ -144,12 +154,10 @@ export function FeedbackCreateDrawer({
       open={open}
       size={560}
       title="提交反馈"
-      onClose={() => {
-        if (!saving.current && !pending) onClose();
-      }}
+      onClose={close}
       footer={
         <Space>
-          <Button disabled={pending} onClick={onClose}>
+          <Button disabled={pending} onClick={close}>
             取消
           </Button>
           <Button
@@ -169,9 +177,12 @@ export function FeedbackCreateDrawer({
         form={form}
         layout="vertical"
         initialValues={{ kind: "bug", module: "", title: "", description: "" }}
+        onValuesChange={(_, values: Draft) =>
+          setChanged(Boolean(values.title || values.module || values.description || values.kind !== "bug"))
+        }
       >
         <Form.Item name="title" label="标题" rules={[{ required: true, message: "请填写标题" }]}>
-          <Input maxLength={200} />
+          <Input showCount maxLength={200} />
         </Form.Item>
         <Form.Item name="kind" label="类型" rules={[{ required: true }]}>
           <Select options={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
@@ -183,6 +194,7 @@ export function FeedbackCreateDrawer({
           <Input.TextArea
             rows={7}
             maxLength={5000}
+            showCount
             placeholder="支持 Markdown 标题、列表、引用和代码；截图请通过附件上传"
           />
         </Form.Item>

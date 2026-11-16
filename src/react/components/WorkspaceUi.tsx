@@ -94,12 +94,14 @@ export function ModalShell({
   width = "min(1120px, calc(100vw - 32px))",
   children,
   onClose,
+  busy = false,
 }: {
   ariaLabel: string;
   className?: string;
   width?: number | string;
   children: ReactNode;
   onClose: () => void;
+  busy?: boolean;
 }) {
   const shellRef = useRef<HTMLElement | null>(null);
 
@@ -118,7 +120,11 @@ export function ModalShell({
       centered
       closable={false}
       footer={null}
-      onCancel={onClose}
+      keyboard={!busy}
+      mask={{ closable: !busy }}
+      onCancel={() => {
+        if (!busy) onClose();
+      }}
       open
       rootClassName={`app-modal-root ${className}`.trim()}
       title={<span className="app-visually-hidden">{ariaLabel}</span>}
@@ -149,11 +155,15 @@ export function ConfirmDialog({
   onConfirm: () => void | Promise<unknown>;
 }) {
   const action = useAsyncFormAction("操作失败，请重试");
+  const busy = Boolean(pending || action.pending);
+  const cancel = () => {
+    if (!pending && !action.isPending()) onCancel();
+  };
   return (
-    <ModalShell ariaLabel={title} className="confirm-dialog" onClose={onCancel}>
+    <ModalShell ariaLabel={title} className="confirm-dialog" busy={busy} onClose={cancel}>
       <div className="modal-shell-head">
         <h2>{title}</h2>
-        <Button aria-label="关闭" icon={<CloseOutlined />} type="text" onClick={onCancel} />
+        <Button aria-label="关闭" disabled={busy} icon={<CloseOutlined />} type="text" onClick={cancel} />
       </div>
       <div className="modal-shell-body">
         <p>{message}</p>
@@ -161,7 +171,9 @@ export function ConfirmDialog({
       </div>
       <div className="modal-shell-actions">
         <Space>
-          <Button onClick={onCancel}>取消</Button>
+          <Button disabled={busy} onClick={cancel}>
+            取消
+          </Button>
           <Button
             danger={danger}
             loading={pending || action.pending}

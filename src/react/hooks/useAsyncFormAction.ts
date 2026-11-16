@@ -36,5 +36,6 @@ export function useAsyncFormAction(fallbackMessage: string) {
     },
     [fallbackMessage, request],
   );
-  return { run, pending, error, setError };
+  const isPending = useCallback(() => busy.current, []);
+  return { run, pending, error, setError, isPending };
 }

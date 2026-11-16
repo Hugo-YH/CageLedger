@@ -19,6 +19,7 @@ import {
 } from "../../../../domain/intake";
 import { IntakeSummaryExport } from "./IntakeSummaryExport";
 import { IntakeStatistics } from "./IntakeStatistics";
+import { CellText } from "../../../components/ui/CellText";
 import { IntakeStatusTag } from "./IntakeStatusTag";
 import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
 
@@ -40,6 +41,7 @@ type IntakeBatchListProps = {
   params: IntakeListParams;
   filters: Record<string, string[]>;
   onClearSelection: () => void;
+  onClearFilters?: () => void;
   onToggleAll: () => void;
   onToggleItem: (item: IntakeBatchListItem, checked: boolean) => void;
   onSort: (key: string) => void;
@@ -63,6 +65,7 @@ export function IntakeBatchList(props: IntakeBatchListProps) {
   const events = useMemo(
     () => ({
       onClearSelection: () => latest.current.onClearSelection(),
+      onClearFilters: () => latest.current.onClearFilters?.(),
       onToggleAll: () => latest.current.onToggleAll(),
       onToggleItem: (item: IntakeBatchListItem, checked: boolean) => latest.current.onToggleItem(item, checked),
       onSort: (key: string) => latest.current.onSort(key),
@@ -98,6 +101,7 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
   params,
   filters,
   onClearSelection,
+  onClearFilters,
   onToggleAll,
   onToggleItem,
   onSort,
@@ -184,9 +188,10 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
           return <ProjectPeopleCopyButton item={item} disabled={loading} />;
         }
         return (
-          <span className="table-cell-text" title={text}>
-            {text}
-          </span>
+          <CellText
+            text={text}
+            copyable={text !== "-" && ["batchNo", "purchaseOrderNo", "orderNo", "iacuc"].includes(key)}
+          />
         );
       },
     })),
@@ -220,6 +225,25 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
           <Typography.Text type="secondary">
             {selectingAll ? `正在选择全部 ${total} 条` : `共 ${total} 条`}
           </Typography.Text>
+        }
+        filters={
+          Object.values(filters).some((values) => values.length) ? (
+            <Space size={[4, 4]} wrap aria-label="当前筛选条件">
+              {Object.entries(filters)
+                .filter(([, values]) => values.length)
+                .map(([key, values]) => (
+                  <Tag key={key} closable onClose={() => onFilter(key, [])}>
+                    {intakeFilterLabel(key)}：
+                    {values.length > 1 ? `${values.length} 项` : intakeFilterValue(key, values[0])}
+                  </Tag>
+                ))}
+              {onClearFilters ? (
+                <Button type="link" size="small" onClick={onClearFilters}>
+                  清空筛选
+                </Button>
+              ) : null}
+            </Space>
+          ) : undefined
         }
         selection={{
           count: selectedItems.length,
@@ -399,4 +423,37 @@ function IntakeColumnTitle({
       onSort={onSort}
     />
   );
+}
+
+function intakeFilterLabel(key: string) {
+  const labels: Record<string, string> = {
+    status: "状态",
+    intakePurpose: "接收用途",
+    batchNo: "批次编号",
+    purchaseOrderNo: "采购单号",
+    orderNo: "订单编号",
+    supplier: "供应商",
+    roomName: "房间",
+    pi: "项目负责人",
+    owner: "实验负责人",
+    iacuc: "IACUC",
+    intakeDate: "接收日期",
+    quantity: "数量",
+    cardCount: "笼卡张数",
+    strainStandard: "品系",
+    printedAt: "打印时间",
+    receivedAt: "接收时间",
+    createdAt: "创建时间",
+  };
+  return labels[key] || key;
+}
+
+function intakeFilterValue(key: string, value: string) {
+  const label =
+    key === "status"
+      ? intakeStatusLabel(value as IntakeBatchStatus)
+      : key === "intakePurpose"
+        ? intakePurposeLabel(value)
+        : value || "空白";
+  return label.length > 20 ? `${label.slice(0, 20)}…` : label;
 }
