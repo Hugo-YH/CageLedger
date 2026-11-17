@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.5",
+    build: "286",
+    releasedAt: "2026-11-17",
+    title: "笼卡打印排序",
+    items: [
+      "笼卡打印先按房间号自然升序、再按项目负责人中文姓名顺序排列；同一房间和负责人下保留原批次顺序及每批笼卡顺序，方便集中分发",
+      "普通与临时饲养间笼卡共用排序规则，房间缺失的旧记录排在最后，负责人缺失的记录排在该房间最后；空白补卡仍追加在末页，原笼卡 ID 与二维码继续保留",
+    ],
+  },
+  {
     version: "1.32.4",
     build: "285",
     releasedAt: "2026-11-17",
