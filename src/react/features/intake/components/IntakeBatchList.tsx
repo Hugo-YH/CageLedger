@@ -8,7 +8,6 @@ import { useIntakeFilterOptions } from "../../../api/intake";
 import { FilterableColumnTitle } from "../../../components/FilterableTableHeader";
 import { CommandBar, DataTable } from "../../../components/ui";
 import { EmptyState } from "../../../components/ui/EmptyState";
-import { IntakeQuarantineStatus } from "../../quarantine/IntakeQuarantineStatus";
 import {
   intakeStatusLabel,
   intakePurposeLabel,
@@ -204,7 +203,6 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
         );
       },
     })),
-    { key: "quarantine", title: "检疫状态", width: 110, render: (_, item) => <IntakeQuarantineStatus item={item} /> },
     {
       key: "actions",
       title: "操作",

@@ -10,6 +10,13 @@
       "compatibilityBoundary": "保留旧核对响应类型及补充兼容入口；该组件不是当前预约录入入口。"
     },
     {
+      "path": "src/react/features/quarantine/IntakeQuarantineStatus.tsx",
+      "status": "retained-legacy",
+      "reason": "待接收批次列表已隐藏检疫状态列，保留原列内状态与关联报告弹窗组件及回归。",
+      "replacement": "src/react/features/quarantine/QuarantineView.tsx",
+      "compatibilityBoundary": "仅移除待接收列表入口；检疫状态计算、来源关联、报告与独立检疫管理继续保留。"
+    },
+    {
       "path": "src/react/features/workflows/components/LedgerClaimsPanel.tsx",
       "status": "retained-legacy",
       "reason": "旧版独立报销单页签，已不在当前工作区挂载。",
