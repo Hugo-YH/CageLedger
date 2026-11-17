@@ -147,6 +147,7 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
         { key: "supplier", label: "购买单位", width: 128 },
         { key: "pi", label: "项目负责人", width: 110 },
         { key: "owner", label: "实验负责人", width: 110 },
+        { key: "strainStandard", label: "品系", width: 160 },
         { key: "quantity", label: "数量", width: 64 },
         { key: "roomName", label: "房间", width: 64 },
         { key: "cardCount", label: "笼卡", width: 94 },
@@ -156,16 +157,19 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
       dataIndex: key === "cardCount" ? "finalCardCount" : key,
       width,
       align: key === "quantity" || key === "cardCount" ? ("right" as const) : undefined,
-      title: (
-        <IntakeColumnTitle
-          column={key}
-          label={label}
-          params={params}
-          values={filters[key] || []}
-          onFilter={(values) => onFilter(key, values)}
-          onSort={() => onSort(key)}
-        />
-      ),
+      title:
+        key === "strainStandard" ? (
+          label
+        ) : (
+          <IntakeColumnTitle
+            column={key}
+            label={label}
+            params={params}
+            values={filters[key] || []}
+            onFilter={(values) => onFilter(key, values)}
+            onSort={() => onSort(key)}
+          />
+        ),
       render: (_: unknown, item: IntakeBatchListItem) => {
         if (key === "status") return <IntakeStatusTag status={item.status} />;
         if (key === "intakePurpose")
@@ -173,7 +177,12 @@ const MemoizedIntakeBatchList = memo(function MemoizedIntakeBatchList({
             <Tag color={isDirectSampling(item) ? "blue" : undefined}>{intakePurposeLabel(item.intakePurpose)}</Tag>
           );
         if (key === "cardCount") return isDirectSampling(item) ? "无需笼卡" : item.finalCardCount;
-        const value = key === "purchaseOrderNo" ? normalizeIntakeOrderIdentifiers(item).purchaseOrderNo : item[key];
+        const value =
+          key === "strainStandard"
+            ? item.strainStandard || item.strainRaw
+            : key === "purchaseOrderNo"
+              ? normalizeIntakeOrderIdentifiers(item).purchaseOrderNo
+              : item[key];
         const text =
           value == null || value === ""
             ? key === "intakeDate"

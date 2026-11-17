@@ -193,6 +193,7 @@ test("applied intake filters can be cleared and identifiers expose a keyboard-ac
         intakePurpose: "housing",
         iacuc: "Z2026001",
         supplier: "测试供应商",
+        strainStandard: "C57BL/6J",
         pi,
         owner: "测试实验负责人",
         roomName: "8014",
