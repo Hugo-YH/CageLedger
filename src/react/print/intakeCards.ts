@@ -37,6 +37,7 @@ interface IntakeCardPrintItem {
 
 const MIXED_PRINT_REASON = "普通饲养间与临时饲养间笼卡不能混合打印，请分开选择。";
 const UNRESOLVED_PRINT_REASON = "无法确认 8014 饲养间的设施归属，请先检查房间配置。";
+const printCollator = new Intl.Collator("zh-CN", { numeric: true });
 
 export function planIntakeCardPrint(
   batches: Pick<IntakeBatch, "intakePurpose" | "roomName" | "finalCardCount">[],
@@ -117,7 +118,17 @@ function intakeCardPrintKind(
 function printItems(batches: IntakePrintBatch[]): IntakeCardPrintItem[] {
   return batches
     .filter((batch) => !isDirectSampling(batch))
+    .sort(
+      (left, right) =>
+        comparePrintField(String(left.roomName || "").trim(), String(right.roomName || "").trim()) ||
+        comparePrintField(formatPersonNames(left.pi), formatPersonNames(right.pi)),
+    )
     .flatMap((batch) => batch.cards.slice(0, batch.finalCardCount).map((card) => ({ batch, card })));
+}
+
+function comparePrintField(left: string, right: string) {
+  if (!left || !right) return left ? -1 : right ? 1 : 0;
+  return printCollator.compare(left, right);
 }
 
 function blankPrintItem(): IntakeCardPrintItem {
