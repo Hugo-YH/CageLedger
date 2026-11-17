@@ -26,6 +26,7 @@ import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import { DialogActivityContext } from "../../state/dialogActivity";
 import { CertificateGroupEditors } from "./CertificateGroupEditors";
+import { CertificateOriginalActions } from "./CertificateOriginalActions";
 import { ReceptionCertificateReview } from "./ReceptionCertificateReview";
 import { ReceptionCertificatePreview } from "./ReceptionCertificatePreview";
 import {
@@ -33,8 +34,6 @@ import {
   certificateErrorMessage as errorMessage,
   certificateFileError,
   certificateLineErrors,
-  certificateMultipleFilesError,
-  certificateUploadAccept,
   hasStaleCertificateSource,
   latestCertificateRun,
   mergeCertificateReviewWarnings,
@@ -74,7 +73,6 @@ export function ReceptionCertificateDrawer({
   const [recognitionModes, setRecognitionModes] = useState<Record<string, "auto" | "all">>({});
   const recognitionRequests = useRef(new Map<string, ReceptionRecognitionRequest>());
   const saveRequest = useRef<{ serialized: string; request: ReceptionRegistrationSaveRequest } | null>(null);
-  const input = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
   const initialUploadStarted = useRef(false);
   const [phase, setPhase] = useState<"upload" | "recognize" | null>(null);
@@ -433,59 +431,16 @@ export function ReceptionCertificateDrawer({
                       原件始终保留。PDF 每次最多识别 20 页，超过时请拆分上传。
                     </HelpPopover>
                   </Flex>
-                  <Space wrap role="group" aria-label="合格证原件操作">
-                    {canWrite ? (
-                      <>
-                        <input
-                          ref={input}
-                          type="file"
-                          accept={certificateUploadAccept}
-                          aria-label="上传合格证文件"
-                          hidden
-                          disabled={!writable || pending}
-                          onChange={(event) => {
-                            const files = Array.from(event.target.files ?? []);
-                            event.target.value = "";
-                            if (files.length > 1) {
-                              setError(certificateMultipleFilesError);
-                              return;
-                            }
-                            const file = files[0];
-                            if (file) void uploadFile(file);
-                          }}
-                        />
-                        <Button
-                          icon={<ActionIcon name="upload" />}
-                          disabled={!writable || pending}
-                          loading={upload.isPending}
-                          onClick={() => input.current?.click()}
-                        >
-                          上传
-                        </Button>
-                      </>
-                    ) : null}
-                    {attachment ? (
-                      <>
-                        <Button
-                          href={attachment.fileUrl}
-                          download={attachment.name}
-                          icon={<ActionIcon name="download" />}
-                        >
-                          下载
-                        </Button>
-                        {canWrite ? (
-                          <Button
-                            icon={<ActionIcon name="scan" />}
-                            loading={recognize.isPending}
-                            disabled={!writable || pending}
-                            onClick={() => void runRecognition()}
-                          >
-                            识别
-                          </Button>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </Space>
+                  <CertificateOriginalActions
+                    canWrite={canWrite}
+                    disabled={!writable || pending}
+                    uploading={upload.isPending}
+                    recognizing={recognize.isPending}
+                    attachment={attachment}
+                    onUpload={(file) => void uploadFile(file)}
+                    onRecognize={() => void runRecognition()}
+                    onError={setError}
+                  />
                 </Flex>
                 {canWrite ? (
                   <Flex vertical gap={4}>
