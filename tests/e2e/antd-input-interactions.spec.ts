@@ -193,7 +193,7 @@ test("applied intake filters can be cleared and identifiers expose a keyboard-ac
         intakePurpose: "housing",
         iacuc: "Z2026001",
         supplier: "测试供应商",
-        strainStandard: "C57BL/6J",
+        strainStandard: "BALB/cJGpt",
         pi,
         owner: "测试实验负责人",
         roomName: "8014",
@@ -219,6 +219,27 @@ test("applied intake filters can be cleared and identifiers expose a keyboard-ac
     await panel.getByRole("button", { name: "完成", exact: true }).click();
     await expect(page.getByRole("button", { name: "筛选项目负责人", exact: true })).toBeFocused();
     const row = page.getByRole("row").filter({ hasText: batchNo });
+    const strain = row.getByRole("button", { name: "查看完整内容：BALB/cJGpt", exact: true });
+    const alignment = await strain.evaluate((element) => {
+      const cell = element.closest("td")!;
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const cellStyle = getComputedStyle(cell);
+      return {
+        textLeft: range.getBoundingClientRect().left,
+        contentLeft: cell.getBoundingClientRect().left + cell.clientLeft + parseFloat(cellStyle.paddingLeft),
+        textHeight: element.getBoundingClientRect().height,
+        lineHeight: parseFloat(cellStyle.lineHeight),
+      };
+    });
+    expect(Math.abs(alignment.textLeft - alignment.contentLeft)).toBeLessThan(1);
+    expect(Math.abs(alignment.textHeight - alignment.lineHeight)).toBeLessThan(1);
+    await strain.focus();
+    await strain.press("Enter");
+    await expect(strain).toHaveAttribute("aria-expanded", "true");
+    await strain.press("Escape");
+    await expect(strain).toHaveAttribute("aria-expanded", "false");
+    await page.screenshot({ path: info.outputPath("intake-strain-alignment.png"), animations: "disabled" });
     const detail = row.getByRole("button", { name: `查看完整内容：${batchNo}`, exact: true });
     await detail.focus();
     await detail.press("Enter");

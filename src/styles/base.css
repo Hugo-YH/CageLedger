@@ -678,9 +678,9 @@ textarea {
   font-family: inherit;
 }
 
-/* Ant internal buttons (table expand, picker navigation, modal close) own their geometry. */
+/* Ant internal buttons and inline table text own their geometry. */
 button:not([class^="ant-"], [class*=" ant-"], [class^="adm-"], [class*=" adm-"]),
-[role="button"]:not([class^="ant-"], [class*=" ant-"], [class^="adm-"], [class*=" adm-"]) {
+[role="button"]:not(.table-cell-text, [class^="ant-"], [class*=" ant-"], [class^="adm-"], [class*=" adm-"]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
