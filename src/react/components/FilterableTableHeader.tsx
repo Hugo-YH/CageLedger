@@ -191,7 +191,6 @@ export function FilterableColumnTitle({
         )}
       </div>
       <Space className="table-filter-actions">
-        <Typography.Text type="secondary">勾选即生效</Typography.Text>
         <Button size="small" type="text" onClick={() => updateSelection([])}>
           清空
         </Button>
