@@ -18,7 +18,7 @@ async function filterColumn(page: Page, label: string, value: string) {
   const options = page.getByRole("group", { name: "筛选" + label + "选项", exact: true });
   await options.getByRole("button", { name: "清空", exact: true }).click();
   await options.getByRole("checkbox", { name: value, exact: false }).click();
-  await options.getByRole("button", { name: "应用", exact: true }).click();
+  await options.getByRole("button", { name: "完成", exact: true }).click();
   await expect(options).toBeHidden();
 }
 

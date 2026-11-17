@@ -251,15 +251,16 @@ test("applying a workflow filter clears the selection and discards an unconfirme
   const filterPanel = page.locator(".table-filter-panel:visible");
   const option = filterPanel.getByRole("checkbox", { name: /分页负责人 12/ });
   // Ant synchronizes the controlled group value in an effect after the click.
+  await expect(toolbar).toContainText("已选 1 项");
   await option.click();
   await expect(option).toBeChecked();
-  await expect(toolbar).toContainText("已选 1 项");
-  await filterPanel.getByRole("button", { name: "应用", exact: true }).click();
   await expect(toolbar).toContainText("已选 0 项");
   await expect(page.getByText("范围已变化，已清空选择", { exact: true })).toBeVisible();
   await expect(confirmation).toBeHidden();
   await expect(toolbar.getByRole("button", { name: "批量锁定", exact: true })).toHaveCount(0);
   expect(writes).toEqual([]);
+  await expect(filterPanel).toBeVisible();
+  await filterPanel.getByRole("button", { name: "完成", exact: true }).click();
   await page.getByRole("checkbox", { name: "选择 分页负责人 12 2026-08 结算流程", exact: true }).check();
   await toolbar.getByRole("button", { name: "批量锁定", exact: true }).click();
   await confirmation.getByRole("button", { name: "批量锁定", exact: true }).click();
@@ -289,7 +290,7 @@ test(
     await page.getByRole("button", { name: "筛选项目负责人", exact: true }).click();
     const filter = page.locator(".table-filter-panel:visible");
     await filter.getByRole("checkbox", { name: /分页负责人 12/ }).click();
-    await filter.getByRole("button", { name: "应用", exact: true }).click();
+    await filter.getByRole("button", { name: "完成", exact: true }).click();
     await expect(page.getByLabel("已应用筛选")).toContainText("负责人：分页负责人 12");
     await page.getByRole("menuitem", { name: /总览/ }).click();
     await openWorkflowCenter(page);
@@ -456,7 +457,7 @@ test("lock operators select only eligible statuses and changing month clears sel
   const month = filter.getByRole("checkbox", { name: /^9月/ });
   await month.click();
   await expect(month).toBeChecked();
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await filter.getByRole("button", { name: "完成", exact: true }).click();
   await expect(toolbar).toContainText("已选 0 项");
   await expect(toolbar.getByRole("button", { name: "批量锁定", exact: true })).toHaveCount(0);
 });

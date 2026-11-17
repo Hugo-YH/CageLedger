@@ -106,42 +106,66 @@ test(
       const panel = await openTree(page, "接收日期");
       await expect(panel.getByRole("checkbox", { name: /2026年/ })).toBeVisible();
       await expandYear(panel);
-      await panel.getByRole("checkbox", { name: /10月/ }).click();
       const monthly = page.waitForRequest(
         (request) =>
           new URL(request.url()).pathname === "/api/intake-batches" && columnFilters(request).intakeDate?.length === 2,
       );
-      await panel.getByRole("button", { name: "应用", exact: true }).click();
+      await panel.getByRole("checkbox", { name: /10月/ }).click();
       expect(columnFilters(await monthly).intakeDate).toEqual(["2026-10-28", "2026-10-29"]);
       await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-0` })).toBeVisible();
       await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-1` })).toBeVisible();
       await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-2` })).toHaveCount(0);
+      await expect(panel).toBeVisible();
+      await panel.getByRole("button", { name: "完成", exact: true }).click();
+      const trigger = page.getByRole("button", { name: "筛选接收日期", exact: true });
+      await expect(trigger).toBeFocused();
 
       const dayPanel = await openTree(page, "接收日期");
       await dayPanel.getByRole("button", { name: "清空", exact: true }).click();
+      await expect(dayPanel).toBeVisible();
+      await expect(trigger).toHaveAttribute("aria-pressed", "false");
+      await expect(dayPanel.getByRole("checkbox", { name: /2026年/ })).not.toBeChecked();
       await expandYear(dayPanel);
       await expandYear(dayPanel, "10月");
-      await dayPanel.getByRole("checkbox", { name: /28日/ }).first().click();
       const daily = page.waitForRequest(
         (request) =>
           new URL(request.url()).pathname === "/api/intake-batches" &&
           columnFilters(request).intakeDate?.[0] === "2026-10-28",
       );
-      await dayPanel.getByRole("button", { name: "应用", exact: true }).click();
+      await dayPanel.getByRole("checkbox", { name: /28日/ }).first().click();
       expect(columnFilters(await daily).intakeDate).toEqual(["2026-10-28"]);
       await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-1` })).toHaveCount(0);
+      await expect(dayPanel).toBeVisible();
+      const search = dayPanel.getByRole("searchbox");
+      await search.fill("2025-10");
+      const additionalDay = page.waitForRequest(
+        (request) =>
+          new URL(request.url()).pathname === "/api/intake-batches" &&
+          columnFilters(request).intakeDate?.includes("2025-10-28") === true,
+      );
+      await dayPanel.getByRole("checkbox", { name: /10月/ }).click();
+      expect(columnFilters(await additionalDay).intakeDate?.sort()).toEqual(["2025-10-28", "2026-10-28"]);
+      await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-0` })).toBeVisible();
+      await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-2` })).toBeVisible();
+      await search.fill("2026-10");
+      await expect(dayPanel.getByRole("checkbox", { name: /28日/ })).toBeChecked();
+      await search.press("Escape");
+      await expect(dayPanel).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveAttribute("aria-pressed", "true");
+      await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-2` })).toBeVisible();
 
       const pendingPanel = await openTree(page, "接收日期");
       await pendingPanel.getByRole("button", { name: "清空", exact: true }).click();
-      await pendingPanel.getByRole("checkbox", { name: /待定/ }).click();
       const pending = page.waitForRequest(
         (request) =>
           new URL(request.url()).pathname === "/api/intake-batches" && columnFilters(request).intakeDate?.[0] === "",
       );
-      await pendingPanel.getByRole("button", { name: "应用", exact: true }).click();
+      await pendingPanel.getByRole("checkbox", { name: /待定/ }).click();
       expect(columnFilters(await pending).intakeDate).toEqual([""]);
       await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-3` })).toContainText("待定");
       await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-0` })).toHaveCount(0);
+      await pendingPanel.getByRole("button", { name: "完成", exact: true }).click();
     } finally {
       for (const id of ids) await page.request.delete(`/api/intake-batches/${id}`);
     }
@@ -160,74 +184,74 @@ test(
     await openSavedQuantitySheets(page);
     const monthPanel = await openTree(page, "月份");
     await expandYear(monthPanel);
-    await monthPanel.getByRole("checkbox", { name: /10月/ }).click();
     const quantityMonth = page.waitForRequest(
       (request) =>
         new URL(request.url()).pathname === "/api/quantity-sheets" && columnFilters(request).month?.[0] === "2026-10",
     );
-    await monthPanel.getByRole("button", { name: "应用", exact: true }).click();
+    await monthPanel.getByRole("checkbox", { name: /10月/ }).click();
     expect(columnFilters(await quantityMonth).month).toEqual(["2026-10"]);
+    await monthPanel.getByRole("button", { name: "完成", exact: true }).click();
 
     const timePanel = await openTree(page, "更新时间");
     await expect(timePanel.getByRole("checkbox", { name: /2026年/ })).toBeVisible();
     await expandYear(timePanel);
     await expandYear(timePanel, "10月");
-    await timePanel.getByRole("checkbox", { name: /^28日/ }).click();
     const quantityTime = page.waitForRequest(
       (request) =>
         new URL(request.url()).pathname === "/api/quantity-sheets" &&
         columnFilters(request).updatedAt?.includes(timestamps[0]),
     );
-    await timePanel.getByRole("button", { name: "应用", exact: true }).click();
+    await timePanel.getByRole("checkbox", { name: /^28日/ }).click();
     expect(columnFilters(await quantityTime).updatedAt).toEqual(timestamps);
+    await timePanel.getByRole("button", { name: "完成", exact: true }).click();
 
     await openNavigationEntry(page, "结算管理", "结算列表");
     const settlementPanel = await openTree(page, "结算月份");
     await expandYear(settlementPanel);
-    await settlementPanel.getByRole("checkbox", { name: /10月/ }).click();
     const settlement = page.waitForRequest(
       (request) =>
         new URL(request.url()).pathname === "/api/settlement-candidates" &&
         columnFilters(request).month?.[0] === "2026-10",
     );
-    await settlementPanel.getByRole("button", { name: "应用", exact: true }).click();
+    await settlementPanel.getByRole("checkbox", { name: /10月/ }).click();
     expect(columnFilters(await settlement).month).toEqual(["2026-10"]);
+    await settlementPanel.getByRole("button", { name: "完成", exact: true }).click();
 
     await openNavigationEntry(page, "技术服务费管理", "已保存技术服务明细");
     const servicePanel = await openTree(page, "月份");
     await expandYear(servicePanel);
-    await servicePanel.getByRole("checkbox", { name: /10月/ }).click();
     const service = page.waitForRequest(
       (request) =>
         new URL(request.url()).pathname === "/api/technical-services/sheets" &&
         columnFilters(request).month?.[0] === "2026-10",
     );
-    await servicePanel.getByRole("button", { name: "应用", exact: true }).click();
+    await servicePanel.getByRole("checkbox", { name: /10月/ }).click();
     expect(columnFilters(await service).month).toEqual(["2026-10"]);
+    await servicePanel.getByRole("button", { name: "完成", exact: true }).click();
 
     await openWorkflowCenter(page);
     const workflowPanel = await openTree(page, "结算月份");
     await expandYear(workflowPanel);
-    await workflowPanel.getByRole("checkbox", { name: /10月/ }).click();
     const workflow = page.waitForRequest(
       (request) =>
         new URL(request.url()).pathname === "/api/billing-workflows" && columnFilters(request).month?.[0] === "2026-10",
     );
-    await workflowPanel.getByRole("button", { name: "应用", exact: true }).click();
+    await workflowPanel.getByRole("checkbox", { name: /10月/ }).click();
     expect(columnFilters(await workflow).month).toEqual(["2026-10"]);
+    await workflowPanel.getByRole("button", { name: "完成", exact: true }).click();
 
     await page.getByRole("menuitem", { name: /帮助与反馈/ }).click();
     const feedbackPanel = await openTree(page, "提出时间");
     await expandYear(feedbackPanel);
     await expandYear(feedbackPanel, "10月");
-    await feedbackPanel.getByRole("checkbox", { name: /^28日/ }).click();
     const feedback = page.waitForRequest(
       (request) =>
         new URL(request.url()).pathname === "/api/feedback" &&
         columnFilters(request).createdAt?.includes(timestamps[0]),
     );
-    await feedbackPanel.getByRole("button", { name: "应用", exact: true }).click();
+    await feedbackPanel.getByRole("checkbox", { name: /^28日/ }).click();
     expect(columnFilters(await feedback).createdAt).toEqual(timestamps);
+    await feedbackPanel.getByRole("button", { name: "完成", exact: true }).click();
   },
 );
 
@@ -259,6 +283,8 @@ test(
       await page.emulateMedia({ reducedMotion: width === 844 ? "reduce" : "no-preference" });
       const trigger = page.getByRole("button", { name: "筛选接收日期", exact: true });
       const panel = await openTree(page, "接收日期");
+      await panel.getByRole("button", { name: "清空", exact: true }).click();
+      await expect(trigger).toHaveAttribute("aria-pressed", "false");
       const tree = panel.getByRole("tree");
       await tree.focus();
       await page.keyboard.press("Home");
@@ -312,6 +338,7 @@ test(
       await page.keyboard.press("Escape");
       await expect(panel).toBeHidden();
       await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveAttribute("aria-pressed", "true");
     }
   },
 );

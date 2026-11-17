@@ -125,12 +125,12 @@ test("单据跟踪展示 IACUC/登记人员并支持筛选和撤回已发起", a
     .locator("label")
     .filter({ hasText: /已发起/ })
     .click();
-  await filterPanel.getByRole("button", { name: "应用", exact: true }).click();
+  await filterPanel.getByRole("button", { name: "完成", exact: true }).click();
   await expect(page.getByRole("row", { name: /E2E 台账负责人 1/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /E2E 台账负责人 2/ })).toBeVisible();
   await page.getByRole("button", { name: "筛选状态", exact: true }).click();
   await page.locator(".table-filter-panel:visible").getByRole("button", { name: "清空", exact: true }).click();
-  await page.locator(".table-filter-panel:visible").getByRole("button", { name: "应用", exact: true }).click();
+  await page.locator(".table-filter-panel:visible").getByRole("button", { name: "完成", exact: true }).click();
 
   const firstWorkflowRow = page.getByRole("row", { name: /E2E 台账负责人 1/ });
   await firstWorkflowRow.getByRole("button", { name: "撤回", exact: true }).click();

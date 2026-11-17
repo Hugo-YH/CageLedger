@@ -51,13 +51,13 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
             contentType: "application/json",
           });
           await testInfo.attach(`${label}-open`, { body: await page.screenshot(), contentType: "image/png" });
-          await page.getByRole("button", { name: "应用", exact: true }).click();
+          await page.getByRole("button", { name: "完成", exact: true }).click();
           await expect(input).toBeHidden();
           await trigger.focus();
           await page.keyboard.press("Enter");
           await expect(input).toBeInViewport();
           await expect(input).toHaveValue("");
-          await page.getByRole("button", { name: "应用", exact: true }).click();
+          await page.getByRole("button", { name: "完成", exact: true }).click();
           await expect(input).toBeHidden();
         }
       },

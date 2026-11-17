@@ -60,10 +60,6 @@ test("batch filter displays Chinese brackets for legacy options while retaining 
     for (const number of legacyNumbers) await expect(filter.getByText(number, { exact: true })).toHaveCount(0);
     await page.screenshot({ path: info.outputPath("batch-filter-chinese-brackets.png"), animations: "disabled" });
     const checkbox = filter.getByRole("checkbox", { name: displayNumbers[0], exact: false });
-    // Checkbox.Group commits its controlled value in an effect. Click once, then
-    // assert the committed state instead of check()'s immediate post-click read.
-    await checkbox.click();
-    await expect(checkbox).toBeChecked();
     const applied = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -71,12 +67,16 @@ test("batch filter displays Chinese brackets for legacy options while retaining 
         (url.searchParams.get("columnFilters") || "").includes(legacyNumbers[0])
       );
     });
-    await filter.getByRole("button", { name: "应用", exact: true }).click();
+    // Click once, then await both the checked state and the immediate query.
+    await checkbox.click();
+    await expect(checkbox).toBeChecked();
     const result = await applied;
     expect(result.ok(), await result.text()).toBe(true);
     expect((await result.json()).items.map((item: { batchNo: string }) => item.batchNo)).toEqual([displayNumbers[0]]);
     await expect(page.getByRole("row").filter({ hasText: displayNumbers[0] })).toHaveCount(1);
     await expect(page.getByRole("row").filter({ hasText: displayNumbers[1] })).toHaveCount(0);
+    await expect(filter).toBeVisible();
+    await filter.getByRole("button", { name: "完成", exact: true }).click();
   } finally {
     for (const id of createdIds)
       expect((await page.request.delete(`/api/intake-batches/${encodeURIComponent(id)}`)).ok()).toBe(true);

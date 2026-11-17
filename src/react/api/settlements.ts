@@ -16,6 +16,7 @@ import type {
 import type { TechnicalServicePreview } from "../../contracts/technicalServices";
 import { requestDownload, requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { otherColumnFilters } from "./filterOptions";
 import { individualPeople } from "./personNames";
 import { invalidateWorkflowQueries } from "./workflows";
 
@@ -198,7 +199,7 @@ export function exportMonthlyBillingSummary(month: string) {
 }
 
 export function useSettlementFilterOptions(params: SettlementCandidateListParams, column: string, enabled: boolean) {
-  const filters = params.columnFilters || {};
+  const filters = otherColumnFilters(params.columnFilters, column);
   const search = new URLSearchParams({
     column,
     columnFilters: JSON.stringify(filters),

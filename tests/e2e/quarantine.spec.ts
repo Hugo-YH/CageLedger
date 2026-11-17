@@ -429,7 +429,7 @@ test("received animals flow through pool, covered cohort and manual completion",
   const ownIntake = intakeFilter.getByRole("checkbox", { name: intakeIds[1], exact: false });
   await ownIntake.check();
   await expect(ownIntake).toBeChecked();
-  await intakeFilter.getByRole("button", { name: "应用", exact: true }).click();
+  await intakeFilter.getByRole("button", { name: "完成", exact: true }).click();
   await expect(intakeFilter).toBeHidden();
   const intakeRow = page.getByRole("row").filter({ hasText: intakeIds[1] });
   await intakeRow.getByRole("button", { name: "检疫记录" }).click();

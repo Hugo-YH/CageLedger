@@ -15,7 +15,7 @@ async function openWorkflowMonth(page: Page, month: string) {
   const option = filter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   if (!(await option.isChecked())) await option.click();
   await expect(option).toBeChecked();
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await filter.getByRole("button", { name: "完成", exact: true }).click();
 }
 
 test("房间管理员按账号撤回本人流程，按钮与接口权限一致，原因和台账同步", async ({ page }) => {
@@ -93,7 +93,7 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   });
   await settlementMonthOption.click();
   await expect(settlementMonthOption).toBeChecked();
-  await settlementMonthFilter.getByRole("button", { name: "应用", exact: true }).click();
+  await settlementMonthFilter.getByRole("button", { name: "完成", exact: true }).click();
   const ownRow = page.getByRole("row").filter({ hasText: ownPi });
   const foreignRow = page.getByRole("row").filter({ hasText: foreignPi });
   await foreignRow.getByRole("checkbox").check();
@@ -127,7 +127,7 @@ test("房间管理员按账号撤回本人流程，按钮与接口权限一致�
   const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await monthOption.click();
   await expect(monthOption).toBeChecked();
-  await monthFilter.getByRole("button", { name: "应用", exact: true }).click();
+  await monthFilter.getByRole("button", { name: "完成", exact: true }).click();
   const ownWorkflow = page.getByRole("row").filter({ hasText: ownPi });
   const foreignWorkflow = page.getByRole("row").filter({ hasText: foreignPi });
   await expect(ownWorkflow).toBeVisible();
@@ -359,7 +359,7 @@ test("房间管理员可登记他人发起的结算流程，登记信息和台�
   const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await monthOption.click();
   await expect(monthOption).toBeChecked();
-  await monthFilter.getByRole("button", { name: "应用", exact: true }).click();
+  await monthFilter.getByRole("button", { name: "完成", exact: true }).click();
   const row = page.getByRole("row").filter({ hasText: pi });
   await expect(row).toBeVisible();
   await expect(row.getByRole("button", { name: "撤回", exact: true })).toHaveCount(0);

@@ -154,7 +154,7 @@ test("workspace return restores applied preferences and scroll without bulk sele
   await expect(filter).toHaveAttribute("aria-busy", "false");
   await filter.getByRole("checkbox").click();
   await expect(filter.getByRole("checkbox")).toBeChecked();
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await filter.getByRole("button", { name: "完成", exact: true }).click();
   await expect(page.getByRole("button", { name: "筛选月份", exact: true })).toBeFocused();
   await page.getByRole("button", { name: "IACUC，点击切换排序", exact: true }).click();
   await page.getByLabel("每页显示条数").click();

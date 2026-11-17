@@ -10,6 +10,7 @@ import type {
 } from "../../contracts/technicalServices";
 import { requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { otherColumnFilters } from "./filterOptions";
 import { individualPeople } from "./personNames";
 import { initiateReviewedServiceSettlement, previewSettlement } from "./settlements";
 import { isMutationActorCurrent, mutationActor, publishMutationItem } from "./mutationCache";
@@ -81,7 +82,7 @@ export function useServiceFilterOptions(
   const filters = individualPeople({
     month: params.month,
     keyword: params.keyword,
-    columnFilters: params.columnFilters,
+    columnFilters: otherColumnFilters(params.columnFilters, column),
   });
   return useQuery({
     queryKey: [...root, `${list}-filter-options`, filters, column],

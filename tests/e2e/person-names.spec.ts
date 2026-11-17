@@ -8,8 +8,8 @@ async function openFilter(page: Page, label: string): Promise<Locator> {
   return filter;
 }
 
-async function applyFilter(filter: Locator) {
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
+async function finishFilter(filter: Locator) {
+  await filter.getByRole("button", { name: "完成", exact: true }).click();
 }
 
 test("individual people filters and editing preserve raw intake names", async ({ page }) => {
@@ -57,7 +57,7 @@ test("individual people filters and editing preserve raw intake names", async ({
     await openNavigationEntry(page, "笼卡管理", "待接收批次");
     let filter = await openFilter(page, "购买单位");
     await filter.getByRole("checkbox", { name: new RegExp(`${prefix}-供应商`) }).click();
-    await applyFilter(filter);
+    await finishFilter(filter);
     const rows = page.getByRole("row").filter({ hasText: prefix });
     await expect(rows).toHaveCount(3);
     const compound = rows.filter({ hasText: batchNos[2] });
@@ -67,26 +67,26 @@ test("individual people filters and editing preserve raw intake names", async ({
     filter = await openFilter(page, "项目负责人");
     await expect(filter.getByRole("checkbox", { name: /陈晓卿、李壮|陈晓卿；李壮/ })).toHaveCount(0);
     await filter.getByRole("checkbox", { name: /^陈晓卿\s*\d+$/ }).click();
-    await applyFilter(filter);
+    await finishFilter(filter);
     await expect(rows).toHaveCount(2);
     await expect(rows.filter({ hasText: batchNos[1] })).toHaveCount(0);
     filter = await openFilter(page, "项目负责人");
     await filter.getByRole("checkbox", { name: /^李壮\s*\d+$/ }).click();
-    await applyFilter(filter);
+    await finishFilter(filter);
     await expect(rows).toHaveCount(3);
     filter = await openFilter(page, "项目负责人");
     await filter.getByRole("button", { name: "清空", exact: true }).click();
-    await applyFilter(filter);
+    await finishFilter(filter);
 
     filter = await openFilter(page, "实验负责人");
     await expect(filter.getByRole("checkbox", { name: /负责人甲、负责人乙|负责人甲\\负责人乙/ })).toHaveCount(0);
     await filter.getByRole("checkbox", { name: /^负责人甲\s*\d+$/ }).click();
-    await applyFilter(filter);
+    await finishFilter(filter);
     await expect(rows).toHaveCount(2);
     await expect(rows.filter({ hasText: batchNos[1] })).toHaveCount(0);
     filter = await openFilter(page, "实验负责人");
     await filter.getByRole("button", { name: "清空", exact: true }).click();
-    await applyFilter(filter);
+    await finishFilter(filter);
     await expect(rows).toHaveCount(3);
 
     await compound.getByRole("button", { name: "编辑", exact: true }).click();
@@ -141,7 +141,7 @@ test("individual people filters and editing preserve raw intake names", async ({
     await openNavigationEntry(page, "笼卡管理", "待接收批次");
     filter = await openFilter(page, "项目负责人");
     await filter.getByRole("checkbox", { name: /^王小明\s*\d+$/ }).click();
-    await applyFilter(filter);
+    await finishFilter(filter);
     await expect(page.getByRole("row").filter({ hasText: batchNos[2] })).toHaveCount(1);
     await expect(page.getByRole("row").filter({ hasText: batchNos[0] })).toHaveCount(0);
     await expect(page.getByRole("row").filter({ hasText: batchNos[1] })).toHaveCount(0);

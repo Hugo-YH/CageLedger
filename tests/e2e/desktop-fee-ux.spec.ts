@@ -41,7 +41,7 @@ async function applyServiceFilter(page: Page, column: string, value: string) {
   });
   await choice.click();
   await expect(choice).toBeChecked();
-  await options.getByRole("button", { name: "应用", exact: true }).click();
+  await options.getByRole("button", { name: "完成", exact: true }).click();
   await expect(options).toBeHidden();
 }
 

@@ -62,7 +62,7 @@ async function filterServiceColumn(page: Page, label: string, values: string[]) 
     await checkbox.click();
     await expect(checkbox).toBeChecked();
   }
-  await panel.getByRole("button", { name: "应用", exact: true }).click();
+  await panel.getByRole("button", { name: "完成", exact: true }).click();
   await expect(panel).toBeHidden();
 }
 
@@ -508,7 +508,7 @@ test("service pages use the billing workspace style across desktop and mobile la
         expect(rect.right).toBeLessThanOrEqual(width + 1);
         expect(rect.bottom).toBeLessThanOrEqual(height + 1);
         await testInfo.attach(`${name}-funnel-${width}`, { body: await page.screenshot(), contentType: "image/png" });
-        await panel.getByRole("button", { name: "应用", exact: true }).click();
+        await panel.getByRole("button", { name: "完成", exact: true }).click();
         await expect(panel).toBeHidden();
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();

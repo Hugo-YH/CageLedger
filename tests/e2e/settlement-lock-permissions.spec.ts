@@ -147,7 +147,7 @@ test("lock operator withdraws a foreign workflow from the list with a required r
   const option = filter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await option.click();
   await expect(option).toBeChecked();
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await filter.getByRole("button", { name: "完成", exact: true }).click();
   await page.getByRole("row").filter({ hasText: pi }).getByRole("button", { name: "撤回", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "撤回结算流程", exact: true });
   await expect(dialog.getByRole("button", { name: "确认撤回", exact: true })).toBeDisabled();

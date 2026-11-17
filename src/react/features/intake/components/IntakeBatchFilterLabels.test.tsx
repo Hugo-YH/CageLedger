@@ -132,9 +132,9 @@ it("searches batch numbers across bracket styles and applies the original comple
   expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument();
   fireEvent.change(search, { target: { value: "" } });
   for (const checkbox of within(panel).getAllByRole("checkbox")) fireEvent.click(checkbox);
-  expect(onFilter).not.toHaveBeenCalled();
-  fireEvent.click(within(panel).getByRole("button", { name: "应用" }));
-  expect(onFilter).toHaveBeenCalledExactlyOnceWith("batchNo", [
+  expect(onFilter).toHaveBeenCalledTimes(3);
+  fireEvent.click(within(panel).getByRole("button", { name: "完成" }));
+  expect(onFilter).toHaveBeenLastCalledWith("batchNo", [
     "(Z2025117)2026050808",
     "(Z2026026)2026042806",
     "（Z2025170）2026102902",

@@ -82,7 +82,7 @@ test(
     await page.getByRole("button", { name: "筛选项目负责人姓名", exact: true }).click();
     const filter = page.locator(".table-filter-panel:visible");
     await filter.getByRole("checkbox", { name: /合成结算负责人 12/ }).click();
-    await filter.getByRole("button", { name: "应用", exact: true }).click();
+    await filter.getByRole("button", { name: "完成", exact: true }).click();
     await expect(page.getByLabel("已应用筛选")).toContainText("负责人：合成结算负责人 12");
     await page.getByRole("menuitem", { name: /总览/ }).click();
     await openSettlement(page);

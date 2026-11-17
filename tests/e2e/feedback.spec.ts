@@ -26,7 +26,7 @@ async function filterColumn(page: Page, label: string, option: string) {
   await panel.getByPlaceholder("搜索当前列").fill(option);
   await panel.getByRole("checkbox", { name: option }).click();
   await expect(panel.getByRole("checkbox", { name: option })).toBeChecked();
-  await panel.getByRole("button", { name: /应\s*用/ }).click();
+  await panel.getByRole("button", { name: /完\s*成/ }).click();
   await expect(panel).toBeHidden();
 }
 
@@ -374,7 +374,7 @@ for (const viewport of [
   });
 }
 
-test("header funnels apply only on confirmation, clear and query beyond the current page", async ({
+test("header funnels apply immediately, preserve searched selections and query beyond the current page", async ({
   page,
 }, testInfo) => {
   await login(page);
@@ -401,9 +401,11 @@ test("header funnels apply only on confirmation, clear and query beyond the curr
   await panel.getByPlaceholder("搜索当前列").fill(module);
   await panel.getByRole("checkbox", { name: module }).click();
   await expect(panel.getByRole("checkbox", { name: module })).toBeChecked();
-  await expect(page.getByRole("button", { name: "清空筛选", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "清空筛选", exact: true })).toBeVisible();
+  await expect(page.getByText("共 2 条反馈", { exact: true })).toBeVisible();
+  await expect(panel).toBeVisible();
   await expect(panel.locator("small")).toHaveText("2");
-  await panel.getByRole("button", { name: /应\s*用/ }).click();
+  await panel.getByRole("button", { name: /完\s*成/ }).click();
   await expect(page.getByText("共 2 条反馈", { exact: true })).toBeVisible();
   await filterColumn(page, "类型", "使用疑问");
   await expect(page.getByText("共 1 条反馈", { exact: true })).toBeVisible();
@@ -412,8 +414,31 @@ test("header funnels apply only on confirmation, clear and query beyond the curr
   const kinds = page.getByRole("group", { name: "筛选类型选项", exact: true });
   await expect(kinds.getByRole("checkbox", { name: "故障" })).toBeVisible();
   await kinds.getByRole("button", { name: /清\s*空/ }).click();
-  await kinds.getByRole("button", { name: /应\s*用/ }).click();
   await expect(page.getByText("共 2 条反馈", { exact: true })).toBeVisible();
+  await expect(kinds).toBeVisible();
+  const kindTrigger = page.getByRole("button", { name: "筛选类型", exact: true });
+  await expect(kindTrigger).toHaveAttribute("aria-pressed", "false");
+  const kindSearch = kinds.getByRole("searchbox");
+  await kindSearch.fill("使用疑问");
+  await kinds.getByRole("checkbox", { name: "使用疑问" }).click();
+  await expect(kinds.getByRole("checkbox", { name: "使用疑问" })).toBeChecked();
+  await expect(page.getByText("共 1 条反馈", { exact: true })).toBeVisible();
+  await kindSearch.fill("故障");
+  await kinds.getByRole("checkbox", { name: "故障" }).click();
+  await expect(kinds.getByRole("checkbox", { name: "故障" })).toBeChecked();
+  await expect(page.getByText("共 2 条反馈", { exact: true })).toBeVisible();
+  await kindSearch.fill("使用疑问");
+  await expect(kinds.getByRole("checkbox", { name: "使用疑问" })).toBeChecked();
+  await kindSearch.press("Escape");
+  await expect(kinds).toBeHidden();
+  await expect(kindTrigger).toBeFocused();
+  await expect(kindTrigger).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("共 2 条反馈", { exact: true })).toBeVisible();
+  await kindTrigger.click();
+  await kinds.getByRole("button", { name: /清\s*空/ }).click();
+  await expect(kindTrigger).toHaveAttribute("aria-pressed", "false");
+  await expect(kinds).toBeVisible();
+  await kinds.getByRole("button", { name: /完\s*成/ }).click();
   await page.getByRole("button", { name: "编号，点击切换排序", exact: true }).click();
   const request = await page.request.get(
     `/api/feedback?${new URLSearchParams({ columnFilters: JSON.stringify({ module: [module] }), limit: "1", offset: "1", sortKey: "number", sortDir: "asc" })}`,
@@ -436,7 +461,7 @@ test("header funnels apply only on confirmation, clear and query beyond the curr
   unavailable = false;
   await failed.getByRole("button", { name: /重\s*试/ }).click();
   await expect(failed.getByRole("checkbox", { name: module })).toBeVisible();
-  await failed.getByRole("button", { name: /应\s*用/ }).click();
+  await failed.getByRole("button", { name: /完\s*成/ }).click();
 });
 
 for (const viewport of [

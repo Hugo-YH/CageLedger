@@ -18,7 +18,7 @@ test("bulk receipt reviews per-batch dates, preserves drafts on failure and expo
     const option = filter.getByRole("checkbox", { name: supplier, exact: false });
     await option.click();
     await expect(option).toBeChecked();
-    await filter.getByRole("button", { name: "应用", exact: true }).click();
+    await filter.getByRole("button", { name: "完成", exact: true }).click();
   }
 
   for (const [index, id] of ids.entries()) {

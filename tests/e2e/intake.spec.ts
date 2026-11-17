@@ -309,7 +309,7 @@ test("intake printing blocks mixed layouts and uses the temporary page size", as
     const supplierOption = supplierFilter.getByRole("checkbox", { name: supplier, exact: false });
     await supplierOption.click();
     await expect(supplierOption).toBeChecked();
-    await supplierFilter.getByRole("button", { name: "应用", exact: true }).click();
+    await supplierFilter.getByRole("button", { name: "完成", exact: true }).click();
 
     const temporaryRow = page.locator("tr", { hasText: temporaryBatchNo }).first();
     const standardRow = page.locator("tr", { hasText: standardBatchNo }).first();

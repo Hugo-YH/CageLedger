@@ -1,9 +1,9 @@
 import { ConfigProvider } from "antd";
-import type { ReactElement, ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FilterableColumnTitle } from "./FilterableTableHeader";
+import { FilterableColumnTitle, type FilterableColumnTitleProps } from "./FilterableTableHeader";
 
 const options = [
   { value: "alpha", label: "示例负责人甲", count: 1 },
@@ -43,7 +43,7 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps the pending selection through failure and retry, then applies once with focus restored", async () => {
+  it("keeps selection through failure and retry, applies each change immediately and closes without applying twice", async () => {
     const onRetry = vi.fn();
     const onFilter = vi.fn();
     const props = { label: "项目负责人", values: ["alpha"], options, onSort: vi.fn(), onFilter, onRetry };
@@ -61,10 +61,12 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     rerender(<FilterableColumnTitle {...props} />);
     expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).toBeChecked();
     fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
-    const apply = within(panel).getByRole("button", { name: "应用" });
-    fireEvent.click(apply);
-    fireEvent.click(apply);
     expect(onFilter).toHaveBeenCalledExactlyOnceWith(["alpha", "beta"]);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const done = within(panel).getByRole("button", { name: "完成" });
+    fireEvent.click(done);
+    fireEvent.click(done);
+    expect(onFilter).toHaveBeenCalledOnce();
     expect(trigger).toHaveFocus();
   });
 
@@ -89,10 +91,10 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     expect(within(panel).queryByText("供应商（分部）", { exact: true })).not.toBeInTheDocument();
   });
 
-  it("distinguishes a search miss and discards unconfirmed edits on Escape", async () => {
+  it("distinguishes a search miss and closes on Escape without reverting an applied selection", async () => {
     const onFilter = vi.fn();
     renderFilter(
-      <FilterableColumnTitle label="项目负责人" values={[]} options={options} onSort={vi.fn()} onFilter={onFilter} />,
+      <ControlledFilter label="项目负责人" values={[]} options={options} onSort={vi.fn()} onFilter={onFilter} />,
     );
     const trigger = screen.getByRole("button", { name: "筛选项目负责人" });
     fireEvent.click(trigger);
@@ -105,13 +107,13 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     fireEvent.keyDown(search, { key: "Escape" });
     await waitFor(() => expect(trigger).toHaveAttribute("aria-expanded", "false"));
     expect(trigger).toHaveFocus();
-    expect(onFilter).not.toHaveBeenCalled();
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["alpha"]);
     fireEvent.click(trigger);
-    expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).not.toBeChecked();
+    expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).toBeChecked();
     expect(search).toHaveValue("");
   });
 
-  it("checks a whole year, preserves pending dates and only applies on confirmation", async () => {
+  it("immediately filters a whole year while preserving undetermined dates", async () => {
     const onFilter = vi.fn();
     renderFilter(
       <FilterableColumnTitle
@@ -133,9 +135,10 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     expect(within(panel).queryByText("10月")).not.toBeInTheDocument();
     fireEvent.click(within(panel).getByRole("checkbox", { name: /2026年/ }));
     await waitFor(() => expect(within(panel).getByRole("checkbox", { name: /2026年/ })).toBeChecked());
-    expect(onFilter).not.toHaveBeenCalled();
-    fireEvent.click(within(panel).getByRole("button", { name: "应用" }));
     expect(onFilter).toHaveBeenCalledExactlyOnceWith(["", "2026-10-28", "2026-10-29"]);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(panel).getByRole("button", { name: "完成" }));
+    expect(onFilter).toHaveBeenCalledOnce();
     expect(trigger).toHaveFocus();
   });
 
@@ -156,7 +159,62 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     expect(within(panel).getByRole("checkbox", { name: /2026年/ })).toHaveAttribute("aria-checked", "mixed");
     fireEvent.change(within(panel).getByRole("searchbox"), { target: { value: "2026年11月" } });
     fireEvent.click(await within(panel).findByRole("checkbox", { name: /11月/ }));
-    fireEvent.click(within(panel).getByRole("button", { name: "应用" }));
     expect(onFilter).toHaveBeenCalledExactlyOnceWith(["2025-12", "2026-10", "2026-11"]);
+    fireEvent.click(within(panel).getByRole("button", { name: "完成" }));
+    expect(onFilter).toHaveBeenCalledOnce();
+  });
+  it("keeps selections outside a search and clears immediately without closing the menu", async () => {
+    const onFilter = vi.fn();
+    renderFilter(
+      <ControlledFilter label="负责人" values={["alpha"]} options={options} onSort={vi.fn()} onFilter={onFilter} />,
+    );
+    const trigger = screen.getByRole("button", { name: "筛选负责人" });
+    fireEvent.click(trigger);
+    const panel = await screen.findByRole("group", { name: "筛选负责人选项" });
+    const search = within(panel).getByRole("searchbox");
+    fireEvent.change(search, { target: { value: "乙" } });
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
+    expect(onFilter).toHaveBeenLastCalledWith(["alpha", "beta"]);
+    fireEvent.change(search, { target: { value: "甲" } });
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人甲/ }));
+    expect(onFilter).toHaveBeenLastCalledWith(["beta"]);
+    fireEvent.click(within(panel).getByRole("button", { name: "清空" }));
+    expect(onFilter).toHaveBeenLastCalledWith([]);
+    expect(onFilter).toHaveBeenCalledTimes(3);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(within(panel).getByRole("button", { name: "清空" }));
+    expect(onFilter).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps cached candidates interactive during refresh and accepts an external reset", async () => {
+    const onFilter = vi.fn();
+    const props = { label: "负责人", values: ["alpha"], options, onSort: vi.fn(), onFilter };
+    const { rerender } = renderFilter(<FilterableColumnTitle {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "筛选负责人" }));
+    const panel = await screen.findByRole("group", { name: "筛选负责人选项" });
+    rerender(<FilterableColumnTitle {...props} loading />);
+    expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).toBeChecked();
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["alpha", "beta"]);
+    rerender(<FilterableColumnTitle {...props} values={[]} error="更新失败" />);
+    expect(within(panel).getByRole("alert")).toHaveTextContent("更新失败");
+    expect(within(panel).getByRole("checkbox", { name: /示例负责人乙/ })).not.toBeChecked();
+    expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).not.toBeChecked();
+    expect(onFilter).toHaveBeenCalledOnce();
   });
 });
+
+function ControlledFilter(props: FilterableColumnTitleProps) {
+  const [values, setValues] = useState(props.values);
+  return (
+    <FilterableColumnTitle
+      {...props}
+      values={values}
+      onFilter={(next) => {
+        setValues(next);
+        props.onFilter(next);
+      }}
+    />
+  );
+}

@@ -146,7 +146,7 @@ for (const recognition of ["本地识别", "AI识别"] as const) {
       const filter = page.getByRole("group", { name: "筛选接收日期选项", exact: true });
       await filter.getByRole("checkbox", { name: /待定/ }).click();
       await expect(filter.getByRole("checkbox", { name: /待定/ })).toBeChecked();
-      await filter.getByRole("button", { name: "应用", exact: true }).click();
+      await filter.getByRole("button", { name: "完成", exact: true }).click();
       const row = page.locator("tr", { hasText: batchNo });
       await expect(row.getByText("待定", { exact: true })).toBeVisible();
       await row.getByRole("button", { name: "编辑", exact: true }).click();

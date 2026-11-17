@@ -75,12 +75,13 @@ test("undetermined intake dates stay first across pages, filters and refresh whi
     const filter = page.getByRole("group", { name: "筛选购买单位选项", exact: true });
     const supplierOption = filter.getByRole("checkbox", { name: new RegExp(supplier) });
     await expect(supplierOption).not.toBeChecked();
+    const filtered = listResponse(page, 0);
     await supplierOption.click();
     await expect(supplierOption).toBeChecked();
-    const filtered = listResponse(page, 0);
-    await filter.getByRole("button", { name: "应用", exact: true }).click();
     expect((await filtered).ok()).toBe(true);
     await expect.poll(visibleIds).toEqual(expected.slice(0, 10));
+    await expect(filter).toBeVisible();
+    await filter.getByRole("button", { name: "完成", exact: true }).click();
     const filteredSecond = listResponse(page, 10);
     await page.locator(".intake-list-pagination .ant-pagination-item-2").click();
     expect((await filteredSecond).ok()).toBe(true);

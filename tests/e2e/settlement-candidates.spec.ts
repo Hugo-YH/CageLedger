@@ -192,7 +192,7 @@ test("settlement candidates merge a principal investigator's IACUC sheets", asyn
   const monthOption = monthFilter.getByRole("checkbox", { name: new RegExp(`^${Number(month.slice(5))}月`) });
   await monthOption.click();
   await expect(monthOption).toBeChecked();
-  await monthFilter.getByRole("button", { name: "应用", exact: true }).click();
+  await monthFilter.getByRole("button", { name: "完成", exact: true }).click();
   const settlementGeometry = await settlementRegion.evaluate((element) => {
     const content = element.querySelector<HTMLElement>(".ant-table-content");
     const actionsHeader = element.querySelector<HTMLElement>("th.ant-table-cell-fix-end");
@@ -353,14 +353,14 @@ test("settlement list shows 结算状态 column and filters by initiated workflo
   const generatedLabel = filterPanel.locator("label").filter({ hasText: /已生成/ });
   await expect(generatedLabel).toBeVisible({ timeout: 10_000 });
   await generatedLabel.click();
-  await filterPanel.getByRole("button", { name: "应用", exact: true }).click();
+  await filterPanel.getByRole("button", { name: "完成", exact: true }).click();
   await expect(page.getByRole("row", { name: /E2E 已发起负责人/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /E2E 未发起负责人/ })).toHaveCount(0);
 
   // 清空筛选后已生成的流程预览弹窗不显示撤销/撤回，通过列表批量撤回删除
   await page.getByRole("button", { name: "筛选结算状态", exact: true }).click();
   await page.locator(".table-filter-panel:visible").getByRole("button", { name: "清空", exact: true }).click();
-  await page.locator(".table-filter-panel:visible").getByRole("button", { name: "应用", exact: true }).click();
+  await page.locator(".table-filter-panel:visible").getByRole("button", { name: "完成", exact: true }).click();
   await expect(page.getByRole("row", { name: /E2E 未发起负责人/ })).toBeVisible();
   await page
     .getByRole("row", { name: /E2E 已发起负责人/ })

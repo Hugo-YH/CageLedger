@@ -7,7 +7,7 @@ for (const [group, label, columnLabel] of [
   ["饲养费管理", "已保存数量统计表", "负责人"],
   ["结算管理", "单据跟踪", "项目负责人"],
 ]) {
-  test(`desktop ${label} filter recovers from failure without applying unfinished choices`, async ({ page }, info) => {
+  test(`desktop ${label} filter recovers from failure and applies choices immediately`, async ({ page }, info) => {
     await page.setViewportSize({ width: 1180, height: 800 });
     let mode: "error" | "hold" | "ready" = "error";
     let held: Route | undefined;
@@ -55,11 +55,24 @@ for (const [group, label, columnLabel] of [
     await expect(option).toBeVisible();
     await option.click();
     await expect(option).toBeChecked();
+    await expect(panel).toBeVisible();
+    await expect(trigger).toHaveAttribute("aria-pressed", "true");
     await search.fill("没有这个负责人");
     await expect(panel.getByRole("status")).toContainText("没有匹配的筛选项");
+    await search.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute("aria-pressed", "true");
+    await trigger.press("Enter");
+    await expect(option).toBeChecked();
+    await panel.getByRole("button", { name: "清空", exact: true }).click();
+    await expect(panel).toBeVisible();
+    await expect(option).not.toBeChecked();
     await expect(trigger).toHaveAttribute("aria-pressed", "false");
     await search.fill("");
-    await panel.getByRole("button", { name: "应用", exact: true }).click();
+    await option.click();
+    await expect(option).toBeChecked();
+    await panel.getByRole("button", { name: "完成", exact: true }).click();
     await expect(panel).toBeHidden();
     await expect(trigger).toHaveAttribute("aria-pressed", "true");
     await expect(trigger).toBeFocused();

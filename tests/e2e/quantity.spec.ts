@@ -292,7 +292,7 @@ test(
     // Ant's controlled Checkbox.Group commits its value in an effect after the click.
     await iacucFilter.click();
     await expect(iacucFilter).toBeChecked();
-    await filterPanel.getByRole("button", { name: "应用", exact: true }).click();
+    await filterPanel.getByRole("button", { name: "完成", exact: true }).click();
     await expect(selectionSummary).toHaveText("已选 0 项");
     await expect(page.getByText("范围已变化，已清空选择", { exact: true })).toBeVisible();
     await expect(toolbar.getByRole("button", { name: "清空选择", exact: true })).toBeDisabled();

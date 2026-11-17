@@ -14,6 +14,7 @@ import type {
 } from "../../contracts/feedback";
 import { ApiError, requestConditionalJson, requestJson, requestMultipart, type ConditionalJson } from "./client";
 import { queryKeys } from "./queryKeys";
+import { otherColumnFilters } from "./filterOptions";
 
 export type FeedbackListColumn =
   "number" | "title" | "kind" | "module" | "status" | "author" | "syncStatus" | "encounterCount" | "createdAt";
@@ -51,12 +52,13 @@ export function useFeedbackFilterOptions(
   filters: FeedbackFilters["columnFilters"],
   enabled: boolean,
 ) {
+  const candidates = otherColumnFilters(filters, column);
   return useQuery<{ items: Array<{ value: string; label: string; count: number }> }>({
-    queryKey: queryKeys.feedbackFilterOptions(column, filters),
+    queryKey: queryKeys.feedbackFilterOptions(column, candidates),
     staleTime: 0,
     queryFn: ({ signal }) =>
       requestJson(
-        `/api/feedback/filter-options?${new URLSearchParams({ column, columnFilters: JSON.stringify(filters) })}`,
+        `/api/feedback/filter-options?${new URLSearchParams({ column, columnFilters: JSON.stringify(candidates) })}`,
         { signal },
       ),
     enabled,

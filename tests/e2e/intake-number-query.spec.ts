@@ -57,7 +57,7 @@ test("intake keeps header number filters and legacy query compatibility without 
   const parsedOption = filter.getByRole("checkbox", { name: parsedNumber, exact: false });
   await parsedOption.click();
   await expect(parsedOption).toBeChecked();
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await filter.getByRole("button", { name: "完成", exact: true }).click();
   await expect(choices).toHaveCount(1);
   await expect(page.getByRole("checkbox", { name: `选择 ${parsedNumber}`, exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: parsedNumber, exact: true })).toBeVisible();
@@ -72,7 +72,7 @@ test("intake keeps header number filters and legacy query compatibility without 
   const invalidOption = filter.getByRole("checkbox", { name: invalidNumber, exact: false });
   await invalidOption.click();
   await expect(invalidOption).toBeChecked();
-  await filter.getByRole("button", { name: "应用", exact: true }).click();
+  await filter.getByRole("button", { name: "完成", exact: true }).click();
   await expect(choices).toHaveCount(1);
   await expect(page.getByRole("checkbox", { name: `选择 ${invalidNumber}`, exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: invalidNumber, exact: true })).toBeVisible();

@@ -213,9 +213,11 @@ test("applied intake filters can be cleared and identifiers expose a keyboard-ac
     const panel = page.getByRole("group", { name: "筛选项目负责人选项", exact: true });
     await panel.getByRole("searchbox").fill(pi);
     await panel.getByRole("checkbox", { name: new RegExp(pi) }).check();
-    await panel.getByRole("button", { name: "应用", exact: true }).click();
     const filters = page.locator('[aria-label="当前筛选条件"]');
     await expect(filters).toContainText(pi.slice(0, 20));
+    await expect(panel).toBeVisible();
+    await panel.getByRole("button", { name: "完成", exact: true }).click();
+    await expect(page.getByRole("button", { name: "筛选项目负责人", exact: true })).toBeFocused();
     const row = page.getByRole("row").filter({ hasText: batchNo });
     const detail = row.getByRole("button", { name: `查看完整内容：${batchNo}`, exact: true });
     await detail.focus();

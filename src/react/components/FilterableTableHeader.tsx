@@ -1,5 +1,5 @@
 import { ActionIcon } from "./ui/ActionIcon";
-import { Alert, Button, Checkbox, Input, Popover, Skeleton, Space } from "antd";
+import { Alert, Button, Checkbox, Input, Popover, Skeleton, Space, Typography } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ComponentRef } from "react";
 import { DateFilterTree } from "./DateFilterTree";
@@ -38,13 +38,20 @@ export function FilterableColumnTitle({
 }: FilterableColumnTitleProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [pending, setPending] = useState(values);
+  const [selected, setSelected] = useState(values);
+  const selectedRef = useRef(values);
   const rootRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<ComponentRef<typeof Button>>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(false);
   const panelId = useId();
   const [inMeasureRow, setInMeasureRow] = useState(false);
+  useLayoutEffect(() => {
+    if (!sameSelection(values, selectedRef.current)) {
+      selectedRef.current = values;
+      setSelected(values);
+    }
+  }, [values]);
   const closeAndRestoreFocus = useCallback(() => {
     openRef.current = false;
     setOpen(false);
@@ -91,11 +98,19 @@ export function FilterableColumnTitle({
   });
   function setPopoverOpen(next: boolean) {
     if (next) {
-      setPending(values);
+      selectedRef.current = values;
+      setSelected(values);
       setSearch("");
     }
     openRef.current = next;
     setOpen(next);
+  }
+  function updateSelection(next: string[]) {
+    if (!openRef.current || sameSelection(next, selectedRef.current)) return;
+    const current = [...new Set(next)];
+    selectedRef.current = current;
+    setSelected(current);
+    onFilter(current);
   }
 
   const content = (
@@ -116,12 +131,7 @@ export function FilterableColumnTitle({
         onChange={(event) => setSearch(event.target.value)}
       />
       <div className={dateHierarchy ? "table-date-filter-options" : "table-filter-options"}>
-        {loading ? (
-          <div role="status" aria-label={`${label}筛选选项正在加载`}>
-            <span className="app-visually-hidden">{label}筛选选项正在加载</span>
-            <Skeleton active paragraph={{ rows: 3 }} title={false} />
-          </div>
-        ) : error ? (
+        {error ? (
           <Alert
             type="error"
             showIcon
@@ -135,20 +145,37 @@ export function FilterableColumnTitle({
               ) : undefined
             }
           />
-        ) : dateHierarchy ? (
+        ) : null}
+        {loading && options.length > 0 ? (
+          <Typography.Text type="secondary" role="status">
+            正在更新筛选选项…
+          </Typography.Text>
+        ) : null}
+        {loading && !options.length ? (
+          <div role="status" aria-label={`${label}筛选选项正在加载`}>
+            <span className="app-visually-hidden">{label}筛选选项正在加载</span>
+            <Skeleton active paragraph={{ rows: 3 }} title={false} />
+          </div>
+        ) : error && !options.length ? null : dateHierarchy ? (
           <DateFilterTree
             label={label}
             hierarchy={dateHierarchy}
             options={options}
             search={search}
-            values={pending}
-            onChange={setPending}
+            values={selected}
+            onChange={updateSelection}
           />
         ) : visibleOptions.length ? (
           <Checkbox.Group
             className="table-filter-checkboxes"
-            value={pending}
-            onChange={(nextValues) => setPending(nextValues.map(String))}
+            value={selected}
+            onChange={(nextValues) => {
+              const visible = new Set(visibleOptions.map((option) => option.value));
+              updateSelection([
+                ...selectedRef.current.filter((value) => !visible.has(value)),
+                ...nextValues.map(String),
+              ]);
+            }}
           >
             {visibleOptions.map((option) => (
               <Checkbox key={option.value} value={option.value}>
@@ -164,19 +191,12 @@ export function FilterableColumnTitle({
         )}
       </div>
       <Space className="table-filter-actions">
-        <Button size="small" type="text" onClick={() => setPending([])}>
+        <Typography.Text type="secondary">勾选即生效</Typography.Text>
+        <Button size="small" type="text" onClick={() => updateSelection([])}>
           清空
         </Button>
-        <Button
-          size="small"
-          type="primary"
-          onClick={() => {
-            if (!openRef.current) return;
-            closeAndRestoreFocus();
-            onFilter(pending);
-          }}
-        >
-          应用
+        <Button size="small" type="primary" onClick={closeAndRestoreFocus}>
+          完成
         </Button>
       </Space>
     </div>
@@ -221,6 +241,11 @@ export function FilterableColumnTitle({
       ) : null}
     </span>
   );
+}
+
+function sameSelection(left: string[], right: string[]) {
+  const values = new Set(right);
+  return left.length === values.size && left.every((value) => values.has(value));
 }
 
 export function FilterableTableHeader(props: FilterableColumnTitleProps) {

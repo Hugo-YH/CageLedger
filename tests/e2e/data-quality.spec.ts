@@ -229,7 +229,7 @@ test("data quality archive filters, details and older snapshots are read only ac
   const category = page.getByRole("group", { name: "筛选问题分类选项" }).getByLabel("进驻接收明细关联缺失");
   await category.click();
   await expect(category).toBeChecked();
-  await page.getByRole("button", { name: "应用", exact: true }).click();
+  await page.getByRole("button", { name: "完成", exact: true }).click();
   const row = page.getByRole("row", { name: /待核对记录 1\s/ });
   await expect(row).toBeVisible();
   await expect(page.getByRole("row", { name: /待核对记录 0\s/ })).toHaveCount(0);

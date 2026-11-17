@@ -14,7 +14,7 @@ import type {
   ReceptionRegistrationSaveRequest,
 } from "../../contracts/reception";
 import { requestDownload, requestJson, requestMultipart } from "./client";
-import type { ColumnFilterOption } from "./filterOptions";
+import { otherColumnFilters, type ColumnFilterOption } from "./filterOptions";
 import { queryKeys } from "./queryKeys";
 
 export function useReceptions(params: ReceptionListParams) {
@@ -37,9 +37,10 @@ export function useReceptionFilterOptions(
   columnFilters: Record<string, string[]>,
   enabled: boolean,
 ) {
-  const search = new URLSearchParams({ column, columnFilters: JSON.stringify(columnFilters) });
+  const filters = otherColumnFilters(columnFilters, column);
+  const search = new URLSearchParams({ column, columnFilters: JSON.stringify(filters) });
   return useQuery({
-    queryKey: queryKeys.receptionFilterOptions(column, columnFilters),
+    queryKey: queryKeys.receptionFilterOptions(column, filters),
     queryFn: ({ signal }) =>
       requestJson<{ items: ColumnFilterOption[] }>(`/api/receptions/filter-options?${search}`, { signal }),
     enabled,
