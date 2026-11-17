@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.4",
+    build: "285",
+    releasedAt: "2026-11-17",
+    title: "列表展示优化",
+    items: [
+      "修复品系等可展开文本误用按钮内边距造成的缩进和行高差异，长短名称统一对齐，继续支持查看全文、键盘操作和编号复制",
+      "删除表头筛选浮层中的“勾选即生效”提示，底部仅显示“清空”和“完成”；勾选、取消勾选和清空仍立即生效",
+      "待接收批次列表隐藏检疫状态列，检疫管理、来源关联及报告数据继续保留",
+    ],
+  },
+  {
     version: "1.32.3",
     build: "284",
     releasedAt: "2026-11-17",
