@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.6",
+    build: "287",
+    releasedAt: "2026-11-23",
+    title: "待接收与接收列表",
+    items: [
+      "标记为已接收的批次从待接收列表移出，可在“接收管理 → 接收列表”查看。分次接收的批次在全部确认前继续留在待接收列表。",
+      "待接收列表的总数、列头筛选和跨页全选均按未完成接收的批次计算。接收成功后清除已完成批次的勾选。",
+    ],
+  },
+  {
     version: "1.32.5",
     build: "286",
     releasedAt: "2026-11-17",
