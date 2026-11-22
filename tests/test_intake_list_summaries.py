@@ -4,7 +4,7 @@ import unittest
 
 from server_app.cache import invalidate_data_cache_prefixes
 from server_app.domains.intake.read_service import print_data, read_batch
-from server_app.repositories.entities import list_intake_batches_page
+from server_app.repositories.entities import list_intake_batch_filter_options, list_intake_batches_page
 from server_app.repositories.filter_options import filtered_where
 from server_app.repositories.intake_summaries import FIELDS
 from server_app.shared.concurrency import StaleWriteError
@@ -34,17 +34,17 @@ class IntakeSummaryReadTests(unittest.TestCase):
                 roomName="8101",
                 intakeDate="" if index == 0 else "2026-10-29",
                 intakePurpose="housing",
-                status="pending_print",
+                status=("pending_print", "printed", "received")[index],
                 quantity=10,
                 finalCardCount=2,
-                confirmedCardCount=0,
-                remainingCardCount=2,
+                confirmedCardCount=1 if index == 1 else 0,
+                remainingCardCount=1 if index == 1 else 2,
                 updatedAt="v1",
                 notes="source notes",
                 rawMessage="x" * 20000,
                 recognition={"extractedText": "y" * 10000},
                 cards=[{"id": "card", "qrId": "ABCD", "suggestedQuantity": "5", "notes": "unused card metadata"}],
-                receipts=[],
+                receipts=[{"actualReceiptDate": "2026-10-29", "cardCount": 1}] if index == 1 else [],
             )
             self.items.append(item)
             self.conn.execute(
@@ -102,6 +102,22 @@ class IntakeSummaryReadTests(unittest.TestCase):
                 summary = self.listing(True, **params)
                 self.assertEqual([row["id"] for row in full["items"]], [row["id"] for row in summary["items"]])
                 self.assertEqual(full["page"], summary["page"])
+
+    def test_pending_scope_applies_before_pagination_and_is_retained_by_the_status_facet(self):
+        for summary in (False, True):
+            first = self.listing(summary, status="pending", limit=1, sortKey="intakeDate", sortDir="desc")
+            second = self.listing(summary, status="pending", limit=1, offset=1, sortKey="intakeDate", sortDir="desc")
+            self.assertEqual([row["id"] for result in (first, second) for row in result["items"]], ["1", "0"])
+            self.assertEqual(first["page"]["total"], 2)
+            self.assertTrue(first["page"]["hasMore"])
+            self.assertFalse(second["page"]["hasMore"])
+            self.assertEqual(self.listing(summary)["page"]["total"], 3)
+            received = self.listing(summary, status="received")
+            self.assertEqual([row["id"] for row in received["items"]], ["2"])
+        filters = {"status": "pending", "columnFilters": {"status": ["received"], "intakeDate": ["2026-10-29"]}}
+        self.assertEqual(self.listing(True, **filters)["page"]["total"], 0)
+        options = list_intake_batch_filter_options(self.conn, filters, filtered_where, "status")["items"]
+        self.assertEqual(options, [{"value": "printed", "label": "已打印", "count": 1}])
 
     def test_detail_and_batch_print_are_read_only_bounded_and_preserve_order(self):
         before = self.conn.total_changes

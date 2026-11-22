@@ -37,7 +37,7 @@ function sampleRows(): IntakeBatch[] {
     quantity: index === 11 ? 4 : 8,
     pi: "批次旧项目负责人",
     owner: "批次实验负责人",
-    status: index === 1 ? "received" : "pending_print",
+    status: index === 1 ? "printed" : "pending_print",
   }));
 }
 

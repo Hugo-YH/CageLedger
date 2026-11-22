@@ -192,6 +192,7 @@ export interface IntakeBatch {
 export interface IntakeListParams {
   limit: number;
   offset: number;
+  status?: IntakeBatchStatus | "all" | "pending" | "unprinted";
   sortKey?: string;
   sortDir?: "asc" | "desc";
   columnFilters?: Record<string, string[]>;

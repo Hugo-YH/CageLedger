@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { IntakeListParams } from "../../../api/contracts";
 import { useIntakeBatches } from "../../../api/intake";
+import { queryKeys } from "../../../api/queryKeys";
+import { useListPageBounds } from "../../../hooks/useListPageBounds";
 
 export function useIntakeBatchPage(mode: "entry" | "batches") {
   const [page, setPage] = useState(1);
@@ -12,6 +14,7 @@ export function useIntakeBatchPage(mode: "entry" | "batches") {
     () => ({
       limit: pageSize,
       offset: (page - 1) * pageSize,
+      status: "pending",
       sortKey: sort.key,
       sortDir: sort.dir,
       columnFilters: filters,
@@ -25,6 +28,9 @@ export function useIntakeBatchPage(mode: "entry" | "batches") {
     if (query.isSuccess && !query.isPlaceholderData) setDisplayedParams(params);
   }, [query.isSuccess, query.isPlaceholderData, params]);
   const data = query.data ?? displayed.data;
+  const pages = Math.max(1, Math.ceil((query.data?.page.total ?? 0) / pageSize));
+  const blocked = query.isFetching || query.isError || query.isPlaceholderData;
+  useListPageBounds(page, pages, mode === "batches" && query.isSuccess && !blocked, setPage, queryKeys.intakeRoot);
   const scope = JSON.stringify([
     mode,
     Object.entries(filters)
@@ -40,7 +46,7 @@ export function useIntakeBatchPage(mode: "entry" | "batches") {
     query,
     data,
     scope,
-    blocked: query.isFetching || query.isError || query.isPlaceholderData,
+    blocked,
     setPage,
     onPageSize: (value: number) => {
       setPageSize(value);

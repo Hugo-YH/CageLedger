@@ -86,8 +86,8 @@ test("direct sampling is recognized, saved without cards, confirmed and included
     const result = await confirmed.json();
     expect(result.tasks).toEqual([]);
     await expect(receiptDialog).toBeHidden();
-    await expect(row).toContainText("已接收");
-    await expect(page.getByRole("button", { name: "标记已接收", exact: true })).toBeDisabled();
+    await expect(row).toHaveCount(0);
+    await expect(page.getByText("已选 0 项", { exact: true })).toBeVisible();
     const read = await page.request.get(`/api/intake-batches/${id}`);
     const data = await read.json();
     expect(data.item ?? data).toMatchObject({
@@ -107,13 +107,6 @@ test("direct sampling is recognized, saved without cards, confirmed and included
     expect(filteredItems.every((item: { intakePurpose: string }) => item.intakePurpose === "direct_sampling")).toBe(
       true,
     );
-    await row.getByRole("button", { name: "编辑", exact: true }).click();
-    await expect(page.getByRole("combobox", { name: "接收用途", exact: true })).toBeDisabled();
-    await page
-      .getByRole("dialog", { name: "编辑待接收批次", exact: true })
-      .getByRole("button", { name: "关闭", exact: true })
-      .click();
-
     await page.getByRole("button", { name: "导出汇总", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "接收汇总", exact: true });
     for (const label of ["开始日期", "结束日期"]) {
@@ -132,6 +125,9 @@ test("direct sampling is recognized, saved without cards, confirmed and included
     expect(content).toContain("直接取材·无需笼卡·已接收");
     expect(content).toContain("数量：10只");
     expect(content).not.toContain("房间未填写");
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await openNavigationEntry(page, "接收管理", "接收列表");
+    await expect(page.getByRole("region", { name: "接收批次列表" }).locator("tr", { hasText: batchNo })).toBeVisible();
   } finally {
     await page.request.delete(`/api/intake-batches/${id}`);
   }

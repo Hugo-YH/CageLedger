@@ -124,6 +124,15 @@ test("bulk receipt reviews per-batch dates, preserves drafts on failure and expo
     expect(result.receipts).toHaveLength(2);
     expect(result.tasks).toEqual([]);
     await expect(dialog).toBeHidden();
+    const pendingRegion = page.getByRole("region", { name: "待接收批次列表" });
+    for (const id of ids) await expect(pendingRegion.locator("tr", { hasText: id })).toHaveCount(0);
+    await expect(page.getByText("已选 0 项", { exact: true })).toBeVisible();
+    const pendingActions = page.getByRole("group", { name: "待接收批次批量操作", exact: true });
+    await expect(pendingActions.getByText("共 0 条", { exact: true })).toBeVisible();
+    await pendingRegion.getByRole("button", { name: "筛选状态", exact: true }).click();
+    const statuses = page.getByRole("group", { name: "筛选状态选项", exact: true });
+    await expect(statuses.getByText("当前列没有可选项。", { exact: true })).toBeVisible();
+    await statuses.getByRole("button", { name: "完成", exact: true }).click();
     await openNavigationEntry(page, "接收管理", "接收列表");
     await filterOwnBatches();
     const region = page.getByRole("region", { name: "接收批次列表" });

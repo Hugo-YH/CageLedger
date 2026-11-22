@@ -25,6 +25,7 @@ function intakeListUrl(params: IntakeListParams, summary = false) {
   const search = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
   if (params.sortKey) search.set("sortKey", params.sortKey);
   if (summary) search.set("view", "summary");
+  if (params.status) search.set("status", params.status);
   if (params.personFilterMode) search.set("personFilterMode", params.personFilterMode);
   if (params.sortDir) search.set("sortDir", params.sortDir);
   if (params.columnFilters && Object.keys(params.columnFilters).length) {
@@ -97,7 +98,7 @@ export function listAllIntakeBatches(params: IntakeListParams, signal?: AbortSig
 }
 
 export function useIntakeFilterOptions(params: IntakeListParams, column: string, enabled: boolean) {
-  return useColumnFilterOptions("intake-batches", column, params.columnFilters, enabled);
+  return useColumnFilterOptions("intake-batches", column, params.columnFilters, enabled, params.status);
 }
 
 export function saveIntakeBatch({

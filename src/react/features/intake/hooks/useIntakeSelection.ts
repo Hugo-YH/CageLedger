@@ -72,9 +72,10 @@ export function useIntakeSelection() {
   );
 
   const remove = useCallback(
-    (id: string) => {
+    (ids: string[]) => {
       cancelPending();
-      setSelectedItems((current) => current.filter((item) => item.id !== id));
+      const removed = new Set(ids);
+      setSelectedItems((current) => current.filter((item) => !removed.has(item.id)));
     },
     [cancelPending],
   );

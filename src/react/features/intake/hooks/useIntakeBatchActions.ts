@@ -72,15 +72,16 @@ export function useIntakeBatchActions(selection: ReturnType<typeof useIntakeSele
         actualReceiptDates,
         expectedVersions: Object.fromEntries(items.map((item) => [item.id, item.updatedAt])),
       });
-      selection.update(response.batches);
+      selection.remove(response.batches.map((batch) => batch.id));
       setPendingReceipt(null);
       setBulkNotice("");
       if (skipped)
         feedback.warning(
           "批次接收标记已完成",
-          `已标记 ${items.length} 个批次为已接收；${skipped} 个不符合接收条件的批次跳过。`,
+          `接收列表新增 ${response.batches.length} 个批次，另有 ${skipped} 个批次不符合接收条件。`,
         );
-      else feedback.success("批次已标记为已接收", `共 ${items.length} 个批次。`);
+      else
+        feedback.success("批次已标记为已接收", `可在「接收管理 → 接收列表」查看 ${response.batches.length} 个批次。`);
     } catch (error) {
       const stale = error instanceof ApiError && error.status === 409;
       setReceiptNeedsReselect(stale);
@@ -107,7 +108,7 @@ export function useIntakeBatchActions(selection: ReturnType<typeof useIntakeSele
   async function confirmDelete() {
     if (!deleteTarget) return;
     await remove.mutateAsync(deleteTarget.id);
-    selection.remove(deleteTarget.id);
+    selection.remove([deleteTarget.id]);
     setDeleteTarget(null);
   }
   return {

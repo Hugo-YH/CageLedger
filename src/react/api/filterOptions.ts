@@ -23,6 +23,7 @@ export function useColumnFilterOptions(
   column: string,
   columnFilters: Record<string, string[]> | undefined,
   enabled: boolean,
+  status?: string,
 ) {
   const filters = otherColumnFilters(columnFilters, column);
   const personFilterMode = ["intake-batches", "quantity-sheets", "settlement-candidates", "billing-workflows"].includes(
@@ -31,10 +32,11 @@ export function useColumnFilterOptions(
     ? "individual"
     : "";
   const query = new URLSearchParams({ list, column });
+  if (status) query.set("status", status);
   if (personFilterMode) query.set("personFilterMode", personFilterMode);
   if (Object.keys(filters).length) query.set("columnFilters", JSON.stringify(filters));
   return useQuery({
-    queryKey: ["filter-options", list, column, filters, personFilterMode],
+    queryKey: ["filter-options", list, column, filters, personFilterMode, status],
     queryFn: ({ signal }) =>
       requestJson<{ items: ColumnFilterOption[] }>(`/api/filter-options?${query.toString()}`, { signal }),
     enabled,

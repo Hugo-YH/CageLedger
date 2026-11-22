@@ -130,7 +130,7 @@ def intake_batch_where(filters, filtered_where, exclude_column="", conn=None):
         )
     status = str(filters.get("status", "") or "").strip()
     normalized_filters = dict(filters)
-    if status in ("all", "unprinted"):
+    if status in ("all", "unprinted", "pending"):
         normalized_filters.pop("status", None)
     where, params = filtered_where(
         [
@@ -151,6 +151,8 @@ def intake_batch_where(filters, filtered_where, exclude_column="", conn=None):
             where = " AND ".join([part for part in (where, "intake_date >= ? AND intake_date < ?") if part])
             params = (*params, f"{year:04d}-{month_number:02d}-01", f"{next_year:04d}-{next_month:02d}-01")
     where_parts = [where] if where else []
+    if status == "pending":
+        where_parts.append("status != 'received'")
     next_params = list(params)
     for key, values in (filters.get("columnFilters") or {}).items():
         if key == exclude_column:
