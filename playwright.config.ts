@@ -46,6 +46,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: `CAGELEDGER_EPHEMERAL_DB=1 CAGELEDGER_DEV_PORT=${e2ePort} CAGELEDGER_DEV_API_PORT=${e2eApiPort} CAGELEDGER_DOCS_PORT=${docsPort} npm run dev`,
+    env: { CAGELEDGER_DEV_HOST: "127.0.0.1", CAGELEDGER_DEV_ORIGIN: "" },
     url: `${e2eBaseUrl}/api/health`,
     reuseExistingServer: process.env.CAGELEDGER_E2E_REUSE === "1",
     timeout: 120_000,

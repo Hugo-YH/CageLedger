@@ -53,7 +53,7 @@ docker run -d --name cageledger --restart unless-stopped \
 
 ## 本地开发
 
-日常开发、验收、测试和软件包构建以 [Codex 云端开发](docs/contracts/cloud-development.md) 为入口；Gitea 托管代码与产物。
+开发机通过 Tailscale 连接 `100.64.0.2` 上的 Gitea。仓库同步和远程联调见[本地开发](wiki/本地开发.md)，云端的网络、验收与软件包构建见 [Codex 云端开发](docs/contracts/cloud-development.md)。Gitea 托管代码与产物。
 
 要求 Node.js `>=22.12.0 <23` 和 Python 3.13；版本文件分别为 `.nvmrc`、`.python-version`。克隆仓库并进入项目目录后执行：
 

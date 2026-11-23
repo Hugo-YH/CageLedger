@@ -75,7 +75,7 @@ React 19 / TypeScript / Vite，服务端状态由 TanStack Query 管理，列表
 
 按实际能力选择技能，不固定串联。Ant API 查询用 `antd`；CageLedger UI 一致性审查用 `antd-ui-audit`；巡检目录草稿、发布或图片维护用 `inspection-catalog-editor`。动画审查、设计方案、选库等专项技能只在对应需求下使用，具体路由见各 Skill 描述。复杂跨模块工作在会话提供时可用 `spec-driven-develop`，普通修改不因关键词触发完整规划流程。
 
-发布源头是 `package.json`，版本由 `scripts/set_version.mjs` 同步；更新说明写入 `wiki/更新日志.md`，运行 `npm run release:notes:sync` 生成系统记录。云端 Git/API 使用 `https://git.cellnucle.us/hugo/cageledger`，兼容原 HTTP 直连入口，镜像为 `ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
+发布源头是 `package.json`，版本由 `scripts/set_version.mjs` 同步；更新说明写入 `wiki/更新日志.md`，运行 `npm run release:notes:sync` 生成系统记录。Tailnet 开发机经 `100.64.0.2` 访问 Gitea，见 [本地开发](wiki/本地开发.md)。云端认证代理使用 `https://git.cellnucle.us/hugo/cageledger`，生产镜像为 `ddns.cellnucle.us:3333/hugo/cageledger:<tag>`。
 
 Codex 云端负责日常开发、验收、按影响范围的测试和 ARM64 构建，继续推送 Gitea Packages；Gitea 托管代码、Packages 和 Release。生产目标为 DS223（aarch64），只构建 `linux/arm64`，历史 AMD64 制品保留。离线源码包以后由 Gitea 本地构建，Codex 不上传；本地临时源码包仍可用于来源核验。运行环境由 `runtime-image.lock.json` 固定到不可变摘要，受管构建直接复用已验证的依赖层；依赖输入变化时明确失败，只有显式 `npm run runtime:refresh` 才刷新和发布新的内容寻址运行时镜像，不移动业务版本或 `latest`。保留缓存，不能用每次重新安装 apt/pip 代替锁定依赖。
 

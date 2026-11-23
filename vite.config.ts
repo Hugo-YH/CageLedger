@@ -7,15 +7,16 @@ const apiOrigin =
   process.env.CAGELEDGER_API_ORIGIN || `http://127.0.0.1:${process.env.CAGELEDGER_DEV_API_PORT || "5174"}`;
 const docsOrigin =
   process.env.CAGELEDGER_DOCS_ORIGIN || `http://127.0.0.1:${process.env.CAGELEDGER_DOCS_PORT || "5175"}`;
+const devOrigin = process.env.CAGELEDGER_DEV_ORIGIN;
 
 export default defineConfig({
   plugins: [react()],
   publicDir: "assets",
   server: {
-    host: "0.0.0.0",
+    host: "127.0.0.1",
     port: 5173,
     strictPort: true,
-    allowedHosts: ["clt.cellnucle.us"],
+    allowedHosts: devOrigin ? [new URL(devOrigin).hostname] : [],
     fs: {
       // Overriding deny replaces Vite defaults; retain them and scope data to this project.
       deny: [
@@ -30,7 +31,7 @@ export default defineConfig({
     },
     proxy: {
       "/api": apiOrigin,
-      "/docs": { target: docsOrigin, ws: true },
+      "/docs": { target: docsOrigin, ws: true, changeOrigin: true },
     },
   },
   build: {

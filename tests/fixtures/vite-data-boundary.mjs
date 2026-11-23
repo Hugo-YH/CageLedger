@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpServer, get } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,12 +11,13 @@ const project = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const temporary = await realpath(await mkdtemp(join(tmpdir(), "cageledger-vite-boundary-")));
 const root = join(temporary, "Data", "project with spaces");
 const marker = "SYNTHETIC_PROTECTED_CONTENT_NO_REAL_DATA";
+const devHost = "dev.example.ts.net";
 const requests = [];
 let vite;
 const upstream = createHttpServer(async (request, response) => {
   let body = "";
   for await (const chunk of request) body += chunk;
-  requests.push({ method: request.method, path: request.url, body });
+  requests.push({ host: request.headers.host, method: request.method, path: request.url, body });
   response.setHeader("Content-Type", "application/json");
   response.end(JSON.stringify({ synthetic: true, method: request.method, path: request.url, body }));
 });
@@ -63,6 +64,9 @@ try {
   const vitePort = portProbe.address().port;
   await new Promise((done, reject) => portProbe.close((error) => (error ? reject(error) : done())));
   const upstreamOrigin = `http://127.0.0.1:${upstream.address().port}`;
+  process.env.CAGELEDGER_DEV_ORIGIN = `https://${devHost}`;
+  process.env.CAGELEDGER_API_ORIGIN = upstreamOrigin;
+  process.env.CAGELEDGER_DOCS_ORIGIN = upstreamOrigin;
   vite = await createServer({
     root,
     configFile: join(root, "vite.config.ts"),
@@ -72,7 +76,6 @@ try {
       host: "127.0.0.1",
       port: vitePort,
       strictPort: false,
-      proxy: { "/api": upstreamOrigin, "/docs": { target: upstreamOrigin, ws: true } },
     },
     optimizeDeps: { noDiscovery: true, include: [] },
   });
@@ -123,9 +126,18 @@ try {
     path: "/api/synthetic-boundary?check=1",
     body: "synthetic-body",
   });
-  const docs = await fetch(origin + "/docs/synthetic-control?check=1");
-  assert.equal(docs.status, 200);
-  assert.equal((await docs.json()).path, "/docs/synthetic-control?check=1");
+  const docsPath = "/docs/synthetic-control?check=1";
+  const requestDocs = (host) =>
+    new Promise((resolve, reject) => {
+      get(origin + docsPath, { headers: { host } }, (response) => {
+        response.resume();
+        resolve(response.statusCode);
+      }).once("error", reject);
+    });
+  assert.equal(await requestDocs(devHost), 200);
+  assert.equal(requests[1]?.path, docsPath);
+  assert.equal(requests[1]?.host, new URL(upstreamOrigin).host);
+  assert.equal(await requestDocs("untrusted.example"), 403);
   assert.equal(requests.length, 2, "Only synthetic proxy requests reached the upstream");
   console.log(
     JSON.stringify({

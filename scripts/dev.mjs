@@ -7,7 +7,6 @@ import { resolveProjectPython } from "./python_runtime.mjs";
 import { childExitCode, createDevShutdown } from "./dev_shutdown.mjs";
 
 const processes = new Set();
-const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(join(tmpdir(), "cageledger-e2e-")) : "";
 const apiPort = process.env.CAGELEDGER_DEV_API_PORT || "5174";
 const appPort = process.env.CAGELEDGER_DEV_PORT || "5173";
 const docsPort = process.env.CAGELEDGER_DOCS_PORT || "5175";
@@ -30,6 +29,10 @@ function loadDotEnv(root) {
 }
 
 const dotEnv = loadDotEnv(resolve(import.meta.dirname, ".."));
+const devHost = (process.env.CAGELEDGER_DEV_HOST ?? dotEnv.CAGELEDGER_DEV_HOST)?.trim() || "127.0.0.1";
+const devOrigin = (process.env.CAGELEDGER_DEV_ORIGIN ?? dotEnv.CAGELEDGER_DEV_ORIGIN)?.trim();
+const browserOrigin = devOrigin ? URL.parse(devOrigin) : null;
+const devRepository = process.env.CAGELEDGER_DEV_REPOSITORY_URL ?? dotEnv.CAGELEDGER_DEV_REPOSITORY_URL;
 const configuredCorsOrigins = (
   process.env.CAGELEDGER_CORS_ALLOWED_ORIGINS ||
   dotEnv.CAGELEDGER_CORS_ALLOWED_ORIGINS ||
@@ -38,7 +41,21 @@ const configuredCorsOrigins = (
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
+if (
+  devOrigin &&
+  (!browserOrigin ||
+    !["http:", "https:"].includes(browserOrigin.protocol) ||
+    browserOrigin.pathname !== "/" ||
+    browserOrigin.search ||
+    browserOrigin.hash ||
+    browserOrigin.username ||
+    browserOrigin.password)
+) {
+  throw new Error("CAGELEDGER_DEV_ORIGIN must be an HTTP(S) origin, such as https://dev.example.ts.net");
+}
+if (browserOrigin) devBrowserOrigins.push(browserOrigin.origin);
 const corsAllowedOrigins = [...new Set([...configuredCorsOrigins, ...devBrowserOrigins])].join(",");
+const ephemeralDir = process.env.CAGELEDGER_EPHEMERAL_DB === "1" ? mkdtempSync(join(tmpdir(), "cageledger-e2e-")) : "";
 
 function launch(command, args, env = {}) {
   const child = spawn(command, args, {
@@ -72,12 +89,12 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 launch(resolveProjectPython(), ["server.py"], {
+  CAGELEDGER_HOST: "127.0.0.1",
   CAGELEDGER_PORT: apiPort,
   CAGELEDGER_DEV_ASSETS: "1",
-  // In development the browser talks to Vite while Vite proxies /api to Python.
-  // Keep the production default same-origin-only and explicitly allow only the
-  // two browser-facing loopback origins for this local proxy instance.
+  // The browser uses Vite. Permit the configured browser origin when a proxy rewrites Host.
   CAGELEDGER_CORS_ALLOWED_ORIGINS: corsAllowedOrigins,
+  ...(devRepository ? { CAGELEDGER_REPOSITORY_URL: devRepository } : {}),
   ...(ephemeralDir
     ? {
         CAGELEDGER_ENV: "test",
@@ -94,19 +111,16 @@ launch(resolveProjectPython(), ["server.py"], {
       }
     : {}),
 });
-launch(
-  process.platform === "win32" ? "npm.cmd" : "npm",
-  ["exec", "vite", "--", "--host", "0.0.0.0", "--port", appPort],
-  {
-    // Test traffic must never inherit proxy targets pointing at a developer's database.
-    CAGELEDGER_API_ORIGIN: ephemeralDir
-      ? `http://127.0.0.1:${apiPort}`
-      : process.env.CAGELEDGER_API_ORIGIN || dotEnv.CAGELEDGER_API_ORIGIN || `http://127.0.0.1:${apiPort}`,
-    CAGELEDGER_DOCS_ORIGIN: ephemeralDir
-      ? `http://127.0.0.1:${docsPort}`
-      : process.env.CAGELEDGER_DOCS_ORIGIN || dotEnv.CAGELEDGER_DOCS_ORIGIN || `http://127.0.0.1:${docsPort}`,
-  },
-);
+launch(process.platform === "win32" ? "npm.cmd" : "npm", ["exec", "vite", "--", "--host", devHost, "--port", appPort], {
+  CAGELEDGER_DEV_ORIGIN: browserOrigin?.origin ?? "",
+  // Test traffic must never inherit proxy targets pointing at a developer's database.
+  CAGELEDGER_API_ORIGIN: ephemeralDir
+    ? `http://127.0.0.1:${apiPort}`
+    : process.env.CAGELEDGER_API_ORIGIN || dotEnv.CAGELEDGER_API_ORIGIN || `http://127.0.0.1:${apiPort}`,
+  CAGELEDGER_DOCS_ORIGIN: ephemeralDir
+    ? `http://127.0.0.1:${docsPort}`
+    : process.env.CAGELEDGER_DOCS_ORIGIN || dotEnv.CAGELEDGER_DOCS_ORIGIN || `http://127.0.0.1:${docsPort}`,
+});
 launch(
   process.platform === "win32" ? "npm.cmd" : "npm",
   ["exec", "vitepress", "--", "dev", "wiki", "--host", "127.0.0.1", "--port", docsPort],

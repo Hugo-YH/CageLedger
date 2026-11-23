@@ -19,16 +19,13 @@ npm run dev
 
 现有依赖基线已在 Node 22.23.3 / npm 11.21.1 下验证默认策略的干净安装；npm 10.9.9 的默认 `ci` 对既有 React peer 图仍报锁文件缺项。`antd-mobile` 间接使用的 `@react-spring/web` 声明尚未覆盖 React 19，严格 peer 检查仍失败；实际交互回归通过不能替代上游兼容声明。不要用自动降级移动组件或新增 `--force` 绕过。现有 Dockerfile 使用 `--legacy-peer-deps`，与本地默认安装策略的差异仍须在单独的依赖兼容任务中收敛。
 
-开发页面为 `http://localhost:5173`，Vite 将 `/api` 代理到 `http://127.0.0.1:5174`。
+开发页面为 `http://localhost:5173`，Vite 将 `/api` 代理到 `http://127.0.0.1:5174`。开发机通过 Tailscale 访问 `100.64.0.2` 上的 Gitea；跨设备联调使用开发机自己的 Tailscale 地址。访问与远端切换步骤见 [本地开发](wiki/本地开发.md)。
 
 Vite开发服务拒绝通过静态文件或raw模块读取本工程的`data/`目录；业务数据通过`/api`访问。`server.fs.deny`同时保留当前Vite默认敏感文件保护，规则使用本工程绝对路径，避免匹配名为Data的父卷。升级Vite时运行`node scripts/run_python.mjs -m unittest discover -s tests -p test_vite_data_boundary.py`，核对新增默认规则和合成HTTP边界；该回归不请求真实数据库或附件。
 
 项目文档和更新记录分别位于 `/docs/`、`/docs/releases/`，开发服务同时启动 VitePress 并代理其页面和热更新连接。使用 `CAGELEDGER_DEV_PORT`、`CAGELEDGER_DEV_API_PORT`、`CAGELEDGER_DOCS_PORT` 启动不同端口的实例时，代理默认跟随实际 API／文档端口；文档预构建缓存按端口隔离，避免测试或另一实例导致文档空白。`CAGELEDGER_API_ORIGIN`、`CAGELEDGER_DOCS_ORIGIN` 可显式覆盖代理目标。
 
-通过 Codex 或 SSH 转发开发端口时，浏览器地址中的端口可能不同于 5173。若写入提示“请求来源不受信任”，
-在本地 `.env` 的 `CAGELEDGER_CORS_ALLOWED_ORIGINS` 中添加浏览器实际显示的 origin（例如
-`http://localhost:56519`，不含 `/app`），多个地址用逗号分隔，然后重启 `npm run dev`。
-转发地址变化时更新该配置；只登记实际使用的入口，不使用通配符，也不关闭服务端来源校验。
+在开发机 `.env` 中用 `CAGELEDGER_DEV_ORIGIN` 登记 Tailscale Serve 提供的 HTTPS 来源，填协议、主机和端口，然后重启 `npm run dev`。同一设置用于 Vite 主机校验与 API 来源校验。已有其他本地代理需要登记额外 API 来源时，可用 `CAGELEDGER_CORS_ALLOWED_ORIGINS`，多个来源用逗号分隔。
 
 检疫报告直接下载 PDF，服务端使用 LibreOffice Writer 转换保留的实验室模板。运行环境需有
 `soffice` 或 `libreoffice`；也可在本地 `.env` 配置 `CAGELEDGER_LIBREOFFICE_BIN` 为可执行文件的绝对路径。

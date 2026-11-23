@@ -15,7 +15,9 @@ git status --short
 
 使用现有检出；云任务已隔离，不额外创建 worktree 或临时功能分支。平台初始 `work` 仅作为导入分支，核对提交和现有修改后进入 `main`，不重置或丢弃工作区。长期分支继续遵循 [分支策略](branching.md)。
 
-保留平台 GitHub `origin` 供环境仓库恢复；添加独立 Gitea remote 后显式操作 `gitea`，避免推错上游。不要盲目覆盖已有同名 remote。
+开发网络通过 Tailscale 访问 `100.64.0.2` 上的 Gitea。已加入 Tailnet 的开发机按 [本地开发](../../wiki/本地开发.md) 核对协议、端口及仓库地址。Codex 云端可在环境配置中启用 Tailscale，发布后由新环境的受管代理访问 Tailnet。加入 Tailnet 后仍需配置 Gitea 仓库认证。没有 Tailnet 路由的工作区通过已配置的 HTTPS 认证代理访问同一仓库。
+
+保留平台 GitHub `origin` 供环境仓库恢复。先检查现有的 `gitea` remote，缺少时才添加对应环境的地址。以下是使用 Codex HTTPS 代理的配置和验证命令。
 
 ```bash
 git remote add gitea https://git.cellnucle.us/hugo/cageledger.git
@@ -27,7 +29,7 @@ Gitea 是日常代码上游，GitHub `origin` 仅保留为平台导入入口。�
 
 云端每轮修改完成、相关验证通过后，立即提交并推送到 Gitea 对应开发分支，避免未推送代码仅保存在云端磁盘；这是用户已授权的日常备份步骤。按本轮实际影响选择验证，不因提交和推送升级为全量测试或构建。推送前 fetch 并核对待推送提交，不强推、不夹带他人改动；推送失败保留本地提交并明确说明原因。该约定不自动授权构建、标签、Release、Packages、latest 或生产部署。
 
-网络密钥 `CAGELEDGER_GITEA_TOKEN` 在环境设置中绑定 `git.cellnucle.us`。包装器仅为子进程追加 HTTPS 主机限定认证头，保留平台已有 Git 认证和代理，不将值写进文件或命令参数。不要把占位符编码成 Basic 凭据、写入 credential store 或用于 HTTP 地址。推送需任务授权，推送前核对远端状态与待推送提交，不强推。
+网络密钥 `CAGELEDGER_GITEA_TOKEN` 在环境设置中绑定 `git.cellnucle.us`。包装器仅为子进程追加 HTTPS 主机限定认证头，保留平台已有 Git 认证和代理，不将值写进文件或命令参数。Tailnet 直连时使用该入口对应的认证。不要把云端占位符编码成 Basic 凭据、写入 credential store 或用于 HTTP 地址。推送需任务授权，推送前核对远端状态与待推送提交，不强推。
 
 ## 工具与依赖
 
@@ -50,7 +52,7 @@ Linux 还需浏览器系统库、中文字体、Poppler 与可执行的 LibreOff
 CAGELEDGER_EPHEMERAL_DB=1 npm run dev
 ```
 
-此命令启动临时数据库、Vite、Python API 和文档服务；关闭时清理本次临时数据。端口默认 5173/5174/5175。启动前检查端口归属，不终止未知进程，不从生产目录复制凭据或数据库。
+此命令启动临时数据库、Vite、Python API 和文档服务；关闭时清理本次临时数据。服务默认监听回环地址的 5173/5174/5175 端口。通过 Tailnet 远程访问时，只转发 Vite，并用 `CAGELEDGER_DEV_ORIGIN` 登记浏览器实际来源，见 [Tailscale 联调](../../wiki/本地开发.md#通过-tailscale-联调)。启动前检查端口归属，不终止未知进程，不从生产目录复制凭据或数据库。
 
 测试范围统一遵循 [测试策略](testing-strategy.md)，不重复建立一套云端业务门禁：
 
@@ -124,6 +126,6 @@ npm run release:cloud -- --offline-image --publish
 
 Git/API 的 `CAGELEDGER_GITEA_TOKEN` 是代理注入绑定，不能在进程里编码成 Basic 密码。Registry 使用绑定 `git.cellnucle.us` 的 `CAGELEDGER_GITEA_REGISTRY_BASIC`，值为用户本地生成的 Base64(`hugo:具有写软件包权限的Token`)，不带 `Basic` 前缀及空格；仅向 HTTPS `/v2/token` 发送 Basic，得到的 Bearer 只驻留内存。不要打印、落盘或重新编码占位符。可选 Mac 构建通过锁定摘要和原有 Docker 凭据取同一运行环境，保持 Docker context、TLS 与认证配置。
 
-软件版本发布、环境配置发布和生产 NAS 部署分别授权；本流程不自动部署 NAS。生产使用的 `ddns.cellnucle.us:3333` 与云端 API 的 HTTPS 地址是独立入口，内网下载是否经过 FRP 需按实际 DNS、认证 realm 和 blob 地址核对，不能仅凭 Packages 页面域名判断。
+软件版本发布、环境配置发布和生产 NAS 部署分别授权；本流程不自动部署 NAS。生产 NAS 的镜像拉取入口为 `ddns.cellnucle.us:3333`。改变云端 API 或 Tailnet Git 地址时，镜像拉取仍按部署配置解析 Registry、认证 realm 和 blob 地址。
 
 `release:local` 作为 Mac mini 受管正式发布入口保留，仍有平台专用转换器信任和完整交付核验。当前云端 WebKit 系统库未齐，默认启动校验受限；只有补齐依赖并实际通过后才能报告完整三浏览器门禁。它不是云端普通构建前置步骤；未经完整适配和验证，不能宣称该正式发布管线已迁移到 Linux。已有版本、标签和制品保持不可覆盖；生产部署另行授权。恢复及证据规则见 [发布工程](release-engineering.md)。

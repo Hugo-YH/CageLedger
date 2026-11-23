@@ -70,7 +70,7 @@ npm run release:cloud -- --offline-image --publish
 
 ## 云端远端、凭据与分支
 
-云端官方上游为 `https://git.cellnucle.us/hugo/cageledger.git`，显式使用 `gitea` remote，保留平台 GitHub `origin`：
+Tailnet 内的开发机通过 `100.64.0.2` 同步代码，步骤见 [本地开发](/development/local-development)。Codex 云端通过 HTTPS 认证代理使用 `https://git.cellnucle.us/hugo/cageledger.git`，显式操作 `gitea` remote，并保留平台 GitHub `origin`：
 
 ```bash
 source scripts/cloud_env.sh

@@ -61,12 +61,12 @@ cd "$HOME/Library/Application Support/CageLedgerRunner"
 
 安装器固定官方 Gitea Runner 5.3.0 的 darwin-arm64 二进制，并校验官方 SHA256；保留已有配置和注册信息，不自动注册或启动服务。注册时填写：
 
-| 项目        | 内容                                                 |
-| ----------- | ---------------------------------------------------- |
-| Gitea 地址  | `https://git.cellnucle.us`，与当前实例 ROOT_URL 一致 |
-| 注册令牌    | 仓库设置中新生成的 Runner 注册令牌                   |
-| Runner 名称 | `mac-mini-arm64`                                     |
-| 标签        | 配置已固定 `macos-arm64:host`                        |
+| 项目        | 内容                                             |
+| ----------- | ------------------------------------------------ |
+| Gitea 地址  | 当前实例 `ROOT_URL`，且 Runner 从 Tailnet 可访问 |
+| 注册令牌    | 仓库设置中新生成的 Runner 注册令牌               |
+| Runner 名称 | `mac-mini-arm64`                                 |
+| 标签        | 配置已固定 `macos-arm64:host`                    |
 
 注册后限制 `.runner` 文件权限，先在前台验证上线：
 
@@ -99,7 +99,7 @@ Runner 主机的 Docker 构建使用当前本地 Docker Desktop／Colima context
 
 ## 内网传输与验证边界
 
-Runner 注册使用 Gitea 配置的 ROOT_URL。若要避免产物经 frp 中转，应让 Mac 上的 `git.cellnucle.us` 通过内网 DNS 指向 Gitea 所在 NAS 的 HTTPS 反向代理，并保留有效域名证书。仅把 Runner 放进内网不会自动改变公网域名的网络路径；不要关闭 TLS 校验。
+Mac mini 的开发网络通过 Tailscale 访问 `100.64.0.2` 上的 Gitea。Runner 注册前核对 Gitea 当前 `ROOT_URL` 和克隆地址，确认 Mac 能从 Tailnet 访问；使用 HTTPS 时保留证书校验。切换版本发布使用的 API 或 Registry 入口时，分别核对发布凭据与运行环境镜像摘要。
 
 当前只有云端脚本和模拟测试可在本会话验证。Mac 的安装、注册、launchd、Docker context 和 Gitea 实际任务运行，须在上述 Mac mini 上完成后才能报告通过。
 
