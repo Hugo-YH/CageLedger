@@ -32,7 +32,12 @@ const dotEnv = loadDotEnv(resolve(import.meta.dirname, ".."));
 const devHost = (process.env.CAGELEDGER_DEV_HOST ?? dotEnv.CAGELEDGER_DEV_HOST)?.trim() || "127.0.0.1";
 const devOrigin = (process.env.CAGELEDGER_DEV_ORIGIN ?? dotEnv.CAGELEDGER_DEV_ORIGIN)?.trim();
 const browserOrigin = devOrigin ? URL.parse(devOrigin) : null;
-const devRepository = process.env.CAGELEDGER_DEV_REPOSITORY_URL ?? dotEnv.CAGELEDGER_DEV_REPOSITORY_URL;
+const giteaApiUrl =
+  process.env.CAGELEDGER_GITEA_API_URL ??
+  dotEnv.CAGELEDGER_GITEA_API_URL ??
+  process.env.CAGELEDGER_DEV_REPOSITORY_URL ??
+  dotEnv.CAGELEDGER_DEV_REPOSITORY_URL ??
+  "";
 const configuredCorsOrigins = (
   process.env.CAGELEDGER_CORS_ALLOWED_ORIGINS ||
   dotEnv.CAGELEDGER_CORS_ALLOWED_ORIGINS ||
@@ -94,7 +99,7 @@ launch(resolveProjectPython(), ["server.py"], {
   CAGELEDGER_DEV_ASSETS: "1",
   // The browser uses Vite. Permit the configured browser origin when a proxy rewrites Host.
   CAGELEDGER_CORS_ALLOWED_ORIGINS: corsAllowedOrigins,
-  ...(devRepository ? { CAGELEDGER_REPOSITORY_URL: devRepository } : {}),
+  CAGELEDGER_GITEA_API_URL: giteaApiUrl,
   ...(ephemeralDir
     ? {
         CAGELEDGER_ENV: "test",
@@ -102,6 +107,7 @@ launch(resolveProjectPython(), ["server.py"], {
         CAGELEDGER_DATA_ROOT: ephemeralDir,
         // Isolated runs must not inherit real Gitea credentials from .env.
         CAGELEDGER_GITEA_TOKEN: process.env.CAGELEDGER_E2E_GITEA_TOKEN || "",
+        CAGELEDGER_GITEA_API_URL: "",
         // Automated tests use mocked AI and must not inherit a paid local key.
         DEEPSEEK_API_KEY: process.env.CAGELEDGER_E2E_DEEPSEEK_API_KEY || "",
         CAGELEDGER_REPOSITORY_URL: process.env.CAGELEDGER_E2E_REPOSITORY_URL || "http://127.0.0.1:1/test/feedback",

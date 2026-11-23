@@ -126,6 +126,7 @@ CAGELEDGER_REPOSITORY_URL = os.environ.get(
     os.environ.get("CAGELEDGER_REPOSITORY", "https://git.cellnucle.us/hugo/cageledger"),
 ).strip()
 CAGELEDGER_BRANCH = os.environ.get("CAGELEDGER_BRANCH", "main")
+CAGELEDGER_GITEA_API_URL = os.environ.get("CAGELEDGER_GITEA_API_URL", "").strip()
 CAGELEDGER_GITEA_TOKEN = os.environ.get("CAGELEDGER_GITEA_TOKEN", "").strip()
 CAGELEDGER_UPDATE_CHECK_ENABLED = _env_bool("CAGELEDGER_UPDATE_CHECK_ENABLED")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()

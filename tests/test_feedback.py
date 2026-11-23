@@ -485,6 +485,35 @@ class FeedbackTests(FeedbackFixture, unittest.TestCase):
         self.assertEqual(self.detail(item["id"])["item"]["issueNumber"], 7)
         self.assertFalse(any(call[0] == "POST" for call in self.client.calls))
 
+    def test_restart_resumes_configuration_blocked_tasks_for_current_repository(self):
+        item = self.create()
+        other = self.create()
+        self.client.issues.append({"number": 7, "body": sync.marker("feedback", item["id"]), "state": "open"})
+        with self.connect() as conn:
+            conn.execute("UPDATE feedback SET repository=? WHERE id=?", (REPOSITORY + "-other", other["id"]))
+            conn.execute(
+                "UPDATE feedback_tasks SET state='blocked',uncertain=1,error=?",
+                ("共享仓库地址无效，请管理员检查配置",),
+            )
+        stop = threading.Event()
+        with (
+            patch.multiple(
+                worker,
+                connect_db=self.connect,
+                FEEDBACK_FILES_PATH=self.root,
+                _stop=stop,
+                _resume=threading.Event(),
+                _health_state="recovering",
+                _health_error="",
+            ),
+            patch.object(worker, "Client", return_value=self.client),
+            patch.object(stop, "wait", side_effect=lambda _timeout: stop.set()),
+        ):
+            worker._run()
+        self.assertEqual(self.detail(item["id"])["item"]["issueNumber"], 7)
+        self.assertEqual(self.detail(other["id"])["item"]["syncStatus"], "uncertain")
+        self.assertFalse(any(call[0] == "POST" for call in self.client.calls))
+
     def test_repeated_database_locks_in_recovery_keep_worker_running(self):
         item = self.create()
         stop = threading.Event()

@@ -212,9 +212,14 @@ class ClientTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            client = Client(f"http://127.0.0.1:{server.server_port}/hugo/cageledger", "mock-readonly-token")
+            api_url = f"http://127.0.0.1:{server.server_port}"
+            repository = "https://gitea.example.invalid/hugo/cageledger"
+            client = Client(repository, "mock-readonly-token", api_url=api_url)
             with patch.multiple(
-                system, CAGELEDGER_REPOSITORY_URL=client.repository, CAGELEDGER_GITEA_TOKEN="mock-readonly-token"
+                system,
+                CAGELEDGER_REPOSITORY_URL=repository,
+                CAGELEDGER_GITEA_API_URL=api_url,
+                CAGELEDGER_GITEA_TOKEN="mock-readonly-token",
             ):
                 self.assertEqual(system.latest_remote_release()["version"], "v1.5.0")
             self.assertEqual(client.request("GET", "/releases/latest")["tag_name"], "v1.5.0")
@@ -228,6 +233,17 @@ class ClientTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join()
+
+    def test_legacy_tailscale_url_keeps_repository_identity_and_checks_path(self):
+        repository = "https://gitea.example.invalid/hugo/cageledger"
+        api_origin = "http://100.64.0.2:3333"
+        client = Client(repository, "mock-token", api_url=api_origin + "/hugo/cageledger.git/")
+        self.assertEqual(client.repository, repository)
+        self.assertEqual(client.api, api_origin + "/api/v1/repos/hugo/cageledger")
+        with self.assertRaisesRegex(ValueError, "CAGELEDGER_REPOSITORY_URL"):
+            Client(api_origin, "mock-token")
+        with self.assertRaisesRegex(ValueError, "CAGELEDGER_GITEA_API_URL"):
+            Client(repository, "mock-token", api_url=api_origin + "/hugo/other")
 
     def test_untrusted_attachment_urls_are_rejected_before_network(self):
         client = Client(REPOSITORY, "mock-token")

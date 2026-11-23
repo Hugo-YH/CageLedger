@@ -10,6 +10,7 @@ from datetime import datetime
 from urllib.parse import urlencode
 from uuid import uuid4
 
+from server_app.config import CAGELEDGER_GITEA_API_URL
 from server_app.shared import now_iso
 
 from . import repository as repo
@@ -21,7 +22,7 @@ def configured(user):
     service.admin(user)
     if not service.CAGELEDGER_GITEA_TOKEN:
         raise ValueError("请先配置检查更新共用的 Gitea Token")
-    return Client(service.CAGELEDGER_REPOSITORY_URL, service.CAGELEDGER_GITEA_TOKEN)
+    return Client(service.CAGELEDGER_REPOSITORY_URL, service.CAGELEDGER_GITEA_TOKEN, api_url=CAGELEDGER_GITEA_API_URL)
 
 
 def field(body, name):

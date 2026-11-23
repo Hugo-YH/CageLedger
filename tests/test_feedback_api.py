@@ -94,7 +94,8 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
         cls.mock_thread.start()
         cls.temp_dir = tempfile.TemporaryDirectory(prefix="cageledger-feedback-api-")
         cls.port = available_port()
-        cls.repository = f"http://127.0.0.1:{cls.mock.server_port}/hugo/cageledger"
+        cls.repository_origin = "https://gitea.example.invalid"
+        cls.repository = f"{cls.repository_origin}/hugo/cageledger"
         env = {
             **os.environ,
             "CAGELEDGER_HOST": "127.0.0.1",
@@ -104,6 +105,7 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
             "CAGELEDGER_IACUC_INDEX": str(Path(cls.temp_dir.name) / "index.json"),
             "CAGELEDGER_GITEA_TOKEN": "mock-feedback-token",
             "CAGELEDGER_REPOSITORY_URL": cls.repository,
+            "CAGELEDGER_GITEA_API_URL": f"http://127.0.0.1:{cls.mock.server_port}",
             "CAGELEDGER_UPDATE_CHECK_ENABLED": "false",
             "CAGELEDGER_DEV_ASSETS": "1",
             "CAGELEDGER_ADMIN_USERNAME": "admin",
@@ -289,7 +291,7 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
                 "id": 701,
                 "name": "history.png",
                 "size": len(screenshot()),
-                "browser_download_url": self.repository.split("/hugo/")[0] + "/attachments/mock-uuid",
+                "browser_download_url": self.repository_origin + "/attachments/mock-uuid",
             }
         ]
         calls = len(self.fake.calls)

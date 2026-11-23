@@ -7,7 +7,12 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from server_app.config import CAGELEDGER_GITEA_TOKEN, CAGELEDGER_REPOSITORY_URL, FEEDBACK_FILES_PATH
+from server_app.config import (
+    CAGELEDGER_GITEA_API_URL,
+    CAGELEDGER_GITEA_TOKEN,
+    CAGELEDGER_REPOSITORY_URL,
+    FEEDBACK_FILES_PATH,
+)
 from server_app.db import connect_db
 from server_app.domains.feedback import attachment_cache, files, importer, repository, service
 from server_app.domains.feedback.gitea import Client, RemoteError
@@ -115,7 +120,7 @@ def download(handler, attachment_id):
             or not CAGELEDGER_GITEA_TOKEN
         ):
             raise RemoteError("共享仓库配置不可用于该历史附件", permanent=True)
-        client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN)
+        client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN, api_url=CAGELEDGER_GITEA_API_URL)
         # Recheck privacy even if the local projection is between periodic syncs.
         parent_path = f"/issues/comments/{comment['remote_id']}" if comment else f"/issues/{feedback['issue_number']}"
         parent = client.request("GET", parent_path)

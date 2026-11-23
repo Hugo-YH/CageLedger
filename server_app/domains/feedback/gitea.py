@@ -9,10 +9,10 @@ from collections import OrderedDict
 from http.client import HTTPSConnection
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
-from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
+from urllib.request import HTTPSHandler, Request, build_opener
 from uuid import uuid4
 
-from server_app.domains.administration.system import parse_gitea_repository_url
+from server_app.shared.gitea import NoRedirect, parse_gitea_repository_url
 
 
 def safe_etag(value):
@@ -29,11 +29,6 @@ class RemoteError(Exception):
         self.permanent = permanent
         self.uncertain = uncertain
         self.http_status = http_status
-
-
-class NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
 
 
 class ConnectionSetupError(OSError):
@@ -59,22 +54,12 @@ class TrackedHTTPSHandler(HTTPSHandler):
 
 
 class Client:
-    def __init__(self, repository, token):
-        parsed = urlparse(repository)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or parsed.username
-            or parsed.password
-            or parsed.query
-            or parsed.fragment
-        ):
-            raise ValueError("共享仓库地址无效")
-        target = parse_gitea_repository_url(repository)
-        base, owner, name = target["baseUrl"], target["owner"], target["repo"]
-        if not base or not owner or not name:
-            raise ValueError("共享仓库地址无效")
+    def __init__(self, repository, token, *, api_url=""):
+        target = parse_gitea_repository_url(repository, api_url=api_url)
+        owner, name = target["owner"], target["repo"]
         self.repository = repository.rstrip("/").removesuffix(".git")
-        self.base = base.rstrip("/")
+        self.repository_origin = target["baseUrl"]
+        self.base = target["apiBaseUrl"]
         self.api = f"{self.base}/api/v1/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
         self.token = token
         self.auth_blocked = False
@@ -198,12 +183,12 @@ class Client:
         return self.download_asset_version(value)[0]
 
     def download_asset_version(self, value, *, validator="", cached=None):
-        # Attachment metadata is untrusted. Only same-origin /attachments/ UUID URLs are allowed.
+        # Gitea can advertise its public origin even when reached through the configured API origin.
         url = urlparse(value)
-        base = urlparse(self.base)
-        prefix = base.path.rstrip("/") + "/attachments/"
+        origin = f"{url.scheme}://{url.netloc}"
+        prefix = "/attachments/"
         if (
-            (url.scheme, url.netloc) != (base.scheme, base.netloc)
+            origin not in {self.base, self.repository_origin}
             or not url.path.startswith(prefix)
             or url.query
             or url.fragment
@@ -217,7 +202,7 @@ class Client:
             headers = {"Authorization": "token " + self.token}
             if validator:
                 headers["If-None-Match"] = validator
-            request = Request(value, headers=headers)
+            request = Request(self.base + url.path, headers=headers)
             content = self.read_response(request, 10 * 1024 * 1024)
             if len(content) > 10 * 1024 * 1024:
                 raise RemoteError("远端截图超过 10MiB", permanent=True)

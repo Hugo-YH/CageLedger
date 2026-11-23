@@ -9,8 +9,8 @@ import sqlite3
 import sys
 from http import HTTPStatus
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import quote
+from urllib.request import Request, build_opener
 
 from server_app.cache import cache_performance_snapshot
 from server_app.config import (
@@ -21,6 +21,7 @@ from server_app.config import (
     CAGELEDGER_COPYRIGHT,
     CAGELEDGER_DEPARTMENT,
     CAGELEDGER_DEVELOPER,
+    CAGELEDGER_GITEA_API_URL,
     CAGELEDGER_GITEA_TOKEN,
     CAGELEDGER_LICENSE,
     CAGELEDGER_ORGANIZATION,
@@ -37,6 +38,7 @@ from server_app.pdf.cache import pdf_export_cache
 from server_app.pdf.renderer import pdf_renderer_snapshot
 from server_app.runtime_logging import emit_event
 from server_app.shared import now_iso
+from server_app.shared.gitea import NoRedirect, parse_gitea_repository_url
 
 
 def system_update_status():
@@ -299,14 +301,15 @@ def read_git_revision(root):
 
 
 def latest_remote_release():
-    repository = parse_gitea_repository_url(CAGELEDGER_REPOSITORY_URL)
-    url = f"{repository['baseUrl']}/api/v1/repos/{repository['owner']}/{repository['repo']}/releases/latest"
+    repository = parse_gitea_repository_url(CAGELEDGER_REPOSITORY_URL, api_url=CAGELEDGER_GITEA_API_URL)
+    owner, name = quote(repository["owner"], safe=""), quote(repository["repo"], safe="")
+    url = f"{repository['apiBaseUrl']}/api/v1/repos/{owner}/{name}/releases/latest"
     headers = {"Accept": "application/json", "User-Agent": "CageLedger"}
     if CAGELEDGER_GITEA_TOKEN:
         headers["Authorization"] = f"token {CAGELEDGER_GITEA_TOKEN}"
     request = Request(url, headers=headers)
     try:
-        with urlopen(request, timeout=8) as response:
+        with build_opener(NoRedirect()).open(request, timeout=8) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         emit_event("update_check_failed", level=logging.WARNING, error=exc, rate_limit=True, status=exc.code)
@@ -332,26 +335,6 @@ def latest_remote_release():
         "url": payload.get("html_url", ""),
         "message": first_line(payload.get("name", "") or payload.get("body", "")),
         "date": payload.get("published_at") or payload.get("created_at") or "",
-    }
-
-
-def parse_gitea_repository_url(value):
-    parsed = urlparse(str(value or "").strip())
-    path_parts = [part for part in parsed.path.strip("/").split("/") if part]
-    if parsed.scheme not in ("http", "https") or not parsed.netloc or len(path_parts) < 2:
-        raise ValueError("项目仓库地址无效")
-
-    owner = path_parts[-2]
-    repo = path_parts[-1]
-    if repo.endswith(".git"):
-        repo = repo[:-4]
-    if not owner or not repo:
-        raise ValueError("项目仓库地址无效")
-
-    return {
-        "baseUrl": f"{parsed.scheme}://{parsed.netloc}",
-        "owner": owner,
-        "repo": repo,
     }
 
 

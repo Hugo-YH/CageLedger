@@ -5,7 +5,12 @@ import sqlite3
 import threading
 import time
 
-from server_app.config import CAGELEDGER_GITEA_TOKEN, CAGELEDGER_REPOSITORY_URL, FEEDBACK_FILES_PATH
+from server_app.config import (
+    CAGELEDGER_GITEA_API_URL,
+    CAGELEDGER_GITEA_TOKEN,
+    CAGELEDGER_REPOSITORY_URL,
+    FEEDBACK_FILES_PATH,
+)
 from server_app.db import connect_db
 from server_app.runtime_logging import emit_event, log_context
 
@@ -46,6 +51,16 @@ def recover(conn):
     # A crashed POST remains uncertain. Restart only reconciles its stable remote marker.
     if conn.execute("SELECT 1 FROM feedback_tasks WHERE state='working' LIMIT 1").fetchone():
         conn.execute("UPDATE feedback_tasks SET state='pending',due_at=0 WHERE state='working'")
+
+
+def requeue_configuration_errors(conn, repository):
+    # Older workers marked individual tasks as blocked when their global repository settings were invalid.
+    conn.execute(
+        """UPDATE feedback_tasks SET state='pending',due_at=0,error=''
+           WHERE state='blocked' AND error=?
+           AND feedback_id IN (SELECT id FROM feedback WHERE repository=? AND status!='deleted')""",
+        ("共享仓库地址无效，请管理员检查配置", repository),
+    )
 
 
 def run_once(connect, client, root):
@@ -160,28 +175,14 @@ def run_once(connect, client, root):
 def _run():
     stage = "initialize"
     try:
-        client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN)
+        client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN, api_url=CAGELEDGER_GITEA_API_URL)
     except ValueError as exc:
         emit_event("feedback_worker_failed", level=logging.ERROR, error=exc, stage=stage, rate_limit=True)
-        message = "共享仓库地址无效，请管理员检查配置"
-        _set_health("blocked", message)
-        while not _stop.is_set():
-            try:
-                with connect_db() as conn:
-                    conn.execute("UPDATE feedback_tasks SET state='blocked',error=? WHERE state!='done'", (message,))
-                break
-            except Exception as failure:
-                emit_event(
-                    "feedback_worker_failed",
-                    level=logging.WARNING,
-                    error=failure,
-                    stage="block_invalid_repository",
-                    rate_limit=True,
-                )
-                _stop.wait(5)
+        _set_health("blocked", str(exc))
         return
     last_poll = 0
     needs_recovery = True
+    restore_config_blocked_tasks = True
     failed_stage = None
     while not _stop.is_set():
         try:
@@ -190,7 +191,10 @@ def _run():
                 stage = "recover"
                 with connect_db() as conn:
                     recover(conn)
+                    if restore_config_blocked_tasks:
+                        requeue_configuration_errors(conn, client.repository)
                 needs_recovery = False
+                restore_config_blocked_tasks = False
             if _resume.is_set():
                 client.auth_blocked = False
                 _resume.clear()

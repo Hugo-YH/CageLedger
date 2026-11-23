@@ -262,8 +262,8 @@ class FeedbackImageCacheTests(FeedbackFixture, unittest.TestCase):
             response.headers = {}
             return response
 
-        def client(*args):
-            value = Client(*args)
+        def client(*args, **kwargs):
+            value = Client(*args, **kwargs)
             value.opener.open = opened
             return value
 
@@ -277,6 +277,7 @@ class FeedbackImageCacheTests(FeedbackFixture, unittest.TestCase):
             patch.multiple(
                 web,
                 CAGELEDGER_REPOSITORY_URL=self.client.repository,
+                CAGELEDGER_GITEA_API_URL="",
                 CAGELEDGER_GITEA_TOKEN="mock-token",
                 FEEDBACK_FILES_PATH=self.root,
             ),
