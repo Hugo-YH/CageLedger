@@ -237,7 +237,7 @@ Gitea 条件读取缓存仅属于单个串行 Client 的仓库／凭据实例，
 
 远端截图每次仍读取父工单／评论和附件元数据，核对当前内部标记及下载地址；本地缓存以仓库、反馈、父资源、远端附件 ID 和 URL 绑定，并完整校验文件 SHA、大小和类型。可靠 ETag 允许条件下载；缺少有效验证器或本地凭据时重新下载。相同完整字节可复用已验证结果，省去重复解码与落盘；损坏／缺失缓存不会发送旧验证器。返回前继续复核可访问性，附件仍为 `no-store`。新增 `feedback_attachments.cache_sha256/cache_etag/cache_identity` 仅保存非凭据缓存证据，旧库空值自动回填，备份恢复时随数据库和既有附件文件一起保留；校验不匹配会退化为重新获取。
 
-历史工单导入：`GET /api/feedback/import/preview?state=all&page=1` 返回 `{repository,items,page,hasMore}`，每页 20 条，可选 `all/open/closed`。`POST /api/feedback/import` 接受 `{requestId,repository,numbers}`，每次 1 至 10 个唯一正整数编号，返回 `{items:[{number,outcome,feedbackId?,message}]}`；结果为 `imported/skipped/failed`。仓库必须与当前预览一致；请求 ID 绑定操作人和导入范围，重放同请求复用逐项结果，失败项通过新请求重试。并发导入按仓库身份和工单编号核对，逻辑删除的关联不重新导入。PR、内部正文和带系统建单标识的工单跳过。
+历史工单导入：`GET /api/feedback/import/preview?state=all&page=1` 返回 `{repository,repositoryUrl,items,page,hasMore}`，每页 20 条，可选 `all/open/closed`。`repository` 是用于提交和去重的仓库标识，`repositoryUrl` 是当前访问地址。`POST /api/feedback/import` 接受 `{requestId,repository,numbers}`，每次 1 至 10 个唯一正整数编号，返回 `{items:[{number,outcome,feedbackId?,message}]}`；结果为 `imported/skipped/failed`。仓库必须与当前预览一致；请求 ID 绑定操作人和导入范围，重放同请求复用逐项结果，失败项通过新请求重试。并发导入按仓库身份和工单编号核对，逻辑删除的关联不重新导入。PR、内部正文和带系统建单标识的工单跳过。
 
 导入仅远端读取，网络调用不占用写事务；每个工单独立落库及审计，部分失败不丢失成功记录，也不创建新工单。`source=gitea` 和 `importMetadata` 区分原提出人、远端登记账号及导入操作人；原正文、原创建时间保留快照，进展和公开评论沿用现有同步。原工单截图关联到无评论的远端附件，鉴权下载时重新验证工单及附件权限、内部标记和实际图片内容。
 

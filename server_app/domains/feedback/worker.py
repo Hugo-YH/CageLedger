@@ -6,6 +6,7 @@ import threading
 import time
 
 from server_app.config import (
+    CAGELEDGER_FEEDBACK_REPOSITORY_ID,
     CAGELEDGER_GITEA_API_URL,
     CAGELEDGER_GITEA_TOKEN,
     CAGELEDGER_REPOSITORY_URL,
@@ -25,6 +26,7 @@ _resume = threading.Event()
 _health_lock = threading.Lock()
 _health_state = "recovering"
 _health_error = ""
+_repository_changed = "共享仓库地址已变更，历史反馈暂停同步；不会向新仓库重复建单"
 
 
 def _set_health(state, error=""):
@@ -54,12 +56,12 @@ def recover(conn):
 
 
 def requeue_configuration_errors(conn, repository):
-    # Older workers marked individual tasks as blocked when their global repository settings were invalid.
+    # Requeue work only after its original repository is configured again.
     conn.execute(
         """UPDATE feedback_tasks SET state='pending',due_at=0,error=''
-           WHERE state='blocked' AND error=?
+           WHERE state='blocked' AND error IN (?,?)
            AND feedback_id IN (SELECT id FROM feedback WHERE repository=? AND status!='deleted')""",
-        ("共享仓库地址无效，请管理员检查配置", repository),
+        ("共享仓库地址无效，请管理员检查配置", _repository_changed, repository),
     )
 
 
@@ -85,7 +87,7 @@ def run_once(connect, client, root):
         if feedback["repository"] != client.repository:
             conn.execute(
                 "UPDATE feedback_tasks SET state='blocked',error=? WHERE id=?",
-                ("共享仓库地址已变更，历史反馈暂停同步；不会向新仓库重复建单", task["id"]),
+                (_repository_changed, task["id"]),
             )
             return True
         entity = None
@@ -175,7 +177,12 @@ def run_once(connect, client, root):
 def _run():
     stage = "initialize"
     try:
-        client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN, api_url=CAGELEDGER_GITEA_API_URL)
+        client = Client(
+            CAGELEDGER_REPOSITORY_URL,
+            CAGELEDGER_GITEA_TOKEN,
+            api_url=CAGELEDGER_GITEA_API_URL,
+            repository_id=CAGELEDGER_FEEDBACK_REPOSITORY_ID,
+        )
     except ValueError as exc:
         emit_event("feedback_worker_failed", level=logging.ERROR, error=exc, stage=stage, rate_limit=True)
         _set_health("blocked", str(exc))

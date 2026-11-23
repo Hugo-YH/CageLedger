@@ -81,6 +81,7 @@ export interface FeedbackImportCandidate {
 
 export interface FeedbackImportPreview {
   repository: string;
+  repositoryUrl?: string;
   items: FeedbackImportCandidate[];
   page: number;
   hasMore: boolean;

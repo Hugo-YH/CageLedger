@@ -2351,7 +2351,7 @@
           "path": "/api/feedback/import/preview",
           "purpose": "历史工单导入预览",
           "request": "state,page",
-          "response": "{repository,items,page,hasMore}",
+          "response": "{repository,repositoryUrl,items,page,hasMore}",
           "protection": "remote_read",
           "permission": "admin"
         },

@@ -38,6 +38,7 @@ vi.mock("../../api/feedback", () => ({
     refetch: api.refetch,
     data: {
       repository: "https://example.test/owner/repo",
+      repositoryUrl: "http://100.64.0.2:3333/owner/repo",
       hasMore: false,
       items: [
         {
@@ -87,11 +88,13 @@ it("keeps nonimportable rows disabled and blocks duplicate submits", async () =>
       }),
   );
   open();
+  expect(screen.getByText("目标仓库：http://100.64.0.2:3333/owner/repo")).toBeVisible();
   expect(screen.getByRole("checkbox", { name: "选择工单 #2" })).toBeDisabled();
   const submit = screen.getByRole("button", { name: "导入所选（1）" });
   fireEvent.click(submit);
   fireEvent.click(submit);
   await waitFor(() => expect(api.submit).toHaveBeenCalledTimes(1));
+  expect(api.submit.mock.calls[0][0].repository).toBe("https://example.test/owner/repo");
   expect(screen.getByRole("button", { name: "关闭导入窗口" })).toBeDisabled();
   resolve?.({ items: [{ number: 1, outcome: "imported", message: "已导入" }] });
   await waitFor(() => expect(screen.getByLabelText("导入结果")).toHaveTextContent("导入 1 条"));

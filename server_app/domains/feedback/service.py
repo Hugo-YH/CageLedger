@@ -5,12 +5,13 @@ import json
 import re
 from uuid import uuid4
 
-from server_app.config import CAGELEDGER_GITEA_TOKEN, CAGELEDGER_REPOSITORY_URL
+from server_app.config import CAGELEDGER_FEEDBACK_REPOSITORY_ID, CAGELEDGER_GITEA_TOKEN, CAGELEDGER_REPOSITORY_URL
 from server_app.domains.administration.audit import audit_event, write_audit_events
 from server_app.shared import now_iso
 
 from . import repository as repo
 from .diagnostics import validate as validate_diagnostics
+from .gitea import repository_identity, repository_settings
 
 KINDS = {"bug", "suggestion", "question"}
 STATUSES = {"pending", "in_progress", "verification", "resolved", "closed", "conflict", "deleted"}
@@ -56,6 +57,20 @@ def audit(conn, user, action, feedback_id, before=None, after=None):
     )
 
 
+def issue_url(row):
+    if (
+        CAGELEDGER_FEEDBACK_REPOSITORY_ID
+        and row["issue_number"]
+        and row["repository"] == repository_identity(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_FEEDBACK_REPOSITORY_ID)
+    ):
+        try:
+            repository_settings(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_FEEDBACK_REPOSITORY_ID)
+        except ValueError:
+            return row["issue_url"]
+        return f"{repository_identity(CAGELEDGER_REPOSITORY_URL)}/issues/{row['issue_number']}"
+    return row["issue_url"]
+
+
 def present(conn, row, user, metadata=None, *, summary=False):
     require_active(row)
     if metadata is None:
@@ -96,7 +111,7 @@ def present(conn, row, user, metadata=None, *, summary=False):
         "fixVersion": row["fix_version"],
         "lastSyncedAt": row["last_synced_at"],
         "issueNumber": row["issue_number"],
-        "issueUrl": row["issue_url"] if user.get("role") == "admin" else "",
+        "issueUrl": issue_url(row) if user.get("role") == "admin" else "",
         "syncError": error if user.get("role") == "admin" else "",
     }
 
@@ -212,7 +227,7 @@ def create(conn, user, body):
             repo.encode(environment),
             at,
             at,
-            CAGELEDGER_REPOSITORY_URL.rstrip("/").removesuffix(".git"),
+            repository_identity(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_FEEDBACK_REPOSITORY_ID),
         ),
     )
     repo.enqueue(conn, feedback_id, "create")

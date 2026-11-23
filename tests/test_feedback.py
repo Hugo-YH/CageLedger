@@ -493,7 +493,7 @@ class FeedbackTests(FeedbackFixture, unittest.TestCase):
             conn.execute("UPDATE feedback SET repository=? WHERE id=?", (REPOSITORY + "-other", other["id"]))
             conn.execute(
                 "UPDATE feedback_tasks SET state='blocked',uncertain=1,error=?",
-                ("共享仓库地址无效，请管理员检查配置",),
+                ("共享仓库地址已变更，历史反馈暂停同步；不会向新仓库重复建单",),
             )
         stop = threading.Event()
         with (

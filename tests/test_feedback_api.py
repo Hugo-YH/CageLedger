@@ -96,6 +96,7 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
         cls.port = available_port()
         cls.repository_origin = "https://gitea.example.invalid"
         cls.repository = f"{cls.repository_origin}/hugo/cageledger"
+        cls.repository_url = f"http://127.0.0.1:{cls.mock.server_port}/hugo/cageledger"
         env = {
             **os.environ,
             "CAGELEDGER_HOST": "127.0.0.1",
@@ -104,8 +105,9 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
             "CAGELEDGER_DATA_ROOT": cls.temp_dir.name,
             "CAGELEDGER_IACUC_INDEX": str(Path(cls.temp_dir.name) / "index.json"),
             "CAGELEDGER_GITEA_TOKEN": "mock-feedback-token",
-            "CAGELEDGER_REPOSITORY_URL": cls.repository,
-            "CAGELEDGER_GITEA_API_URL": f"http://127.0.0.1:{cls.mock.server_port}",
+            "CAGELEDGER_REPOSITORY_URL": cls.repository_url,
+            "CAGELEDGER_FEEDBACK_REPOSITORY_ID": cls.repository,
+            "CAGELEDGER_GITEA_API_URL": "",
             "CAGELEDGER_UPDATE_CHECK_ENABLED": "false",
             "CAGELEDGER_DEV_ASSETS": "1",
             "CAGELEDGER_ADMIN_USERNAME": "admin",
@@ -229,10 +231,15 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
 
         with closing(sqlite3.connect(Path(self.temp_dir.name) / "feedback.sqlite")) as conn, conn:
             conn.row_factory = sqlite3.Row
+            stored = repository.get(conn, item["id"])
+            self.assertEqual(stored["repository"], self.repository)
+            self.assertEqual(stored["issue_url"], self.repository + "/issues/1")
             repository.enqueue(conn, item["id"], "refresh")
         final = self.poll(item["id"], lambda value: value["item"]["status"] == "resolved")
         self.assertEqual(final["item"]["fixVersion"], "1.6.0")
-        self.assertEqual(final["item"]["issueUrl"], self.repository + "/issues/1")
+        issue_url = self.repository_url + "/issues/1"
+        self.assertEqual(final["item"]["issueUrl"], issue_url)
+        self.assertEqual(self.request("/api/feedback?view=summary")["items"][0]["issueUrl"], issue_url)
         integration = self.request("/api/feedback/integration")
         self.assertTrue(integration["configured"])
         self.assertEqual(integration["workerState"], "running")
@@ -297,6 +304,8 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
         calls = len(self.fake.calls)
         preview = self.request("/api/feedback/import/preview?state=closed&page=1")
         self.assertEqual(preview["items"][0]["reporter"], "张三")
+        self.assertEqual(preview["repository"], self.repository)
+        self.assertEqual(preview["repositoryUrl"], self.repository_url)
         body = {"requestId": str(uuid4()), "repository": self.repository, "numbers": [700]}
         result = self.request("/api/feedback/import", "POST", body)
         self.assertEqual(result["items"][0]["outcome"], "imported")
@@ -305,6 +314,9 @@ class FeedbackApiIntegrationTests(unittest.TestCase):
         detail = self.request("/api/feedback/" + feedback_id)
         attachment = detail["attachments"][0]
         self.assertEqual(detail["item"]["status"], "resolved")
+        self.assertEqual(detail["item"]["issueUrl"], self.repository_url + "/issues/700")
+        reloaded = self.request("/api/feedback/import/preview?state=closed&page=1")
+        self.assertFalse(reloaded["items"][0]["importable"])
         with self.opener.open(self.base_url + attachment["url"]) as response:
             self.assertEqual(response.read(), screenshot())
             self.assertEqual(response.headers["Content-Type"], "image/png")

@@ -149,7 +149,9 @@ export function FeedbackImportDrawer({ onClose }: { onClose: () => void }) {
           title="关联原工单，后续自动同步进展"
           description="每次最多导入 10 条；已关联或已删除的工单不会重复导入。提出人优先取历史记录或标题中的 @姓名；未注明时保留 Gitea 登记账号。仅导入公开评论及截图。"
         />
-        <Typography.Text type="secondary">目标仓库：{repository || "正在读取…"}</Typography.Text>
+        <Typography.Text type="secondary">
+          目标仓库：{preview.data?.repositoryUrl || repository || "正在读取…"}
+        </Typography.Text>
         <CommandBar
           ariaLabel="历史工单导入范围"
           context={

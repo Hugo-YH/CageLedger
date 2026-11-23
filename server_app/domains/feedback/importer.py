@@ -22,7 +22,12 @@ def configured(user):
     service.admin(user)
     if not service.CAGELEDGER_GITEA_TOKEN:
         raise ValueError("请先配置检查更新共用的 Gitea Token")
-    return Client(service.CAGELEDGER_REPOSITORY_URL, service.CAGELEDGER_GITEA_TOKEN, api_url=CAGELEDGER_GITEA_API_URL)
+    return Client(
+        service.CAGELEDGER_REPOSITORY_URL,
+        service.CAGELEDGER_GITEA_TOKEN,
+        api_url=CAGELEDGER_GITEA_API_URL,
+        repository_id=service.CAGELEDGER_FEEDBACK_REPOSITORY_ID,
+    )
 
 
 def field(body, name):
@@ -110,7 +115,13 @@ def preview(conn, user, params):
         if existing := repo.linked_issue(conn, client.repository, issue["number"]):
             reason = "已从系统删除，不能重新导入" if existing["status"] == "deleted" else "已关联到系统反馈"
         items.append({**item, "importable": not reason, "reason": reason})
-    return {"repository": client.repository, "items": items, "page": page, "hasMore": len(issues) == 20}
+    return {
+        "repository": client.repository,
+        "repositoryUrl": client.repository_url,
+        "items": items,
+        "page": page,
+        "hasMore": len(issues) == 20,
+    }
 
 
 def timestamp(value):

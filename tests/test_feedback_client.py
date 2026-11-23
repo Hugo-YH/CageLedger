@@ -245,6 +245,15 @@ class ClientTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CAGELEDGER_GITEA_API_URL"):
             Client(repository, "mock-token", api_url=api_origin + "/hugo/other")
 
+    def test_repository_identity_cannot_point_to_different_owner_or_name(self):
+        repository = "http://100.64.0.2:3333/hugo/cageledger"
+        for previous in ("https://gitea.example.invalid/hugo/other", "https://gitea.example.invalid/other/cageledger"):
+            with (
+                self.subTest(previous=previous),
+                self.assertRaisesRegex(ValueError, "CAGELEDGER_FEEDBACK_REPOSITORY_ID"),
+            ):
+                Client(repository, "mock-token", repository_id=previous)
+
     def test_untrusted_attachment_urls_are_rejected_before_network(self):
         client = Client(REPOSITORY, "mock-token")
         for url in (

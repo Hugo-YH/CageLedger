@@ -37,6 +37,7 @@ def submission(**values):
 class FakeGitea:
     def __init__(self):
         self.repository = REPOSITORY
+        self.repository_url = REPOSITORY
         self.auth_blocked = False
         self.issues = []
         self.comments = []

@@ -29,8 +29,8 @@ def _http_url(value, error):
     raise ValueError(error)
 
 
-def parse_gitea_repository_url(value, *, api_url=""):
-    repository_error = "共享仓库地址无效，请检查 CAGELEDGER_REPOSITORY_URL 是否包含所有者和仓库名"
+def parse_gitea_repository_url(value, *, api_url="", config_name="CAGELEDGER_REPOSITORY_URL"):
+    repository_error = f"共享仓库地址无效，请检查 {config_name} 是否包含所有者和仓库名"
     parsed = _http_url(value, repository_error)
     path_parts = [part for part in parsed.path.strip("/").split("/") if part]
     if len(path_parts) < 2 or not (repo := path_parts[-1].removesuffix(".git")):

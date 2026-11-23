@@ -15,6 +15,20 @@ from uuid import uuid4
 from server_app.shared.gitea import NoRedirect, parse_gitea_repository_url
 
 
+def repository_identity(repository, repository_id=""):
+    return (repository_id or repository).rstrip("/").removesuffix(".git")
+
+
+def repository_settings(repository, repository_id, *, api_url=""):
+    target = parse_gitea_repository_url(repository, api_url=api_url)
+    identity = target
+    if repository_id:
+        identity = parse_gitea_repository_url(repository_id, config_name="CAGELEDGER_FEEDBACK_REPOSITORY_ID")
+        if (identity["owner"], identity["repo"]) != (target["owner"], target["repo"]):
+            raise ValueError("CAGELEDGER_FEEDBACK_REPOSITORY_ID 的所有者和仓库名须与当前仓库一致")
+    return target, identity["baseUrl"]
+
+
 def safe_etag(value):
     return (
         value
@@ -54,12 +68,13 @@ class TrackedHTTPSHandler(HTTPSHandler):
 
 
 class Client:
-    def __init__(self, repository, token, *, api_url=""):
-        target = parse_gitea_repository_url(repository, api_url=api_url)
+    def __init__(self, repository, token, *, api_url="", repository_id=""):
+        target, identity_origin = repository_settings(repository, repository_id, api_url=api_url)
         owner, name = target["owner"], target["repo"]
-        self.repository = repository.rstrip("/").removesuffix(".git")
-        self.repository_origin = target["baseUrl"]
+        self.repository = repository_identity(repository, repository_id)
+        self.repository_url = repository_identity(repository)
         self.base = target["apiBaseUrl"]
+        self.attachment_origins = {self.base, target["baseUrl"], identity_origin}
         self.api = f"{self.base}/api/v1/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
         self.token = token
         self.auth_blocked = False
@@ -187,12 +202,7 @@ class Client:
         url = urlparse(value)
         origin = f"{url.scheme}://{url.netloc}"
         prefix = "/attachments/"
-        if (
-            origin not in {self.base, self.repository_origin}
-            or not url.path.startswith(prefix)
-            or url.query
-            or url.fragment
-        ):
+        if origin not in self.attachment_origins or not url.path.startswith(prefix) or url.query or url.fragment:
             raise RemoteError("远端附件地址不受信任", permanent=True)
         suffix = url.path.removeprefix(prefix)
         if not suffix or "/" in suffix or ".." in suffix:

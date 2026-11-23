@@ -299,7 +299,7 @@ def list_page(conn, user, params, configured):
     projection = "f.*"
     if params.get("view") == "summary":
         projection = """f.id,f.number,f.title,f.kind,f.module,f.status,f.author,f.created_at,f.updated_at,
-            f.version,f.source,f.assignees,f.fix_version,f.last_synced_at,f.issue_number,f.issue_url"""
+            f.version,f.source,f.assignees,f.fix_version,f.last_synced_at,f.issue_number,f.issue_url,f.repository"""
     total = conn.execute("SELECT COUNT(*) FROM feedback f" + clause, args).fetchone()[0]
     rows = conn.execute(
         f"SELECT {projection} FROM feedback f"

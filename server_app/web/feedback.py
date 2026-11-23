@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from server_app.config import (
+    CAGELEDGER_FEEDBACK_REPOSITORY_ID,
     CAGELEDGER_GITEA_API_URL,
     CAGELEDGER_GITEA_TOKEN,
     CAGELEDGER_REPOSITORY_URL,
@@ -15,7 +16,7 @@ from server_app.config import (
 )
 from server_app.db import connect_db
 from server_app.domains.feedback import attachment_cache, files, importer, repository, service
-from server_app.domains.feedback.gitea import Client, RemoteError
+from server_app.domains.feedback.gitea import Client, RemoteError, repository_identity
 from server_app.runtime_logging import emit_event
 from server_app.web.multipart import parse_multipart_upload
 from server_app.web.request_body import read_body
@@ -116,11 +117,16 @@ def download(handler, attachment_id):
         )
     if item["source"] == "gitea":
         if (
-            feedback["repository"] != CAGELEDGER_REPOSITORY_URL.rstrip("/").removesuffix(".git")
+            feedback["repository"] != repository_identity(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_FEEDBACK_REPOSITORY_ID)
             or not CAGELEDGER_GITEA_TOKEN
         ):
             raise RemoteError("共享仓库配置不可用于该历史附件", permanent=True)
-        client = Client(CAGELEDGER_REPOSITORY_URL, CAGELEDGER_GITEA_TOKEN, api_url=CAGELEDGER_GITEA_API_URL)
+        client = Client(
+            CAGELEDGER_REPOSITORY_URL,
+            CAGELEDGER_GITEA_TOKEN,
+            api_url=CAGELEDGER_GITEA_API_URL,
+            repository_id=CAGELEDGER_FEEDBACK_REPOSITORY_ID,
+        )
         # Recheck privacy even if the local projection is between periodic syncs.
         parent_path = f"/issues/comments/{comment['remote_id']}" if comment else f"/issues/{feedback['issue_number']}"
         parent = client.request("GET", parent_path)
