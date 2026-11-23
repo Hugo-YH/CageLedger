@@ -488,8 +488,9 @@ for (const viewport of [
       .getByLabel("标题", { exact: true })
       .evaluate((input) => {
         const style = getComputedStyle(input);
+        const control = input.closest(".ant-input-affix-wrapper") ?? input;
         return {
-          height: input.getBoundingClientRect().height,
+          height: control.getBoundingClientRect().height,
           font: style.fontSize,
           color: style.color,
           lineHeight: style.lineHeight,

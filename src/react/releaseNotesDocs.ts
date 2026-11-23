@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.7",
+    build: "288",
+    releasedAt: "2026-11-23",
+    title: "Tailscale 与反馈同步",
+    items: [
+      "Gitea 仓库可通过 Tailscale 访问。为同一仓库保留原反馈仓库标识后，已有工单继续同步，工单链接使用新的访问地址。",
+      "历史工单导入继续按仓库标识去重，原工单截图可经配置的 Gitea API 地址下载。修正配置后，暂停的同仓库任务会在服务重启时恢复。",
+      "开发环境支持通过 Tailscale Serve 访问应用与文档，默认监听本机回环地址。",
+    ],
+  },
+  {
     version: "1.32.6",
     build: "287",
     releasedAt: "2026-11-23",
