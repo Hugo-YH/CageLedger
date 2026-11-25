@@ -261,7 +261,7 @@ it("preserves strain totals/log values, room color order and selection while res
     value: 3,
   });
   view.rerender(content(18));
-  await waitFor(() => expect((latest("rose").label as { fontSize: number }).fontSize).toBe(18));
+  await waitFor(() => expect(latest("rose").theme).toMatchObject({ label: { fontSize: 18 } }));
   expect(latest("rose").data).toBe(data);
   expect(state.mounts).toHaveBeenCalledTimes(3);
 });

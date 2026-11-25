@@ -2,6 +2,12 @@ import type { DashboardOverviewResponse } from "../../src/react/api/dashboardOve
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { installDashboardPlotProbe, readDashboardPlotCalls } from "./dashboardPlotProbe";
+import { contrastFromLayers } from "./uiAudit";
+
+type DashboardText = { color: string; opacity: string };
+type DashboardTextWindow = Window & {
+  readDashboardText?: (canvas: HTMLCanvasElement, mode: string) => Record<string, DashboardText>;
+};
 
 function chartRuntimeWasRequested() {
   return performance
@@ -92,6 +98,85 @@ test("dashboard chart cards do not introduce horizontal overflow at supported vi
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
       .toBe(true);
   }
+});
+
+test("dashboard plots draw readable text after live theme changes", async ({ page }, info) => {
+  await page.addInitScript(() => {
+    const drawings = new WeakMap<HTMLCanvasElement, Map<string, DashboardText>>();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Forwarded with the original canvas context via apply.
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    const swatch = document.createElement("span").style;
+    CanvasRenderingContext2D.prototype.fillText = function (...args) {
+      if (typeof this.fillStyle === "string" && this.canvas.closest(".ant-dashboard-section")) {
+        let drawing = drawings.get(this.canvas);
+        if (!drawing) {
+          drawing = new Map();
+          drawings.set(this.canvas, drawing);
+        }
+        swatch.color = this.fillStyle;
+        drawing.set(`${document.documentElement.dataset.theme}:${args[0]}`, {
+          color: swatch.color,
+          opacity: String(this.globalAlpha),
+        });
+      }
+      fillText.apply(this, args);
+    };
+    (window as DashboardTextWindow).readDashboardText = (canvas, mode) =>
+      Object.fromEntries(
+        [...(drawings.get(canvas) ?? [])]
+          .filter(([key]) => key.startsWith(`${mode}:`))
+          .map(([key, style]) => [key.slice(mode.length + 1), style]),
+      );
+  });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.setViewportSize({ width: 1440, height: 1400 });
+  const data = overview();
+  data.intake.trend.push({ day: 12, batches: 1, animals: 3 });
+  data.intake.strains = [
+    { strain: "合成品系甲", animals: 4 },
+    { strain: "合成品系乙", animals: 1 },
+  ];
+  await page.route("**/api/dashboard/overview*", (route) => route.fulfill({ json: data }));
+  await login(page);
+
+  const plots = [
+    { selector: ".ant-dashboard-pie canvas", labels: ["80%", "20%", "合成品系甲", "合成品系乙"] },
+    { selector: ".ant-dashboard-trend canvas", labels: ["12"] },
+    { selector: ".ant-dashboard-room-area canvas", labels: ["合成房间"] },
+  ];
+  await page.locator(".ant-dashboard-room-area").scrollIntoViewIfNeeded();
+  for (const mode of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: mode });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
+    for (const { selector, labels } of plots) {
+      const canvas = page.locator(selector);
+      await expect(canvas).toBeVisible();
+      await expect
+        .poll(
+          async () => {
+            const { drawing, background } = await canvas.evaluate(
+              (element: HTMLCanvasElement, currentMode) => ({
+                drawing: (window as DashboardTextWindow).readDashboardText?.(element, currentMode) ?? {},
+                background: getComputedStyle(element.closest(".ant-dashboard-section")!).backgroundColor,
+              }),
+              mode,
+            );
+            return Math.min(
+              ...labels.map((label) => (drawing[label] ? contrastFromLayers([{ ...drawing[label], background }]) : 0)),
+            );
+          },
+          { message: `${mode} chart text contrast for ${labels.join(", ")}` },
+        )
+        .toBeGreaterThanOrEqual(4.5);
+    }
+  }
+  await page
+    .locator(".ant-dashboard-section")
+    .filter({ hasText: "品系分布" })
+    .screenshot({
+      path: info.outputPath("dark-strain-distribution.png"),
+      animations: "disabled",
+    });
 });
 
 test("dashboard 304 refresh does not update or render stable real G2 plots", async ({ page }, info) => {

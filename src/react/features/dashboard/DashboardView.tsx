@@ -82,6 +82,28 @@ const ROOM_PALETTE = ["#3872ff", "#52c41a", "#faad14", "#eb2f96", "#722ed1", "#1
 const STRAIN_COLORS = ["#5B8FF9", "#5AD8A6", "#5D7092", "#F6BD16", "#E8684A", "#6DC8EC", "#9270CA", "#FF9D4D"];
 
 type RoomAreaDatum = { day: string; cages: number; roomName?: string };
+type DashboardChartTheme = ReturnType<typeof createDashboardChartTheme>;
+
+function createDashboardChartTheme(colorText: string, colorTextSecondary: string, fontSizeSM: number) {
+  return {
+    axis: {
+      labelFill: colorTextSecondary,
+      labelOpacity: 1,
+      labelFontSize: fontSizeSM,
+      tickStroke: colorTextSecondary,
+      tickOpacity: 1,
+      gridStroke: colorText,
+    },
+    label: {
+      fill: colorText,
+      fillOpacity: 1,
+      fontSize: fontSizeSM,
+      connectorStroke: colorTextSecondary,
+      connectorStrokeOpacity: 1,
+    },
+    legendCategory: { itemLabelFill: colorText, itemLabelFillOpacity: 1, itemLabelFontSize: fontSizeSM },
+  };
+}
 
 function hexToRgba(hex: string, alpha: number) {
   const value = Number.parseInt(hex.slice(1), 16);
@@ -136,6 +158,11 @@ function DashboardContent({
   retry: () => void;
 }) {
   const { token } = theme.useToken();
+  const { colorText, colorTextSecondary, fontSizeSM } = token;
+  const chartTheme = useMemo(
+    () => createDashboardChartTheme(colorText, colorTextSecondary, fontSizeSM),
+    [colorText, colorTextSecondary, fontSizeSM],
+  );
   const visible = useViewVisibility();
   const { availableMonths, intake, rooms, pi } = data;
   const currentMonth = data.month === "all" ? "历史合计" : data.month;
@@ -301,17 +328,18 @@ function DashboardContent({
                 unit={intake.trendUnit}
                 batches={intake.batches}
                 animals={intake.animals}
+                chartTheme={chartTheme}
               />
             </Card>
           </Col>
           <Col lg={10} xs={24}>
             <Card className="ant-dashboard-section" size="small" title="品系分布">
-              <StrainDistribution items={intake.strains} />
+              <StrainDistribution items={intake.strains} chartTheme={chartTheme} />
             </Card>
           </Col>
         </Row>
 
-        <RoomOverviewCard rooms={rooms} />
+        <RoomOverviewCard rooms={rooms} chartTheme={chartTheme} />
 
         <Card className="ant-dashboard-section" size="small" title="饲养费统计">
           <PiFeeSummary key={data.month} items={pi} />
@@ -326,11 +354,13 @@ const IntakeTrend = memo(function IntakeTrend({
   unit,
   batches,
   animals,
+  chartTheme,
 }: {
   batches: number;
   animals: number;
   items: Array<{ month?: string; day?: number; batches: number; animals: number }>;
   unit: "day" | "month";
+  chartTheme: DashboardChartTheme;
 }) {
   const data = useMemo(
     () =>
@@ -344,6 +374,7 @@ const IntakeTrend = memo(function IntakeTrend({
   const config = useMemo<AreaConfig>(
     () => ({
       data,
+      theme: chartTheme,
       xField: "label",
       yField: "animals",
       height: 180,
@@ -363,7 +394,7 @@ const IntakeTrend = memo(function IntakeTrend({
       scale: { y: { nice: true } },
       legend: false,
     }),
-    [data],
+    [data, chartTheme],
   );
   return (
     <div className="ant-dashboard-trend">
@@ -391,10 +422,11 @@ const IntakeTrend = memo(function IntakeTrend({
 
 const StrainDistribution = memo(function StrainDistribution({
   items,
+  chartTheme,
 }: {
   items: Array<{ strain: string; animals: number }>;
+  chartTheme: DashboardChartTheme;
 }) {
-  const { token } = theme.useToken();
   const { total, data } = useMemo(() => {
     const total = items.reduce((sum, item) => sum + item.animals, 0);
     const sorted = [...items].sort((left, right) => right.animals - left.animals);
@@ -428,6 +460,7 @@ const StrainDistribution = memo(function StrainDistribution({
     };
     return {
       data,
+      theme: chartTheme,
       xField: "type",
       yField: "value",
       colorField: "type",
@@ -446,7 +479,6 @@ const StrainDistribution = memo(function StrainDistribution({
       label: {
         text: (item: { percent: number }) => `${item.percent.toFixed(0)}%`,
         position: "outside",
-        fontSize: token.fontSizeSM,
       },
       legend: {
         color: {
@@ -465,7 +497,7 @@ const StrainDistribution = memo(function StrainDistribution({
         ],
       },
     };
-  }, [data, token.fontSizeSM]);
+  }, [data, chartTheme]);
   return (
     <div className="ant-dashboard-pie">
       <DeferredChart height={280}>
@@ -480,7 +512,13 @@ const StrainDistribution = memo(function StrainDistribution({
   );
 });
 
-const RoomOverviewCard = memo(function RoomOverviewCard({ rooms }: { rooms: RoomOverview[] }) {
+const RoomOverviewCard = memo(function RoomOverviewCard({
+  rooms,
+  chartTheme,
+}: {
+  rooms: RoomOverview[];
+  chartTheme: DashboardChartTheme;
+}) {
   const [selected, setSelected] = useState("__all__");
   const options = useMemo(
     () => [
@@ -516,6 +554,7 @@ const RoomOverviewCard = memo(function RoomOverviewCard({ rooms }: { rooms: Room
   const config = useMemo<AreaConfig>(
     () => ({
       data: chartData,
+      theme: chartTheme,
       xField: "day",
       yField: "cages",
       colorField: selected === "__all__" ? "roomName" : undefined,
@@ -547,7 +586,7 @@ const RoomOverviewCard = memo(function RoomOverviewCard({ rooms }: { rooms: Room
       },
       legend: { color: { position: "bottom", layout: { justifyContent: "center" } } },
     }),
-    [chartData, palette, roomColors, selected, selectedColor],
+    [chartData, chartTheme, palette, roomColors, selected, selectedColor],
   );
   return (
     <Card className="ant-dashboard-section" size="small" title="饲养间笼位统计">
