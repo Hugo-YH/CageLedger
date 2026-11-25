@@ -71,6 +71,7 @@ test("individual people filters and editing preserve raw intake names", async ({
     await expect(rows).toHaveCount(2);
     await expect(rows.filter({ hasText: batchNos[1] })).toHaveCount(0);
     filter = await openFilter(page, "项目负责人");
+    await filter.getByRole("checkbox", { name: "多选", exact: true }).check();
     await filter.getByRole("checkbox", { name: /^李壮\s*\d+$/ }).click();
     await finishFilter(filter);
     await expect(rows).toHaveCount(3);

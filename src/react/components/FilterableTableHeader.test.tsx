@@ -61,7 +61,7 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     rerender(<FilterableColumnTitle {...props} />);
     expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).toBeChecked();
     fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
-    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["alpha", "beta"]);
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["beta"]);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     const done = within(panel).getByRole("button", { name: "完成" });
     fireEvent.click(done);
@@ -86,7 +86,7 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "筛选购买单位" }));
     const panel = await screen.findByRole("group", { name: "筛选购买单位选项" });
     fireEvent.change(within(panel).getByRole("searchbox"), { target: { value: "(分部)" } });
-    expect(within(panel).getAllByRole("checkbox")).toHaveLength(1);
+    expect(within(panel).getAllByRole("checkbox", { name: /供应商/ })).toHaveLength(1);
     await waitFor(() => expect(within(panel).getByText("供应商(分部)", { exact: true })).toBeVisible());
     expect(within(panel).queryByText("供应商（分部）", { exact: true })).not.toBeInTheDocument();
   });
@@ -133,6 +133,7 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     fireEvent.click(trigger);
     const panel = await screen.findByRole("group", { name: "筛选接收日期选项" });
     expect(within(panel).queryByText("10月")).not.toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("checkbox", { name: "多选" }));
     fireEvent.click(within(panel).getByRole("checkbox", { name: /2026年/ }));
     await waitFor(() => expect(within(panel).getByRole("checkbox", { name: /2026年/ })).toBeChecked());
     expect(onFilter).toHaveBeenCalledExactlyOnceWith(["", "2026-10-28", "2026-10-29"]);
@@ -142,7 +143,7 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("searches and selects a month with half-selection feedback, without losing a hidden year", async () => {
+  it("shows half-selection and replaces the current dates with the newly checked month by default", async () => {
     const onFilter = vi.fn();
     renderFilter(
       <FilterableColumnTitle
@@ -159,32 +160,52 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     expect(within(panel).getByRole("checkbox", { name: /2026年/ })).toHaveAttribute("aria-checked", "mixed");
     fireEvent.change(within(panel).getByRole("searchbox"), { target: { value: "2026年11月" } });
     fireEvent.click(await within(panel).findByRole("checkbox", { name: /11月/ }));
-    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["2025-12", "2026-10", "2026-11"]);
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["2026-11"]);
     fireEvent.click(within(panel).getByRole("button", { name: "完成" }));
     expect(onFilter).toHaveBeenCalledOnce();
   });
-  it("keeps selections outside a search and clears immediately without closing the menu", async () => {
+  it("replaces earlier search selections by default and appends across searches only in multi-select mode", async () => {
     const onFilter = vi.fn();
     renderFilter(
-      <ControlledFilter label="负责人" values={["alpha"]} options={options} onSort={vi.fn()} onFilter={onFilter} />,
+      <ControlledFilter label="负责人" values={[]} options={options} onSort={vi.fn()} onFilter={onFilter} />,
     );
     const trigger = screen.getByRole("button", { name: "筛选负责人" });
     fireEvent.click(trigger);
     const panel = await screen.findByRole("group", { name: "筛选负责人选项" });
     const search = within(panel).getByRole("searchbox");
-    fireEvent.change(search, { target: { value: "乙" } });
-    fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
-    expect(onFilter).toHaveBeenLastCalledWith(["alpha", "beta"]);
+    const multiple = within(panel).getByRole("checkbox", { name: "多选" });
+    expect(multiple).not.toBeChecked();
     fireEvent.change(search, { target: { value: "甲" } });
     fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人甲/ }));
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["alpha"]);
+    fireEvent.click(within(panel).getByRole("button", { name: "完成" }));
+    fireEvent.click(trigger);
+
+    fireEvent.change(search, { target: { value: "乙" } });
+    expect(onFilter).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
     expect(onFilter).toHaveBeenLastCalledWith(["beta"]);
+
+    fireEvent.click(multiple);
+    expect(onFilter).toHaveBeenCalledTimes(2);
+    fireEvent.change(search, { target: { value: "甲" } });
+    expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).not.toBeChecked();
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人甲/ }));
+    expect(onFilter).toHaveBeenLastCalledWith(["beta", "alpha"]);
+    fireEvent.click(within(panel).getByRole("button", { name: "完成" }));
+    fireEvent.click(trigger);
+    expect(multiple).toBeChecked();
+    fireEvent.click(multiple);
+    expect(onFilter).toHaveBeenCalledTimes(3);
+    fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
+    expect(onFilter).toHaveBeenLastCalledWith(["alpha"]);
+
     fireEvent.click(within(panel).getByRole("button", { name: "清空" }));
     expect(onFilter).toHaveBeenLastCalledWith([]);
-    expect(onFilter).toHaveBeenCalledTimes(3);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(trigger).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(within(panel).getByRole("button", { name: "清空" }));
-    expect(onFilter).toHaveBeenCalledTimes(3);
+    expect(onFilter).toHaveBeenCalledTimes(5);
   });
 
   it("keeps cached candidates interactive during refresh and accepts an external reset", async () => {
@@ -196,7 +217,7 @@ describe("FilterableColumnTitle feedback and keyboard", () => {
     rerender(<FilterableColumnTitle {...props} loading />);
     expect(within(panel).getByRole("checkbox", { name: /示例负责人甲/ })).toBeChecked();
     fireEvent.click(within(panel).getByRole("checkbox", { name: /示例负责人乙/ }));
-    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["alpha", "beta"]);
+    expect(onFilter).toHaveBeenCalledExactlyOnceWith(["beta"]);
     rerender(<FilterableColumnTitle {...props} values={[]} error="更新失败" />);
     expect(within(panel).getByRole("alert")).toHaveTextContent("更新失败");
     expect(within(panel).getByRole("checkbox", { name: /示例负责人乙/ })).not.toBeChecked();

@@ -52,6 +52,7 @@ async function filterServiceColumn(page: Page, label: string, values: string[]) 
   await page.getByRole("button", { name: `筛选${label}`, exact: true }).click();
   const panel = page.getByRole("group", { name: `筛选${label}选项`, exact: true });
   await panel.getByRole("button", { name: "清空", exact: true }).click();
+  await panel.getByRole("checkbox", { name: "多选", exact: true }).setChecked(values.length > 1);
   for (const value of values) {
     const isMonth = /^\d{4}-\d{2}$/.test(value) && label.includes("月份");
     if (isMonth) await panel.getByRole("searchbox").fill(value);

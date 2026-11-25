@@ -38,6 +38,7 @@ export function FilterableColumnTitle({
 }: FilterableColumnTitleProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [multiple, setMultiple] = useState(false);
   const [selected, setSelected] = useState(values);
   const selectedRef = useRef(values);
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -96,6 +97,7 @@ export function FilterableColumnTitle({
     const text = `${option.label} ${option.value}`;
     return (normalizeSearchText ? normalizeSearchText(text) : text).toLocaleLowerCase("zh-CN").includes(searchKey);
   });
+  const selectedValues = new Set(selected);
   function setPopoverOpen(next: boolean) {
     if (next) {
       selectedRef.current = values;
@@ -106,11 +108,20 @@ export function FilterableColumnTitle({
     setOpen(next);
   }
   function updateSelection(next: string[]) {
-    if (!openRef.current || sameSelection(next, selectedRef.current)) return;
+    if (!openRef.current) return;
     const current = [...new Set(next)];
+    if (sameSelection(current, selectedRef.current)) return;
     selectedRef.current = current;
     setSelected(current);
     onFilter(current);
+  }
+  function toggleSelection(target: string[], checked: boolean) {
+    if (checked) {
+      updateSelection(multiple ? [...selectedRef.current, ...target] : target);
+      return;
+    }
+    const removed = new Set(target);
+    updateSelection(selectedRef.current.filter((value) => !removed.has(value)));
   }
 
   const content = (
@@ -163,27 +174,21 @@ export function FilterableColumnTitle({
             options={options}
             search={search}
             values={selected}
-            onChange={updateSelection}
+            onCheck={toggleSelection}
           />
         ) : visibleOptions.length ? (
-          <Checkbox.Group
-            className="table-filter-checkboxes"
-            value={selected}
-            onChange={(nextValues) => {
-              const visible = new Set(visibleOptions.map((option) => option.value));
-              updateSelection([
-                ...selectedRef.current.filter((value) => !visible.has(value)),
-                ...nextValues.map(String),
-              ]);
-            }}
-          >
+          <div className="table-filter-checkboxes">
             {visibleOptions.map((option) => (
-              <Checkbox key={option.value} value={option.value}>
+              <Checkbox
+                key={option.value}
+                checked={selectedValues.has(option.value)}
+                onChange={(event) => toggleSelection([option.value], event.target.checked)}
+              >
                 <span>{option.label}</span>
                 <small>{option.count}</small>
               </Checkbox>
             ))}
-          </Checkbox.Group>
+          </div>
         ) : (
           <p className="muted" role="status">
             {search.trim() ? "没有匹配的筛选项，请调整搜索内容。" : "当前列没有可选项。"}
@@ -191,6 +196,9 @@ export function FilterableColumnTitle({
         )}
       </div>
       <Space className="table-filter-actions">
+        <Checkbox checked={multiple} onChange={(event) => setMultiple(event.target.checked)}>
+          多选
+        </Checkbox>
         <Button size="small" type="text" onClick={() => updateSelection([])}>
           清空
         </Button>

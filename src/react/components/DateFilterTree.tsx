@@ -5,7 +5,6 @@ import { useMemo, useState, type Key } from "react";
 import {
   buildDateFilterTree,
   dateFilterTreeState,
-  toggleDateFilterValues,
   type DateFilterHierarchy,
   type DateFilterNode,
   type TableFilterOption,
@@ -18,14 +17,14 @@ export function DateFilterTree({
   options,
   search,
   values,
-  onChange,
+  onCheck,
 }: {
   label: string;
   hierarchy: DateFilterHierarchy;
   options: TableFilterOption[];
   search: string;
   values: string[];
-  onChange: (values: string[]) => void;
+  onCheck: (values: string[], checked: boolean) => void;
 }) {
   const nodes = useMemo(() => buildDateFilterTree(options, hierarchy, search), [options, hierarchy, search]);
   const state = useMemo(() => dateFilterTreeState(nodes, values), [nodes, values]);
@@ -56,7 +55,7 @@ export function DateFilterTree({
         search.trim() ? (searchExpansion?.query === search ? searchExpansion.keys : state.branches) : expanded
       }
       onExpand={(keys) => (search.trim() ? setSearchExpansion({ query: search, keys }) : setExpanded(keys))}
-      onCheck={(_, info) => onChange(toggleDateFilterValues(values, info.node.values, info.checked))}
+      onCheck={(_, info) => onCheck(info.node.values, info.checked)}
       titleRender={(node) => (
         <span className="table-date-filter-title" title={node.fullLabel}>
           <span>{node.title}</span>

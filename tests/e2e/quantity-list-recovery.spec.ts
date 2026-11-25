@@ -152,8 +152,9 @@ test("workspace return restores applied preferences and scroll without bulk sele
   await page.getByRole("button", { name: "筛选月份", exact: true }).click();
   const filter = page.getByRole("group", { name: "筛选月份选项", exact: true });
   await expect(filter).toHaveAttribute("aria-busy", "false");
-  await filter.getByRole("checkbox").click();
-  await expect(filter.getByRole("checkbox")).toBeChecked();
+  const year = filter.getByRole("checkbox", { name: /^2026年/ });
+  await year.click();
+  await expect(year).toBeChecked();
   await filter.getByRole("button", { name: "完成", exact: true }).click();
   await expect(page.getByRole("button", { name: "筛选月份", exact: true })).toBeFocused();
   await page.getByRole("button", { name: "IACUC，点击切换排序", exact: true }).click();

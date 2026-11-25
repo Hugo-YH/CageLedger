@@ -374,7 +374,7 @@ for (const viewport of [
   });
 }
 
-test("header funnels apply immediately, preserve searched selections and query beyond the current page", async ({
+test("header funnels replace by default, combine in multi-select and query beyond the current page", async ({
   page,
 }, testInfo) => {
   await login(page);
@@ -419,6 +419,8 @@ test("header funnels apply immediately, preserve searched selections and query b
   const kindTrigger = page.getByRole("button", { name: "筛选类型", exact: true });
   await expect(kindTrigger).toHaveAttribute("aria-pressed", "false");
   const kindSearch = kinds.getByRole("searchbox");
+  const multiple = kinds.getByRole("checkbox", { name: "多选", exact: true });
+  await expect(multiple).not.toBeChecked();
   await kindSearch.fill("使用疑问");
   await kinds.getByRole("checkbox", { name: "使用疑问" }).click();
   await expect(kinds.getByRole("checkbox", { name: "使用疑问" })).toBeChecked();
@@ -426,9 +428,15 @@ test("header funnels apply immediately, preserve searched selections and query b
   await kindSearch.fill("故障");
   await kinds.getByRole("checkbox", { name: "故障" }).click();
   await expect(kinds.getByRole("checkbox", { name: "故障" })).toBeChecked();
-  await expect(page.getByText("共 2 条反馈", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /查看反馈/ }).filter({ hasText: module + "甲" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /查看反馈/ }).filter({ hasText: module + "乙" })).toHaveCount(0);
+  await expect(page.getByText("共 1 条反馈", { exact: true })).toBeVisible();
+  await multiple.check();
   await kindSearch.fill("使用疑问");
+  await expect(kinds.getByRole("checkbox", { name: "使用疑问" })).not.toBeChecked();
+  await kinds.getByRole("checkbox", { name: "使用疑问" }).click();
   await expect(kinds.getByRole("checkbox", { name: "使用疑问" })).toBeChecked();
+  await expect(page.getByText("共 2 条反馈", { exact: true })).toBeVisible();
   await kindSearch.press("Escape");
   await expect(kinds).toBeHidden();
   await expect(kindTrigger).toBeFocused();

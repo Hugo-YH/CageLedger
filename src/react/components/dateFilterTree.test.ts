@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDateFilterTree, dateFilterTreeState, toggleDateFilterValues } from "./dateFilterModel";
+import { buildDateFilterTree, dateFilterTreeState } from "./dateFilterModel";
 
 const options = (values: string[]) => values.map((value) => ({ value, label: value || "待定", count: 1 }));
 
@@ -32,32 +32,27 @@ describe("date filter hierarchy", () => {
     expect(buildDateFilterTree(options([first, second, next]), "datetime", "2026年10月28日")[0].count).toBe(2);
   });
 
-  it("supports date and Chinese calendar searches without hiding unmatched selections", () => {
+  it("matches date and Chinese calendar searches against the same original dates", () => {
     const original = options(["2026-10-28", "2026-10-29", "2025-10-28", ""]);
     for (const search of ["2026-10-28", "2026年10月28日"]) {
       const tree = buildDateFilterTree(original, "day", search);
       expect(tree[0].values).toEqual(["2026-10-28"]);
-      expect(toggleDateFilterValues(["2025-10-28", ""], tree[0].values, true)).toEqual([
-        "2025-10-28",
-        "",
-        "2026-10-28",
-      ]);
-      expect(toggleDateFilterValues(["2025-10-28", "2026-10-28"], tree[0].values, false)).toEqual(["2025-10-28"]);
     }
     expect(buildDateFilterTree(original, "day", "10月")).toHaveLength(2);
     expect(buildDateFilterTree(original, "day", "待定")[0].values).toEqual([""]);
     expect(buildDateFilterTree(original, "day", "不存在")).toEqual([]);
   });
 
-  it("marks partially selected years and months, and includes the entire branch on check", () => {
+  it("marks partially selected years and months, and checks complete branches", () => {
     const tree = buildDateFilterTree(options(["2026-10-28", "2026-10-29", "2026-11-01"]), "day");
     expect(dateFilterTreeState(tree, ["2026-10-28"])).toMatchObject({
       checked: ["date:2026-10-28"],
       halfChecked: ["date:2026", "date:2026-10"],
     });
-    const all = toggleDateFilterValues(["2026-10-28", "hidden-value"], tree[0].values, true);
-    expect(dateFilterTreeState(tree, all).halfChecked).toEqual([]);
-    expect(toggleDateFilterValues(all, tree[0].values, false)).toEqual(["hidden-value"]);
+    expect(dateFilterTreeState(tree, tree[0].values)).toMatchObject({
+      checked: ["date:2026", "date:2026-11", "date:2026-11-01", "date:2026-10", "date:2026-10-29", "date:2026-10-28"],
+      halfChecked: [],
+    });
   });
 
   it("keeps more than 500 candidates while rendering one day for many timestamps", () => {

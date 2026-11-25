@@ -107,9 +107,3 @@ export function dateFilterTreeState(nodes: DateFilterNode[], values: string[]) {
   nodes.forEach(visit);
   return { checked, halfChecked, branches };
 }
-
-export function toggleDateFilterValues(current: string[], target: string[], checked: boolean) {
-  const next = new Set(current);
-  target.forEach((value) => (checked ? next.add(value) : next.delete(value)));
-  return [...next];
-}

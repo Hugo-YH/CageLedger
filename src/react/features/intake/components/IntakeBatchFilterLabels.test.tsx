@@ -110,6 +110,7 @@ it("searches batch numbers across bracket styles and applies the original comple
   expect(within(panel).queryByText("(Z2025117)2026050808", { exact: true })).not.toBeInTheDocument();
   expect(within(panel).queryByText("(Z2026026)2026042806", { exact: true })).not.toBeInTheDocument();
   const search = within(panel).getByRole("searchbox", { name: "搜索批次号筛选选项" });
+  const batchCheckboxes = () => within(panel).queryAllByRole("checkbox", { name: /Z20/ });
   for (const [code, suffix] of [
     ["Z2025117", "2026050808"],
     ["Z2025170", "2026102902"],
@@ -124,14 +125,15 @@ it("searches batch numbers across bracket styles and applies the original comple
       suffix,
     ]) {
       fireEvent.change(search, { target: { value: query } });
-      expect(within(panel).getAllByRole("checkbox")).toHaveLength(1);
+      expect(batchCheckboxes()).toHaveLength(1);
       expect(within(panel).getByText(`（${code}）${suffix}`, { exact: true })).toBeVisible();
     }
   }
   fireEvent.change(search, { target: { value: "（Z2025117)2026050809" } });
-  expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument();
+  expect(batchCheckboxes()).toHaveLength(0);
   fireEvent.change(search, { target: { value: "" } });
-  for (const checkbox of within(panel).getAllByRole("checkbox")) fireEvent.click(checkbox);
+  fireEvent.click(within(panel).getByRole("checkbox", { name: "多选" }));
+  for (const checkbox of batchCheckboxes()) fireEvent.click(checkbox);
   expect(onFilter).toHaveBeenCalledTimes(3);
   fireEvent.click(within(panel).getByRole("button", { name: "完成" }));
   expect(onFilter).toHaveBeenLastCalledWith("batchNo", [

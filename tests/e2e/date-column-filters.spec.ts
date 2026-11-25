@@ -136,6 +136,7 @@ test(
       expect(columnFilters(await daily).intakeDate).toEqual(["2026-10-28"]);
       await expect(page.locator("tr", { hasText: `DATE-TREE-${stamp}-1` })).toHaveCount(0);
       await expect(dayPanel).toBeVisible();
+      await dayPanel.getByRole("checkbox", { name: "多选", exact: true }).check();
       const search = dayPanel.getByRole("searchbox");
       await search.fill("2025-10");
       const additionalDay = page.waitForRequest(
