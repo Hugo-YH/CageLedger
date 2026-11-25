@@ -3,6 +3,16 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.8",
+    build: "289",
+    releasedAt: "2026-11-25",
+    title: "列表筛选与深色图表",
+    items: [
+      "列头筛选默认用新选项替换当前列条件。勾选“清空”旁的“多选”后，可以换关键词搜索并继续追加普通选项或日期条件。",
+      "总览的品系分布百分比、引导线和图例随浅深主题切换。接收趋势和饲养间笼位统计的坐标轴文字、饲养间图例也使用当前主题色。",
+    ],
+  },
+  {
     version: "1.32.7",
     build: "288",
     releasedAt: "2026-11-23",
