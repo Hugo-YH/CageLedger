@@ -3,6 +3,17 @@ import type { ReleaseNote } from "./releaseNoteModel";
 
 export const DOCUMENT_RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.9",
+    build: "290",
+    releasedAt: "2026-11-26",
+    title: "笼位管理",
+    items: [
+      "同一张房间图展示全部笼架和空位数。点击笼架即可在平面图上打开笼位详情，点「关闭」或按 Escape 返回房间图。网格线随浅色和深色主题调整。",
+      "系统管理员和获授权的房间管理员可以拖动、逐格移动或旋转笼架，按房间保存布局。首次打开会自动排放，编辑时吸附网格并校验重叠。",
+      "占用笼位显示 IACUC、实验负责人、动物种类和数量，猴房还显示性别和年龄。同一房间相同 IACUC 使用同一底色，同一项目负责人名下使用相近色。已预留和超期分别用琥珀色虚线框和红色实线框标记。",
+    ],
+  },
+  {
     version: "1.32.8",
     build: "289",
     releasedAt: "2026-11-25",
