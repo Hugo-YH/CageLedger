@@ -943,7 +943,7 @@
  * its existing native thin-scrollbar behavior. */
 @supports selector(::-webkit-scrollbar) {
   :is([data-ui="data-table"], [data-ui="app-shell"], [role="dialog"]) :is(.ant-table-content, .ant-table-body),
-  :is([data-ui="app-shell"], [role="dialog"]) :is(.quantity-entry-wrap, .table-wrap, .cage-preview) {
+  :is([data-ui="app-shell"], [role="dialog"]) :is(.quantity-entry-wrap, .table-wrap) {
     scrollbar-width: auto;
     scrollbar-color: auto;
   }

@@ -155,6 +155,14 @@ def write_normalized_state(
     occupancy_with_snapshots,
     occupancy_structured_values,
 ):
+    rooms = state.get("rooms", [])
+    retained_rooms = {room.get("id") for room in rooms}
+    # The legacy full-state writer replaces room rows. Preserve independent layouts for retained rooms.
+    layouts = [
+        tuple(row)
+        for row in conn.execute("SELECT room_id,placements_json,updated_at FROM room_rack_layouts")
+        if row["room_id"] in retained_rooms
+    ]
     for table in STATE_TABLES:
         conn.execute(f"DELETE FROM {table}")
 
@@ -163,7 +171,7 @@ def write_normalized_state(
     set_setting(conn, "billingMonth", state.get("billingMonth", ""), updated_at)
     set_setting(conn, "billingIacuc", state.get("billingIacuc", ""), updated_at)
 
-    for room in state.get("rooms", []):
+    for room in rooms:
         conn.execute(
             """
             INSERT INTO rooms (id, name, area, rack_count, rows, cols, payload)
@@ -179,6 +187,10 @@ def write_normalized_state(
                 dump_json(room),
             ),
         )
+
+    conn.executemany(
+        "INSERT OR REPLACE INTO room_rack_layouts (room_id,placements_json,updated_at) VALUES (?,?,?)", layouts
+    )
 
     for rack in state.get("racks", []):
         conn.execute(

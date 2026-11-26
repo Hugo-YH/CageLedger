@@ -1,6 +1,8 @@
-"""Bounded infrastructure projections; no writes or derived business state."""
+"""Bounded infrastructure projections and room layout storage."""
 
 import json
+
+from server_app.repositories.payload import dump_json
 
 
 def rooms(conn, room_ids=None):
@@ -42,6 +44,30 @@ def rack(conn, rack_id):
 
 def rack_slots(conn, rack_id):
     return payloads(conn, "SELECT payload FROM cage_slots WHERE rack_id=? ORDER BY row_no,col_no,rowid", (rack_id,))
+
+
+def room_rack_ids(conn, room_id):
+    return {row["id"] for row in conn.execute("SELECT id FROM racks WHERE room_id=?", (room_id,))}
+
+
+def read_rack_layout(conn, room_id):
+    row = conn.execute(
+        "SELECT placements_json,updated_at FROM room_rack_layouts WHERE room_id=?", (room_id,)
+    ).fetchone()
+    return {
+        "placements": json.loads(row["placements_json"]) if row else [],
+        "updatedAt": row["updated_at"] if row else "",
+    }
+
+
+def save_rack_layout(conn, room_id, layout):
+    conn.execute(
+        """
+        INSERT INTO room_rack_layouts (room_id,placements_json,updated_at) VALUES (?,?,?)
+        ON CONFLICT (room_id) DO UPDATE SET placements_json=excluded.placements_json, updated_at=excluded.updated_at
+        """,
+        (room_id, dump_json(layout["placements"]), layout["updatedAt"]),
+    )
 
 
 def room_workspace(conn, room_id, *, current_only=False):

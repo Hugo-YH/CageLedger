@@ -35,6 +35,15 @@ def initialize_infrastructure_schema(conn):
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS room_rack_layouts (
+            room_id TEXT PRIMARY KEY NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+            placements_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL CHECK (updated_at <> '')
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS racks (
             id TEXT PRIMARY KEY,
             room_id TEXT NOT NULL,

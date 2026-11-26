@@ -6,20 +6,26 @@ from unittest.mock import Mock, patch
 from server_app.cache import invalidate_data_cache, invalidate_data_cache_prefixes
 from server_app.domains.infrastructure import service
 from server_app.domains.state.entity_rules import empty_state
-from server_app.domains.state.persistence import read_cached_state, write_normalized_state
+from server_app.domains.state.persistence import assemble_state, read_cached_state, write_normalized_state
 from server_app.domains.state.query import read_bootstrap_state
 from server_app.persistence.bootstrap import initialize_schema
+from server_app.repositories.audit_storage import read_payload
 from server_app.web import infrastructure
+from server_app.web.handler_support import HandlerSupportMixin
+from server_app.web.router_registry import API_ROUTER
 
-ADMIN = {"id": "admin", "role": "admin", "roomIds": []}
-LIMITED = {"id": "staff", "role": "room_admin", "roomIds": ["r1"]}
+ADMIN = {"id": "admin", "username": "admin", "displayName": "管理员", "role": "admin", "roomIds": []}
+LIMITED = {"id": "staff", "username": "staff", "displayName": "房间管理员", "role": "room_admin", "roomIds": ["r1"]}
 NO_ROOMS = {"id": "none", "role": "room_admin", "roomIds": []}
+EMPTY_LAYOUT = {"placements": [], "updatedAt": ""}
+PLACEMENT = {"rackId": "rack1", "column": 0, "row": 0, "rotation": 0}
 
 
 class InfrastructureReadTests(unittest.TestCase):
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA foreign_keys=ON")
         with patch("server_app.persistence.bootstrap.ensure_seed_images"):
             initialize_schema(self.conn)
         state = empty_state()
@@ -108,10 +114,10 @@ class InfrastructureReadTests(unittest.TestCase):
 
         handler = Handler()
         with patch.object(infrastructure, "connect_db", return_value=self.conn):
-            self.assertTrue(infrastructure.handle(handler, "/api/infrastructure/rooms/r1"))
+            self.assertTrue(infrastructure.handle(handler, "GET", "/api/infrastructure/rooms/r1"))
             self.assertEqual(handler.response[1], 403)
             handler.actor = ADMIN
-            self.assertTrue(infrastructure.handle(handler, "/api/infrastructure/racks/missing/slots"))
+            self.assertTrue(infrastructure.handle(handler, "GET", "/api/infrastructure/racks/missing/slots"))
             self.assertEqual(handler.response[1], 404)
 
     def test_cage_view_filters_only_unused_history_and_preserves_full_api_and_permissions(self):
@@ -135,6 +141,7 @@ class InfrastructureReadTests(unittest.TestCase):
             **full,
             "occupancies": [o for o in full["occupancies"] if o["status"] in ("active", "reserved")],
             "placementTasks": [t for t in full["placementTasks"] if t.get("status") not in ("active", "cancelled")],
+            "rackLayout": EMPTY_LAYOUT,
         }
         self.assertEqual(actual, expected)
         self.assertEqual(self.conn.total_changes, before)
@@ -153,8 +160,108 @@ class InfrastructureReadTests(unittest.TestCase):
 
         handler = Handler()
         with patch.object(infrastructure, "connect_db", return_value=self.conn):
-            self.assertTrue(infrastructure.handle(handler, "/api/infrastructure/rooms/r1"))
+            self.assertTrue(infrastructure.handle(handler, "GET", "/api/infrastructure/rooms/r1"))
         self.assertEqual(handler.value, expected)
+
+    def put_layout(self, room_id, actor, body):
+        handler = HandlerSupportMixin()
+        handler.require_user = Mock(return_value=actor)
+        handler.read_json_body = Mock(return_value=body)
+        handler.send_json = Mock()
+        with patch.object(infrastructure, "connect_db", return_value=self.conn):
+            self.assertTrue(API_ROUTER.handle("PUT", f"/api/infrastructure/rooms/{room_id}/rack-layout", handler))
+        handler.send_json.assert_called_once()
+        response, *status = handler.send_json.call_args.args
+        return response, status[0] if status else 200
+
+    def test_layout_permissions_versions_and_audit_are_scoped_to_metadata(self):
+        before = assemble_state(self.conn)
+        body = {"placements": [PLACEMENT], "expectedUpdatedAt": ""}
+        for actor in (NO_ROOMS, {**LIMITED, "role": "researcher"}):
+            self.assertEqual(self.put_layout("r1", actor, body)[1], 403)
+        self.assertEqual(self.put_layout("missing", ADMIN, body)[1], 404)
+        self.assertEqual(self.put_layout("r1", ADMIN, {"placements": [PLACEMENT]})[1], 400)
+        self.assertEqual(self.put_layout("r1", ADMIN, {**body, "expectedUpdatedAt": "unsaved-version"})[1], 409)
+        saved, status = self.put_layout("r1", LIMITED, body)
+        self.assertEqual(status, 200)
+        self.assertEqual(saved["placements"], body["placements"])
+        self.assertTrue(saved["updatedAt"])
+        self.assertEqual(self.put_layout("r1", ADMIN, body)[1], 409)
+        self.assertEqual(self.put_layout("r1", ADMIN, {**body, "expectedUpdatedAt": saved["updatedAt"] + " "})[1], 409)
+        self.assertEqual(service.room_workspace(self.conn, LIMITED, "r1", view="cages")["rackLayout"], saved)
+        self.assertEqual(service.room_workspace(self.conn, ADMIN, "r2", view="cages")["rackLayout"], EMPTY_LAYOUT)
+        self.assertNotIn("rackLayout", service.room_workspace(self.conn, LIMITED, "r1"))
+        self.assertEqual(assemble_state(self.conn), before)
+        audit_ids = self.conn.execute("SELECT id FROM audit_events WHERE action='rack_layout.updated'").fetchall()
+        self.assertEqual(len(audit_ids), 1)
+        audit = json.loads(read_payload(self.conn, audit_ids[0]["id"]))
+        self.assertEqual((audit["actorUserId"], audit["entityId"]), ("staff", "r1"))
+        self.assertEqual((audit["before"], audit["after"]), (EMPTY_LAYOUT, saved))
+
+        cleared, status = self.put_layout("r1", ADMIN, {"placements": [], "expectedUpdatedAt": saved["updatedAt"]})
+        self.assertEqual(status, 200)
+        self.assertEqual(cleared["placements"], [])
+        self.assertNotEqual(cleared["updatedAt"], saved["updatedAt"])
+        self.assertEqual(self.put_layout("r1", ADMIN, {**body, "expectedUpdatedAt": saved["updatedAt"]})[1], 409)
+
+    def test_layout_geometry_uses_rotated_extents_and_rejects_invalid_racks(self):
+        self.conn.execute(
+            "INSERT INTO racks(id,room_id,name,payload) VALUES('other','r1','other',?)",
+            (json.dumps({"id": "other", "roomId": "r1", "name": "other"}),),
+        )
+        self.conn.commit()
+        other = {"rackId": "other", "column": 3, "row": 1, "rotation": 90}
+        for placements in (
+            [PLACEMENT, other],
+            [PLACEMENT, {**PLACEMENT, "column": 4}],
+            [{**PLACEMENT, "rackId": "rack2"}],
+            [{**PLACEMENT, "column": 253}],
+            [{**other, "row": 253}],
+            [{**PLACEMENT, "column": -1}],
+            [{**PLACEMENT, "column": 0.0}],
+            [{**PLACEMENT, "row": True}],
+            [{**PLACEMENT, "rotation": False}],
+            [{**PLACEMENT, "rotation": 180}],
+        ):
+            with self.subTest(placements=placements):
+                self.assertEqual(
+                    self.put_layout("r1", ADMIN, {"placements": placements, "expectedUpdatedAt": ""})[1], 400
+                )
+        self.assertEqual(service.room_workspace(self.conn, ADMIN, "r1", view="cages")["rackLayout"], EMPTY_LAYOUT)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0], 0)
+        valid = [{**PLACEMENT, "column": 250, "row": 254}, {**other, "column": 254, "row": 252}]
+        saved, status = self.put_layout("r1", ADMIN, {"placements": valid, "expectedUpdatedAt": ""})
+        self.assertEqual((saved["placements"], status), (valid, 200))
+        self.assertEqual(service.room_workspace(self.conn, ADMIN, "r1", view="cages")["rackLayout"], saved)
+
+    def test_layout_persists_across_schema_and_legacy_room_rewrite_then_cascades(self):
+        saved, status = self.put_layout("r1", ADMIN, {"placements": [PLACEMENT], "expectedUpdatedAt": ""})
+        self.assertEqual(status, 200)
+        with patch("server_app.persistence.bootstrap.ensure_seed_images"):
+            initialize_schema(self.conn)
+        state = assemble_state(self.conn)
+        state["racks"][0]["roomId"] = "r2"
+        with self.conn:
+            write_normalized_state(self.conn, state, "2026-10-02")
+        self.assertEqual(
+            self.conn.execute("SELECT updated_at FROM room_rack_layouts WHERE room_id='r1'").fetchone()["updated_at"],
+            saved["updatedAt"],
+        )
+        self.assertEqual(
+            service.room_workspace(self.conn, ADMIN, "r1", view="cages")["rackLayout"], {**saved, "placements": []}
+        )
+        self.assertEqual(service.room_workspace(self.conn, ADMIN, "r2", view="cages")["rackLayout"], EMPTY_LAYOUT)
+        with self.conn:
+            self.conn.execute("DELETE FROM rooms WHERE id='r1'")
+        self.assertIsNone(self.conn.execute("SELECT room_id FROM room_rack_layouts WHERE room_id='r1'").fetchone())
+
+    def test_layout_rolls_back_if_audit_write_fails(self):
+        with (
+            patch.object(service, "write_audit_events", side_effect=RuntimeError("audit failed")),
+            self.assertRaisesRegex(RuntimeError, "audit failed"),
+        ):
+            self.put_layout("r1", ADMIN, {"placements": [PLACEMENT], "expectedUpdatedAt": ""})
+        self.assertEqual(service.room_workspace(self.conn, ADMIN, "r1", view="cages")["rackLayout"], EMPTY_LAYOUT)
 
     def test_bootstrap_summary_cache_hit_skips_state_assembly(self):
         state_reader = Mock(return_value=read_cached_state(self.conn))

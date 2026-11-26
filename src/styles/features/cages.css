@@ -1,46 +1,8 @@
 /* Cage map and room management own only cage-domain layout and breakpoints. */
 [data-feature="cages"] {
   min-inline-size: 0;
-
-  --cage-slot-size: 120px;
 }
 
-/* Cage status palette follows Ant Design functional colors: empty stays
- * neutral, reserved uses info blue, active uses success green, an open
- * period uses warning amber, and overdue uses error red. */
-.react-cage-view {
-  --cage-status-empty: var(--line);
-  --cage-status-empty-soft: var(--surface-soft);
-  --cage-status-reserved: var(--info-text);
-  --cage-status-reserved-soft: var(--info-soft);
-  --cage-status-reserved-line: var(--info-line);
-  --cage-status-active: var(--success-text);
-  --cage-status-active-soft: var(--success-soft);
-  --cage-status-active-line: var(--success-line);
-  --cage-status-open: var(--warning-text);
-  --cage-status-open-soft: var(--warning-soft);
-  --cage-status-open-line: var(--warning-line);
-  --cage-status-overdue: var(--danger-text);
-  --cage-status-overdue-soft: var(--danger-soft);
-  --cage-status-overdue-line: var(--danger-line);
-}
-
-/* Slots keep a fixed default size (square) instead of stretching across
- * narrow racks; wide racks scroll horizontally. */
-.react-cage-view .react-rack-row,
-.react-cage-view .react-rack-row .slot {
-  height: 120px;
-}
-
-@media (width < 768px) {
-  [data-feature="cages"] .cage-map-grid {
-    overflow-x: auto;
-  }
-}
-
-/* Cage map legend, slot states and the compact slot form (migrated from
- * legacy-responsive.css). */
-.legend,
 .filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -49,48 +11,19 @@
   margin-bottom: 12px;
 }
 
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-subtle);
-  font-size: 12px;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-}
-
-.status-dot.empty,
 .pill.empty {
   background: var(--cage-status-empty, #d9d9d9);
   color: var(--text-subtle);
 }
 
-.status-dot.reserved,
 .pill.reserved {
   background: var(--cage-status-reserved, #0958d9);
   color: var(--cage-status-reserved, #0958d9);
 }
 
-.status-dot.active,
 .pill.active {
   background: var(--cage-status-active, #389e0d);
   color: var(--cage-status-active, #389e0d);
-}
-
-.status-dot.period-open {
-  background: var(--cage-status-open);
-}
-
-.status-dot.period-normal {
-  background: var(--cage-status-active);
-}
-
-.status-dot.period-overdue {
-  background: var(--cage-status-overdue);
 }
 
 .pill.ended {
@@ -103,166 +36,116 @@
   color: var(--cage-status-open, #d48806);
 }
 
-.cage-preview {
-  position: relative;
-  overflow: visible;
-}
+.react-cage-view .react-rack-scroll {
+  --cage-slot-size: 148px;
+  --cage-slot-gap: 8px;
 
-.slot {
-  border: 1px solid var(--line);
-  min-height: 118px;
-  border-radius: 8px;
-  padding: 12px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 4px;
-  background: var(--surface);
-  color: var(--text);
-  position: relative;
-  transition:
-    outline-color var(--motion-base) var(--ease-standard),
-    border-color var(--motion-base) var(--ease-standard),
-    background-color var(--motion-base) var(--ease-standard);
-}
-
-.slot:not(:disabled):active {
-  outline-color: color-mix(in srgb, var(--primary) 30%, transparent);
-}
-
-.slot:hover,
-.slot.selected {
-  outline: 2px solid color-mix(in srgb, var(--primary) 20%, transparent);
-  border-color: var(--primary);
-}
-
-.slot.selected {
-  background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface));
-}
-
-.slot.active {
-  background: var(--cage-status-active-soft);
-  border-color: var(--cage-status-active-line);
-}
-
-.slot.period-open {
-  background: var(--cage-status-open-soft);
-  border-color: var(--cage-status-open-line);
-}
-
-.slot.period-normal {
-  background: var(--cage-status-active-soft);
-  border-color: var(--cage-status-active-line);
-}
-
-.slot.period-overdue {
-  background: var(--cage-status-overdue-soft);
-  border-color: var(--cage-status-overdue-line);
-}
-
-.slot.reserved {
-  background: var(--cage-status-reserved-soft);
-  border-color: var(--cage-status-reserved-line);
-}
-
-.slot.empty {
-  background: var(--cage-status-empty-soft);
-  border-color: var(--cage-status-empty);
-  border-style: dashed;
-  color: var(--text-subtle);
-}
-
-/* Keep long cage labels within their fixed cell despite native button alignment. */
-.slot-code,
-.slot-iacuc,
-.slot-person,
-.slot-date,
-.slot-animal-meta {
-  align-self: stretch;
   min-inline-size: 0;
+  max-block-size: min(64dvh, 700px);
+  overflow: auto;
+  padding: 5px;
+  scrollbar-gutter: stable;
 }
 
-.slot-code {
-  font-family: var(--font-mono);
-  color: var(--text-subtle);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-  padding-right: 12px;
+.react-cage-view .react-rack-virtual {
+  position: relative;
+  min-inline-size: 100%;
+  inline-size: calc(var(--cage-rack-columns) * (var(--cage-slot-size) + var(--cage-slot-gap)) - var(--cage-slot-gap));
 }
 
-.slot-iacuc {
+.react-cage-view .react-rack-row {
+  position: absolute;
+  inset: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(var(--cage-rack-columns), var(--cage-slot-size));
+  gap: var(--cage-slot-gap);
+  min-block-size: 108px;
+}
+
+.react-cage-view .slot {
+  display: grid;
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-inline-size: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--cage-project-fill, var(--surface));
   color: var(--text-strong);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 22px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.slot.reserved .slot-iacuc {
-  color: var(--cage-status-reserved);
-}
-
-.slot-person,
-.slot-date {
-  color: var(--text-subtle);
   font-size: 12px;
+  line-height: 18px;
+  text-align: start;
+}
+
+.react-cage-view .slot[data-cage-status="empty"] {
+  background: var(--surface-soft);
+}
+
+.react-cage-view .slot[data-cage-status="reserved"] {
+  border-style: dashed;
+  border-color: var(--warning-text);
+}
+
+.react-cage-view .slot[data-cage-status="open"] {
+  border-style: dotted;
+  border-color: var(--warning-text);
+}
+
+.react-cage-view .slot[data-cage-status="overdue"] {
+  border-color: color-mix(in srgb, var(--danger-text) 90%, var(--text-strong));
+}
+
+.react-cage-view .slot:hover {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.react-cage-view .slot.selected {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.react-cage-view .slot:focus-visible {
+  outline: 2px solid var(--primary-dark);
+  outline-offset: 3px;
+}
+
+.react-cage-view .slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
   line-height: 20px;
 }
 
-.slot-date {
-  margin-top: auto;
-}
-
-.slot-empty-text {
-  color: var(--text-subtle);
+.react-cage-view .slot-code {
+  flex: 0 0 auto;
   font-size: 14px;
-  margin: auto 0;
-  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
-.slot small,
-.slot-person,
-.slot-date {
+.react-cage-view .slot-state {
   color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+.react-cage-view .slot-iacuc {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.react-cage-view .slot-iacuc,
+.react-cage-view .slot-person,
+.react-cage-view .slot-animal-meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.slot-status-dot {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: var(--line-strong);
-}
-
-.slot-status-dot.empty {
-  background: var(--cage-status-empty);
-}
-
-.slot-status-dot.reserved {
-  background: var(--cage-status-reserved);
-}
-
-.slot-status-dot.active,
-.slot-status-dot.period-normal {
-  background: var(--cage-status-active);
-}
-
-.slot-status-dot.period-open {
-  background: var(--cage-status-open);
-}
-
-.slot-status-dot.period-overdue {
-  background: var(--cage-status-overdue);
+.react-cage-view .slot-person,
+.react-cage-view .slot-animal-meta {
+  color: var(--text-subtle);
 }
 
 .compact-slot-form {
@@ -320,46 +203,6 @@
   font-size: 12px;
 }
 
-.cage-preview {
-  overflow-x: auto;
-}
-
-.cage-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-/* The cage preview header follows the flat-first surface model: a plain
- * title-lg heading with a secondary count, no gradient panel chrome. */
-.react-cage-view .cage-preview > .panel-head {
-  position: static;
-  margin: 0;
-  padding: 0 0 12px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.react-cage-view .cage-preview .panel-title-line h2 {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-}
-
-.react-cage-view .cage-preview .panel-title-line p {
-  margin: 0;
-  color: var(--text-subtle);
-  font-size: 12px;
-  line-height: 20px;
-}
-
 .cage-slot-modal .modal-shell-head h2 {
   margin: 0;
   color: var(--text-strong);
@@ -379,48 +222,192 @@
   gap: 8px;
 }
 
-/* Mobile cage map and slot sizing (migrated from responsive.css). */
 @media (width < 768px) {
-  .cage-preview {
-    overflow-x: auto;
-    padding-bottom: 8px;
-  }
-
-  .slot {
-    min-height: 88px;
-    padding: 8px;
-    gap: 4px;
-  }
-
-  .slot-code {
-    font-size: 12px;
-  }
-
-  .slot-iacuc {
-    font-size: 12px;
-    padding-right: 0;
-  }
-
-  .slot-person,
-  .slot-date {
-    font-size: 12px;
-  }
-
-  .slot-empty-text {
-    font-size: 14px;
-  }
-
   .compact-form-row.half,
   .compact-form-row.third {
     grid-template-columns: 1fr;
   }
+}
 
-  .cage-layout {
-    grid-template-columns: 1fr;
+[data-feature="cages"] .cage-workspace-body {
+  container-type: inline-size;
+}
+
+[data-feature="cages"] .cage-room-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@container (min-width: 920px) {
+  [data-feature="cages"] .cage-room-workbench {
+    grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
   }
+}
 
-  .react-cage-view .cage-preview > .panel-head .panel-head-actions {
-    grid-template-columns: 1fr;
-    width: 100%;
+[data-feature="cages"] .cage-room-panel {
+  min-inline-size: 0;
+}
+
+[data-feature="cages"] .cage-room-panel-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  line-height: var(--leading-section);
+  text-overflow: ellipsis;
+}
+
+[data-feature="cages"] .cage-room-map-scroll {
+  container-type: inline-size;
+  min-inline-size: 0;
+  max-block-size: min(52vh, 528px);
+  overflow: auto;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+
+[data-feature="cages"] .cage-room-map-scroll:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+[data-feature="cages"] .cage-room-map {
+  --rack-grid-size: clamp(26px, calc(100cqi / var(--rack-map-columns)), 44px);
+  --rack-grid-line: linear-gradient(to right, var(--line) 1px, transparent 1px);
+  --rack-grid-row: linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+
+  position: relative;
+  inline-size: calc(var(--rack-map-columns) * var(--rack-grid-size));
+  block-size: calc(var(--rack-map-rows) * var(--rack-grid-size));
+  margin-inline: auto;
+  overflow: hidden;
+  background-image: var(--rack-grid-line), var(--rack-grid-row);
+  background-size: var(--rack-grid-size) var(--rack-grid-size);
+}
+
+[data-feature="cages"] .cage-room-rack {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  padding: var(--space-1) var(--space-2);
+  overflow: hidden;
+  text-align: start;
+  border-inline-start-width: 3px;
+}
+
+[data-feature="cages"] .cage-room-rack[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+[data-feature="cages"] .cage-room-rack[data-rotation="90"] {
+  border-inline-start-width: 1px;
+  border-block-start-width: 3px;
+}
+
+[data-feature="cages"] .cage-room-rack[data-editable="true"]:enabled {
+  touch-action: none;
+  cursor: grab;
+}
+
+[data-feature="cages"] .cage-room-rack[data-editable="true"]:active {
+  cursor: grabbing;
+}
+
+[data-feature="cages"] .cage-room-rack-name {
+  display: flex;
+  gap: var(--space-1);
+  justify-content: space-between;
+  min-inline-size: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+[data-feature="cages"] .cage-room-rack[data-rotation="90"] .cage-room-rack-name {
+  display: grid;
+  gap: 0;
+}
+
+[data-feature="cages"] .cage-room-rack-preview {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+[data-feature="cages"] .cage-room-rack-drop {
+  position: absolute;
+  z-index: var(--z-raised);
+  pointer-events: none;
+  background: var(--primary-soft);
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius-control);
+}
+
+[data-feature="cages"] .cage-room-rack-drop[data-blocked="true"] {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+[data-feature="cages"] .cage-map-key {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+[data-feature="cages"] .cage-map-key i {
+  inline-size: 12px;
+  block-size: 12px;
+}
+
+[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i {
+  background: var(--cage-project-fill, var(--surface-soft));
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="active"] {
+  background: var(--cage-project-fill, var(--success-soft));
+}
+
+[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="reserved"] {
+  border: 1px dashed var(--amber);
+}
+
+[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="open"] {
+  border: 1px dotted var(--warning-text);
+}
+
+[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="overdue"] {
+  border-color: var(--danger);
+}
+
+[data-feature="cages"] .cage-project-key {
+  max-block-size: 96px;
+  overflow: auto;
+}
+
+[data-feature="cages"] .cage-project-tag {
+  max-inline-size: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+
+@media (width < 768px) {
+  [data-feature="cages"].cage-room-layout-editor button:not(.cage-room-rack) {
+    min-inline-size: 44px;
+    min-block-size: 44px;
   }
 }

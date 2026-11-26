@@ -839,52 +839,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
   }
 }
 
-.react-rack-scroll {
-  height: min(62vh, 720px);
-  overflow: auto;
-  padding: 8px 4px 80px;
-  border-top: 1px solid var(--line);
-  scrollbar-gutter: stable;
-}
-
-.react-rack-virtual {
-  position: relative;
-  min-width: 720px;
-}
-
-.react-rack-row {
-  position: absolute;
-  inset: 0 0 auto;
-  display: grid;
-  gap: 8px;
-  height: 118px;
-}
-
-.react-rack-row .slot {
-  min-width: 0;
-  min-height: 118px;
-  height: 118px;
-}
-
-.react-rack-row.monkey-rack-row {
-  height: 136px;
-}
-
-.react-rack-row.monkey-rack-row .slot {
-  min-height: 136px;
-  height: 136px;
-}
-
-.slot-animal-meta {
-  color: var(--primary-dark);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .monkey-detail-fields {
   min-width: 0;
   margin: 4px 0;
@@ -916,15 +870,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 
 .monkey-age-field label {
   font-weight: 600;
-}
-
-.react-rack-row .slot-position {
-  position: absolute;
-  right: 8px;
-  bottom: 6px;
-  color: var(--text-muted);
-  font-size: 12px;
-  opacity: 0.7;
 }
 
 .cage-slot-modal {
@@ -970,10 +915,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
     grid-template-columns: 1fr 1fr;
   }
 
-  .react-rack-scroll {
-    height: 58vh;
-  }
-
   .placement-react-list article {
     align-items: stretch;
     flex-direction: column;
@@ -981,18 +922,6 @@ table:not([class^="ant-"], [class*=" ant-"]) th {
 }
 
 /* React workspace layout corrections */
-
-.react-cage-view .cage-preview > .panel-head {
-  align-items: center;
-}
-
-.react-cage-view .cage-preview > .panel-head .panel-head-actions {
-  display: grid;
-  grid-template-columns: minmax(190px, 1fr) minmax(150px, 0.72fr);
-  gap: 8px;
-  width: min(520px, 58%);
-  margin-left: auto;
-}
 
 .workflow-center-panel .panel-head {
   grid-template-columns: minmax(0, 1fr);

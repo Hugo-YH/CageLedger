@@ -133,7 +133,12 @@ ROUTE_GROUPS = {
             ),
             "prefix": "/api/infrastructure/",
             "delegate": "infrastructure",
-            "two_args": True,
+        },
+        {
+            "method": "PUT",
+            "paths": ("/api/infrastructure/rooms/{id}/rack-layout",),
+            "prefix": "/api/infrastructure/rooms/",
+            "delegate": "infrastructure",
         },
         {
             "method": "GET",

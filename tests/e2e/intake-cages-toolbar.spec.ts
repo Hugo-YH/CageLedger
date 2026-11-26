@@ -4,6 +4,8 @@ import type { PlacementWriteResponse, RoomWorkspace } from "../../src/contracts/
 import { captureUiAudit, contrastFromLayers } from "./uiAudit";
 import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry, test } from "./fixtures";
 
+const slotLabels = ".slot-code, .slot-iacuc, .slot-person, .slot-state, .slot-animal-meta";
+
 test.afterEach(async ({ page }) => {
   await page.request.delete(`/api/intake-batches/toolbar-intake-${page.viewportSize()!.width}`);
   await page.request.delete("/api/racks/rack-e2e-toolbar-2");
@@ -54,28 +56,30 @@ async function captureToolbar(page: Page, testInfo: TestInfo, name: string, tool
 
 async function inspectSlotContrast(page: Page, testInfo: TestInfo, name: string) {
   const slot = page.getByRole("button", { name: /8014-01-A1/ });
-  const samples = await slot.evaluate((root) =>
-    [...root.querySelectorAll<HTMLElement>(".slot-code, .slot-iacuc, .slot-person, .slot-date")]
-      .filter((element) => element.getClientRects().length && element.textContent?.trim())
-      .map((element) => {
-        const layers = [];
-        for (let current: HTMLElement | null = element; current; current = current.parentElement) {
-          const style = getComputedStyle(current);
-          layers.push({ color: style.color, background: style.backgroundColor, opacity: style.opacity });
-        }
-        return { text: element.textContent, layers };
-      }),
+  const samples = await slot.evaluate(
+    (root, selector) =>
+      [...root.querySelectorAll<HTMLElement>(selector)]
+        .filter((element) => element.getClientRects().length && element.textContent?.trim())
+        .map((element) => {
+          const layers = [];
+          for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+            const style = getComputedStyle(current);
+            layers.push({ color: style.color, background: style.backgroundColor, opacity: style.opacity });
+          }
+          return { text: element.textContent, layers };
+        }),
+    slotLabels,
   );
   expect(samples.length).toBeGreaterThan(0);
-  const bounds = await slot.evaluate((root) => {
+  const bounds = await slot.evaluate((root, selector) => {
     const cell = root.getBoundingClientRect();
-    return [...root.querySelectorAll<HTMLElement>(".slot-code, .slot-iacuc, .slot-person, .slot-date")]
+    return [...root.querySelectorAll<HTMLElement>(selector)]
       .filter((element) => element.getClientRects().length)
       .map((element) => {
         const rect = element.getBoundingClientRect();
         return { text: element.textContent, withinCell: rect.left >= cell.left && rect.right <= cell.right };
       });
-  });
+  }, slotLabels);
   for (const label of bounds) expect(label.withinCell, `${name}: ${label.text}`).toBe(true);
   const evidence = samples.map((sample) => ({ text: sample.text, contrast: contrastFromLayers(sample.layers) }));
   for (const sample of evidence) expect(sample.contrast, `${name}: ${sample.text}`).toBeGreaterThanOrEqual(4.5);
@@ -203,12 +207,9 @@ for (const viewport of [
     await cages.getByRole("button", { name: "批量编辑", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "批量编辑 2 个笼位", exact: true })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
-    await page.getByRole("combobox", { name: "笼架", exact: true }).click();
-    await page
-      .locator(".ant-select-dropdown")
-      .filter({ visible: true })
-      .getByText("工具栏第二笼架", { exact: true })
-      .click();
+    const roomMap = page.getByRole("region", { name: "房间笼架布局", exact: true });
+    await expect(roomMap.getByRole("button")).toHaveCount(2);
+    await roomMap.getByRole("button", { name: /^工具栏第二笼架/ }).click();
     await expect(cages).toContainText("已选 0 项");
     await expect(cages.getByRole("button", { name: "批量编辑", exact: true })).toBeDisabled();
     await page.getByRole("combobox", { name: "笼架", exact: true }).click();
@@ -327,7 +328,7 @@ for (const viewport of [
           await inspectSlotContrast(page, testInfo, `active-slot-${colorScheme}`);
         }
         for (const [tone, endDate] of [
-          ["normal", "2099-01-01"],
+          ["active", "2099-01-01"],
           ["overdue", "2000-02-01"],
         ]) {
           const item = (await room()).occupancies.find((entry) => entry.id === occupancyId)!;
@@ -338,7 +339,7 @@ for (const viewport of [
           expect(updated.ok()).toBe(true);
           await page.reload();
           const slot = page.getByRole("button", { name: /8014-01-A1/ });
-          await expect(slot).toHaveClass(new RegExp(`period-${tone}`));
+          await expect(slot).toHaveAttribute("data-cage-status", tone);
           for (const colorScheme of ["light", "dark"] as const) {
             await page.emulateMedia({ colorScheme });
             await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);

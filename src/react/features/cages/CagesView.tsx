@@ -1,20 +1,27 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Button, Select } from "antd";
+import { Alert, Button, Card, Flex, Select, Typography, theme } from "antd";
 
 import { useRooms, useRoomWorkspace } from "../../api/infrastructure";
+import type { SessionUser } from "../../api/contracts";
 import { cageCode, currentOccupancyIndex } from "../../../domain/cages";
+import { localToday } from "../../../domain/iacucValidity";
+import { arrangeRoomRacks } from "../../../domain/rackLayout";
 import { BatchSlotEditor, PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
-import { CageEmpty, CageLoading, Legend } from "./components/CageViewPrimitives";
+import { CageEmpty, CageLoading } from "./components/CageViewPrimitives";
+import { RoomRackLayoutEditor } from "./components/RoomRackLayoutEditor";
+import { RoomRackLegend, RoomRackMap } from "./components/RoomRackMap";
+import { roomProjectColors } from "./components/roomProjectColors";
 import { PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton, ListRefreshStatus, ModalPresence } from "../../components/ui";
 import { useReservePlacement } from "../../api/cages";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 
-export function CagesView() {
+export function CagesView({ user }: { user: SessionUser }) {
   const feedback = useOperationFeedback();
+  const { token } = theme.useToken();
   const summary = useRooms();
   const rooms = summary.data?.items || [];
   const [roomId, setRoomId] = useState("");
@@ -33,6 +40,7 @@ export function CagesView() {
   const [batchEditorOpen, setBatchEditorOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [reservationError, setReservationError] = useState("");
   const slots = useMemo(
@@ -42,6 +50,14 @@ export function CagesView() {
   const selectedSlot = slots.find((slot) => slot.id === selectedSlotId) || null;
   const occupancies = data?.occupancies || [];
   const occupancyBySlot = useMemo(() => currentOccupancyIndex(data?.occupancies || []), [data?.occupancies]);
+  const projectColors = useMemo(() => roomProjectColors(occupancyBySlot.values(), token), [occupancyBySlot, token]);
+  const placements = useMemo(
+    () => arrangeRoomRacks(racks, data?.rackLayout?.placements || []),
+    [racks, data?.rackLayout],
+  );
+  const today = localToday();
+  const mapData = { racks, slots: data?.slots || [], occupancyBySlot, projectColors, today };
+  const canEditLayout = user.role === "admin" || (user.role === "room_admin" && user.roomIds.includes(selectedRoomId));
   const selectedSlotIdSet = useMemo(() => new Set(selectedSlotIds), [selectedSlotIds]);
   const selectedSlots = useMemo(
     () => slots.filter((slot) => selectedSlotIdSet.has(slot.id)),
@@ -215,6 +231,7 @@ export function CagesView() {
                 onChange={(value) => {
                   setRoomId(value);
                   setRackId("");
+                  setLayoutEditorOpen(false);
                 }}
               />
             </label>
@@ -250,71 +267,103 @@ export function CagesView() {
         />
       ) : null}
       <div className="workspace-body cage-workspace-body">
-        <section className="cage-layout">
-          <div className="panel large cage-preview">
-            <div className="panel-head">
-              <div className="panel-title-line">
-                <h2>动态笼位图</h2>
-                <p>{slots.length} 个笼位</p>
-              </div>
+        <Flex vertical gap={16}>
+          {reservationError ? <Alert role="alert" type="error" showIcon title={reservationError} /> : null}
+          {notice ? (
+            <div className="react-inline-notice" role="status">
+              {notice}
             </div>
-            <div className="legend">
-              <Legend tone="empty" label="空" />
-              <Legend tone="reserved" label="已预约" />
-              <Legend tone="active" label="在用" />
-              <Legend tone="period-open" label="未填结束日期" />
-              <Legend tone="period-overdue" label="超期饲养" />
-            </div>
-            {reservationError ? <Alert role="alert" type="error" showIcon title={reservationError} /> : null}
-            {notice ? (
-              <div className="react-inline-notice" role="status">
-                {notice}
-              </div>
-            ) : null}
-            <ListRefreshStatus active={roomQuery.isFetching && Boolean(data)} />
-            {roomQuery.isError && data ? (
-              <Alert
-                type="error"
-                showIcon
-                title="笼位信息更新失败，暂显示上次结果"
-                action={
-                  <Button
-                    icon={<ActionIcon name="refresh" />}
-                    loading={roomQuery.isFetching}
-                    onClick={() => void roomQuery.refetch()}
-                  >
-                    重试
-                  </Button>
+          ) : null}
+          <ListRefreshStatus active={roomQuery.isFetching && Boolean(data)} />
+          {roomQuery.isError && data ? (
+            <Alert
+              type="error"
+              showIcon
+              title="笼位信息更新失败，暂显示上次结果"
+              action={
+                <Button
+                  icon={<ActionIcon name="refresh" />}
+                  loading={roomQuery.isFetching}
+                  onClick={() => void roomQuery.refetch()}
+                >
+                  重试
+                </Button>
+              }
+            />
+          ) : null}
+          {roomQuery.isPending ? (
+            <CageLoading />
+          ) : roomQuery.isError && !data ? (
+            <PageState
+              title="笼位信息加载失败"
+              detail="请重试加载当前饲养间。"
+              retry={() => void roomQuery.refetch()}
+            />
+          ) : (
+            <div className="cage-room-workbench">
+              <Card
+                className="cage-room-panel"
+                title={<h3 className="cage-room-panel-title">{selectedRoom?.name} · 房间布局</h3>}
+                extra={
+                  canEditLayout && racks.length ? (
+                    <ActionButton icon={<ActionIcon name="edit" />} onClick={() => setLayoutEditorOpen(true)}>
+                      编辑布局
+                    </ActionButton>
+                  ) : null
                 }
-              />
-            ) : null}
-            {roomQuery.isPending ? (
-              <CageLoading />
-            ) : roomQuery.isError && !data ? (
-              <PageState
-                title="笼位信息加载失败"
-                detail="请重试加载当前饲养间。"
-                retry={() => void roomQuery.refetch()}
-              />
-            ) : selectedRack ? (
-              <VirtualRack
-                rack={selectedRack}
-                roomName={selectedRoom?.name || ""}
-                roomSpecies={selectedRoom?.defaultSpecies || ""}
-                slots={slots}
-                occupancies={occupancies}
-                selectedSlotId={selectedSlotId}
-                selectedSlotIds={selectedSlotIds}
-                onSelect={selectSlot}
-              />
-            ) : (
-              <div className="empty-state">
-                <h3>当前房间尚未创建笼架</h3>
-              </div>
-            )}
-          </div>
-        </section>
+              >
+                <Flex vertical gap={16}>
+                  {racks.length ? (
+                    <Typography.Text type="secondary">{racks.length} 个笼架 · 选择笼架查看笼位</Typography.Text>
+                  ) : null}
+                  <RoomRackMap
+                    {...mapData}
+                    placements={placements}
+                    selectedRackId={selectedRack?.id}
+                    onSelect={setRackId}
+                  />
+                  {racks.length ? <RoomRackLegend colors={projectColors} /> : null}
+                </Flex>
+              </Card>
+              {selectedRack ? (
+                <Card
+                  className="cage-room-panel"
+                  title={<h3 className="cage-room-panel-title">{selectedRack.name} · 笼位</h3>}
+                  extra={<Typography.Text type="secondary">{slots.length} 个笼位</Typography.Text>}
+                >
+                  <VirtualRack
+                    key={selectedRack.id}
+                    rack={selectedRack}
+                    roomName={selectedRoom?.name || ""}
+                    roomSpecies={selectedRoom?.defaultSpecies || ""}
+                    slots={slots}
+                    occupancyBySlot={occupancyBySlot}
+                    projectColors={projectColors}
+                    today={today}
+                    selectedSlotId={selectedSlotId}
+                    selectedSlotIds={selectedSlotIds}
+                    onSelect={selectSlot}
+                  />
+                </Card>
+              ) : null}
+            </div>
+          )}
+        </Flex>
       </div>
+      <ModalPresence>
+        {layoutEditorOpen && canEditLayout && data ? (
+          <RoomRackLayoutEditor
+            key={selectedRoomId}
+            roomId={selectedRoomId}
+            roomName={selectedRoom?.name || ""}
+            updatedAt={data.rackLayout?.updatedAt || ""}
+            layout={placements}
+            mapData={mapData}
+            rackId={selectedRack?.id || ""}
+            onClose={() => setLayoutEditorOpen(false)}
+          />
+        ) : null}
+      </ModalPresence>
       <ModalPresence>
         {selectedSlot && selectedRack && !selectedTaskId ? (
           <SlotEditor

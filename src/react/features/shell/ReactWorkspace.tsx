@@ -479,7 +479,7 @@ function renderActiveView(
   if (view === "intake-batches") return <IntakeView mode="batches" user={user} navigate={navigate} />;
   if (view === "reception-list") return <ReceptionView />;
   if (view === "cage-card-scanner") return <ScannerView navigate={navigate} />;
-  if (view === "cages") return <CagesView />;
+  if (view === "cages") return <CagesView user={user} />;
   if (view === "animal-inspection-entry") return <AnimalManagementView mode="entry" user={user} navigate={navigate} />;
   if (view === "animal-inspection-findings")
     return <AnimalManagementView mode="findings" user={user} navigate={navigate} />;

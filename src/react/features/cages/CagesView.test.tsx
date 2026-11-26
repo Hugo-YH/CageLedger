@@ -1,8 +1,9 @@
 import type { ButtonHTMLAttributes, ComponentProps } from "react";
+import type * as Antd from "antd";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CageRack, CageSlot, PlacementTask } from "../../api/contracts";
+import type { CageRack, CageSlot, PlacementTask, SessionUser } from "../../api/contracts";
 import type { CommandBarProps } from "../../components/ui/CommandBar";
 import type { ModalShell } from "../../components/WorkspaceUi";
 import type * as CageWorkspaceComponents from "./components/CageWorkspaceComponents";
@@ -17,8 +18,19 @@ const operationFeedback = vi.hoisted(() => ({
   message: { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }));
 vi.mock("../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => operationFeedback }));
+vi.mock("../../hooks/useUnsavedChanges", () => ({ useUnsavedChanges: () => () => Promise.resolve(true) }));
 
 const { reserve, save, info } = vi.hoisted(() => ({ reserve: vi.fn(), save: vi.fn(), info: vi.fn() }));
+const user: SessionUser = {
+  id: "admin",
+  username: "admin",
+  displayName: "系统管理员",
+  phone: "",
+  active: true,
+  role: "admin",
+  roomIds: [],
+  updatedAt: "",
+};
 const rooms = [
   { id: "room-1", name: "房间一" },
   { id: "room-2", name: "房间二" },
@@ -63,20 +75,24 @@ vi.mock("../../api/cages", () => ({
   useRefreshCageRoom: () => () => Promise.resolve(),
   useMoveInPlacement: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
-vi.mock("antd", () => ({
+vi.mock("antd", async (importOriginal) => ({
+  ...(await importOriginal<typeof Antd>()),
   App: { useApp: () => ({ message: { info } }) },
   Button: (props: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />,
+  Typography: { Text: ({ children }: { children: React.ReactNode }) => <span>{children}</span> },
   Select: ({
     options,
     value,
     onChange,
+    loading,
     ...props
   }: {
     options: Array<{ label: string; value: string }>;
     value: string;
+    loading?: boolean;
     onChange: (value: string) => void;
   }) => (
-    <select {...props} value={value} onChange={(event) => onChange(event.target.value)}>
+    <select {...props} aria-busy={loading} value={value} onChange={(event) => onChange(event.target.value)}>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
@@ -84,7 +100,6 @@ vi.mock("antd", () => ({
       ))}
     </select>
   ),
-  Empty: () => null,
   Alert: ({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) => (
     <div role="alert">
       {title}
@@ -184,7 +199,7 @@ describe("cage workspace selection scope", () => {
   });
 
   it("clears multi-selection and the pending editor when changing racks", () => {
-    render(<CagesView />);
+    render(<CagesView user={user} />);
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
     fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
@@ -198,7 +213,7 @@ describe("cage workspace selection scope", () => {
   });
 
   it("clears single-selection and reservation targets when changing rooms or racks", () => {
-    render(<CagesView />);
+    render(<CagesView user={user} />);
     fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
     expect(screen.getByRole("dialog", { name: "编辑 slot-1" })).toBeInTheDocument();
     changeScope("房间", "room-2");
@@ -215,7 +230,7 @@ describe("cage workspace selection scope", () => {
   });
 
   it("can cancel a reservation before choosing a slot", () => {
-    render(<CagesView />);
+    render(<CagesView user={user} />);
     selectTask();
     expect(screen.getByRole("button", { name: "确认预留" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "取消预留" }));
@@ -231,7 +246,7 @@ describe("cage workspace selection scope", () => {
         finish = resolve;
       }),
     );
-    render(<CagesView />);
+    render(<CagesView user={user} />);
     selectTask();
     fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
     fireEvent.click(screen.getByRole("button", { name: "确认预留" }));
@@ -256,7 +271,7 @@ describe("cage workspace selection scope", () => {
         }),
       )
       .mockResolvedValue(undefined);
-    render(<CagesView />);
+    render(<CagesView user={user} />);
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
     fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
@@ -275,12 +290,12 @@ describe("cage workspace selection scope", () => {
   it("does not close a reopened batch editor when a previously closed job finishes in the same scope", async () => {
     let finish!: () => void;
     save.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve))).mockResolvedValue(undefined);
-    render(<CagesView />);
+    render(<CagesView user={user} />);
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
     fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "批量保存" }));
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "清空选择" }));
     fireEvent.click(screen.getByRole("button", { name: "slot-2" }));
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     await act(async () => {

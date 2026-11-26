@@ -1,15 +1,17 @@
-import { memo, useMemo, useRef } from "react";
+import { memo, useMemo, useRef, type CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { CageSlotButton } from "./CageSlotButton";
-import { today } from "./cageWorkspaceDate";
+import { cageProjectKey, type RoomProjectColor } from "./roomProjectColors";
 
 export const VirtualRack = memo(function VirtualRack({
   rack,
   roomName,
   roomSpecies,
   slots,
-  occupancies,
+  occupancyBySlot,
+  projectColors,
+  today,
   selectedSlotId,
   selectedSlotIds,
   onSelect,
@@ -18,67 +20,69 @@ export const VirtualRack = memo(function VirtualRack({
   roomName: string;
   roomSpecies: string;
   slots: CageSlot[];
-  occupancies: Occupancy[];
+  occupancyBySlot: ReadonlyMap<string, Occupancy>;
+  projectColors: ReadonlyMap<string, RoomProjectColor>;
+  today: string;
   selectedSlotId: string;
   selectedSlotIds: string[];
   onSelect: (slot: CageSlot) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { rows, slotsByRow } = useMemo(() => {
-    const nextSlotsByRow = new Map<number, CageSlot[]>();
+  const { rowCount, columnCount, slotsByRow } = useMemo(() => {
+    const slotsByRow = new Map<number, CageSlot[]>();
+    let rowCount = rack.rows;
+    let columnCount = rack.cols;
     for (const slot of slots) {
-      const rowSlots = nextSlotsByRow.get(slot.row);
+      rowCount = Math.max(rowCount, slot.row);
+      columnCount = Math.max(columnCount, slot.col);
+      const rowSlots = slotsByRow.get(slot.row);
       if (rowSlots) rowSlots.push(slot);
-      else nextSlotsByRow.set(slot.row, [slot]);
+      else slotsByRow.set(slot.row, [slot]);
     }
-    const nextRows = [...nextSlotsByRow.keys()].sort((a, b) => a - b);
-    for (const rowSlots of nextSlotsByRow.values()) rowSlots.sort((a, b) => a.col - b.col);
-    return { rows: nextRows, slotsByRow: nextSlotsByRow };
-  }, [slots]);
-  const occupancyBySlotId = useMemo(
-    () =>
-      new Map(
-        occupancies
-          .filter((item) => item.status === "active" || item.status === "reserved")
-          .map((item) => [item.slotId, item]),
-      ),
-    [occupancies],
-  );
+    for (const rowSlots of slotsByRow.values()) rowSlots.sort((a, b) => a.col - b.col);
+    return { rowCount, columnCount, slotsByRow };
+  }, [rack.rows, rack.cols, slots]);
   const selectedSlotIdSet = useMemo(() => new Set(selectedSlotIds), [selectedSlotIds]);
   const virtualizer = useVirtualizer({
-    count: rows.length,
+    count: slots.length ? rowCount : 0,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => (roomSpecies === "monkey" ? 144 : 128),
+    estimateSize: () => (roomSpecies === "monkey" ? 128 : 108),
+    gap: 8,
     overscan: 3,
   });
   return (
     <div className="react-rack-scroll" ref={scrollRef}>
-      <div className="react-rack-virtual" style={{ height: virtualizer.getTotalSize() }}>
+      <div
+        className="react-rack-virtual"
+        style={{ height: virtualizer.getTotalSize(), "--cage-rack-columns": Math.max(1, columnCount) } as CSSProperties}
+      >
         {virtualizer.getVirtualItems().map((virtualRow) => {
-          const row = rows[virtualRow.index];
-          const rowSlots = slotsByRow.get(row) || [];
+          const rowSlots = slotsByRow.get(virtualRow.index + 1) || [];
           return (
             <div
-              className={`react-rack-row ${roomSpecies === "monkey" ? "monkey-rack-row" : ""}`}
-              key={row}
-              style={{
-                transform: `translateY(${virtualRow.start}px)`,
-                gridTemplateColumns: `repeat(${rack.cols}, var(--cage-slot-size, 120px))`,
-              }}
+              className="react-rack-row"
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-              {rowSlots.map((slot) => (
-                <CageSlotButton
-                  key={slot.id}
-                  slot={slot}
-                  rack={rack}
-                  roomName={roomName}
-                  roomSpecies={roomSpecies}
-                  occupancy={occupancyBySlotId.get(slot.id) || null}
-                  selected={slot.id === selectedSlotId || selectedSlotIdSet.has(slot.id)}
-                  today={today}
-                  onSelect={onSelect}
-                />
-              ))}
+              {rowSlots.map((slot) => {
+                const occupancy = occupancyBySlot.get(slot.id) ?? null;
+                return (
+                  <CageSlotButton
+                    key={slot.id}
+                    slot={slot}
+                    rack={rack}
+                    roomName={roomName}
+                    roomSpecies={roomSpecies}
+                    occupancy={occupancy}
+                    projectFill={occupancy ? projectColors.get(cageProjectKey(occupancy.iacuc))?.fill : undefined}
+                    selected={slot.id === selectedSlotId || selectedSlotIdSet.has(slot.id)}
+                    today={today}
+                    onSelect={onSelect}
+                  />
+                );
+              })}
             </div>
           );
         })}

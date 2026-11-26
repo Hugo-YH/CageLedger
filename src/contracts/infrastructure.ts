@@ -39,6 +39,18 @@ export interface CageRack {
   cols: number;
 }
 
+export interface RackPlacement {
+  rackId: string;
+  column: number;
+  row: number;
+  rotation: 0 | 90;
+}
+
+export interface RoomRackLayout {
+  placements: RackPlacement[];
+  updatedAt: string;
+}
+
 export type CageSlotStatus = "empty" | "reserved" | "active";
 
 export interface CageSlot {
@@ -62,6 +74,7 @@ export interface Occupancy {
   feedingDays?: number | null;
   endDate: string;
   animalCount?: number | null;
+  species?: string;
   animalSex?: string;
   birthDate?: string;
   notes: string;
@@ -115,4 +128,5 @@ export interface RoomWorkspace {
   slots: CageSlot[];
   occupancies: Occupancy[];
   placementTasks: PlacementTask[];
+  rackLayout?: RoomRackLayout;
 }

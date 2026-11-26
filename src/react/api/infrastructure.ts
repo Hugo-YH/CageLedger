@@ -1,6 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
-import type { CageRoom, CageSlot, InfrastructureStructure, RoomWorkspace } from "./contracts";
-import { requestJson } from "./client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  CageRoom,
+  CageSlot,
+  InfrastructureStructure,
+  RackPlacement,
+  RoomRackLayout,
+  RoomWorkspace,
+} from "./contracts";
+import { ApiError, requestJson } from "./client";
 import { queryKeys } from "./queryKeys";
 import { useSession } from "./session";
 
@@ -41,6 +48,27 @@ export function useRoomWorkspace(roomId: string, view?: "cages") {
         { signal },
       ),
     enabled: actor.enabled && Boolean(roomId),
+  });
+}
+export function useSaveRoomRackLayout(roomId: string) {
+  const { scope } = useActorScope();
+  const client = useQueryClient();
+  const key = queryKeys.infrastructureCageRoom(scope, roomId);
+  return useMutation({
+    mutationFn: ({ placements, expectedUpdatedAt }: { placements: RackPlacement[]; expectedUpdatedAt: string }) =>
+      requestJson<RoomRackLayout>(`/api/infrastructure/rooms/${encodeURIComponent(roomId)}/rack-layout`, {
+        method: "PUT",
+        body: JSON.stringify({ placements, expectedUpdatedAt }),
+      }),
+    onSuccess: async (rackLayout) => {
+      await client.cancelQueries({ queryKey: key, exact: true });
+      client.setQueryData<RoomWorkspace>(key, (room) => (room ? { ...room, rackLayout } : room));
+      await client.invalidateQueries({ queryKey: key, exact: true });
+    },
+    onError: async (error) => {
+      if (error instanceof ApiError && error.status === 409)
+        await client.invalidateQueries({ queryKey: key, exact: true });
+    },
   });
 }
 export function useRackSlots(rackId: string) {

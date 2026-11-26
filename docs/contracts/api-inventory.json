@@ -28,6 +28,13 @@
       "audit": "system_features.updated记录管理员账号、显示变化及完整前后配置",
       "effects": "metadata_write"
     },
+    "rack_layout_write": {
+      "version": "expectedUpdatedAt 为必填字符串。首次保存使用空字符串，后续精确匹配版本。冲突返回409",
+      "idempotency": "成功保存生成新版本。旧版本重放返回冲突",
+      "transaction": "BEGIN IMMEDIATE 内校验布局版本、房间笼架和几何，同时保存布局及审计",
+      "audit": "rack_layout.updated 记录操作者、房间和布局前后值",
+      "effects": "metadata_write"
+    },
     "read": {
       "version": "不适用",
       "idempotency": "不适用",
@@ -334,12 +341,12 @@
     "server_app/web/animal_inspection.py": "b92761ddca49e7bddb3814234107473db180e1b0e12e79019699ac5eb3f30493",
     "server_app/web/settlement_candidates.py": "98e30330864a812c12ed8e5e0e6eecedb837a5efb6f620f7fdac74b56c9c3ae4",
     "server_app/web/intake_summary.py": "33eba7143c5f9be95dbf9c6fd0378ba4e1f8c8aa81dc204f47d632f1e2ed2eb8",
-    "server_app/web/infrastructure.py": "d13e701b3ecc0347c8dc2d53634f1f8ae52f7b3bae26a5a264ce5f262c5c3e67",
+    "server_app/web/infrastructure.py": "d8ced05b2be243d0a877554431f6bcf25fb0983bec1383fc4eab05b4f7d8ab57",
     "server_app/web/pdf_exports.py": "a7731788d5923e577c6c75c229001faee29b30ec1e46d8ebc412df37c1de54a9",
     "server_app/domains/reception/certificate_routes.py": "e3bc9ee3e3e496fb72b26ccaae517d862d2b93ac0bcc4a0d846bb86499160607",
     "server_app/repositories/filter_options.py": "b5a05b279918d936dd7f9c99816a2f123da4fd0cb5e68199f137c2f270901774",
     "server_app/web/route_definitions/__init__.py": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    "server_app/web/route_definitions/operations.py": "92ac8da3c37c2ef9284e7e6554b5170f5b2732cd7c4ca9906af92baf6a1ef0e5",
+    "server_app/web/route_definitions/operations.py": "9512452503f76f374d4742e17cb6bb28e9012cafacc0ffe8b19441b502c65502",
     "server_app/web/route_definitions/platform.py": "6746910f672f9bbf86672a0737630e278cba79a82c664481b21dbd7c7f6b8653",
     "server_app/web/route_definitions/settlement.py": "6204780e4c4b085d94dc6168f670793f7f284da27dc6eab540c1fce3b83d22ed",
     "server_app/web/route_definitions/support.py": "da3848715fadefeec17cce2ade3a3824dde449e7ab68221620a7e29927f4c5ba"
@@ -851,9 +858,18 @@
           "path": "/api/infrastructure/rooms/{id}",
           "purpose": "当前授权房间工作数据",
           "request": "id；可选view=cages只读当前占用与待进驻任务",
-          "response": "{rooms,racks,slots,occupancies,placementTasks}；默认完整房间历史，cages仅active/reserved占用及非active/cancelled任务，字段与排序不变",
+          "response": "默认 {rooms,racks,slots,occupancies,placementTasks}。cages 只返回当前占用和待进驻任务，并附 {rackLayout:{placements,updatedAt}}",
           "permission": "login",
           "protection": "read"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/infrastructure/rooms/{id}/rack-layout",
+          "purpose": "保存当前授权饲养间的笼架布局",
+          "request": "{placements:[{rackId,column,row,rotation}],expectedUpdatedAt:string}",
+          "response": "{placements,updatedAt}",
+          "permission": "entity",
+          "protection": "rack_layout_write"
         },
         {
           "method": "GET",

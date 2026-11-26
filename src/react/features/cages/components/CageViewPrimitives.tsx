@@ -1,14 +1,5 @@
 import { PageSkeleton } from "../../../components/WorkspaceUi";
 
-export function Legend({ tone, label }: { tone: string; label: string }) {
-  return (
-    <span className="legend-item">
-      <i className={`status-dot ${tone}`} />
-      {label}
-    </span>
-  );
-}
-
 export function CageLoading() {
   return <PageSkeleton label="笼位信息" rows={6} variant="detail" />;
 }

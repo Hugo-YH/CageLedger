@@ -43,6 +43,19 @@ export function occupancyPeriodTone(occupancy: Occupancy | null, today: string) 
   return today > occupancy.endDate ? "overdue" : "normal";
 }
 
+export const cageStatusLabels = {
+  empty: "空位",
+  active: "在用",
+  reserved: "已预留",
+  open: "未填结束日期",
+  overdue: "超期",
+} as const;
+
+export function cageDisplayStatus(slot: CageSlot, occupancy: Occupancy | null, today: string) {
+  const period = occupancyPeriodTone(occupancy, today);
+  return period === "open" || period === "overdue" ? period : slot.status;
+}
+
 export function animalAgeText(birthDate: string | undefined, referenceDate: string) {
   if (!birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return "";
   const birth = parseDateParts(birthDate);
