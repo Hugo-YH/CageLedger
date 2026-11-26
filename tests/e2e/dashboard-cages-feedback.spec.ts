@@ -118,6 +118,7 @@ test("cage request failures provide retry and retain an open editor during backg
   await expect(page.getByText("当前房间尚未创建笼架", { exact: true })).toBeHidden();
   fail = false;
   await page.getByRole("button", { name: "重新加载", exact: true }).click();
+  await page.getByRole("region", { name: "房间笼架布局", exact: true }).getByRole("button").first().click();
   const slot = page.locator(".react-rack-scroll .slot").first();
   await expect(slot).toBeVisible();
   fail = true;

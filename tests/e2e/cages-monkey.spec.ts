@@ -51,6 +51,10 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   await expect(
     page.locator("#cages-room-select").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
   ).toContainText("E2E 猴房");
+  const rack = page
+    .getByRole("region", { name: "房间笼架布局", exact: true })
+    .getByRole("button", { name: /^猴房 01 号笼架/ });
+  await rack.click();
   await page.getByRole("button", { name: /E2E 猴房-01-A1/ }).click();
   await expect(page.getByRole("group", { name: "猴个体信息", exact: true })).toBeVisible();
   await selectAntOptionByKeyboard(page, page.getByRole("combobox", { name: "性别", exact: true }), 2);
@@ -162,6 +166,7 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   await page.reload();
   await page.locator("#cages-room-select").click();
   await page.locator(".ant-select-dropdown").filter({ visible: true }).getByText("E2E 猴房", { exact: true }).click();
+  await rack.click();
   await expect(page.getByRole("button", { name: /E2E 猴房-01-B1/ })).toContainText("雌");
   const beforeBatch = await (await page.request.get("/api/infrastructure/rooms/room-e2e-monkey?view=cages")).json();
   const versions = new Map(

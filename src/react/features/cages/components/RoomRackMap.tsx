@@ -41,7 +41,7 @@ export function RoomRackMap({
 }: RoomRackMapData & {
   placements: readonly RackPlacement[];
   selectedRackId?: string;
-  onSelect: (rackId: string) => void;
+  onSelect: (rackId: string, trigger?: HTMLElement) => void;
   onMove?: (placement: RackPlacement) => void;
   disabled?: boolean;
 }) {
@@ -133,7 +133,7 @@ export function RoomRackMap({
                 aria-pressed={selectedRackId === rack.id}
                 disabled={disabled}
                 style={placementStyle(placement, columns, rows)}
-                onClick={() => onSelect(rack.id)}
+                onClick={(event) => onSelect(rack.id, event.currentTarget)}
                 onPointerDown={(event) => startDrag(event, placement)}
                 onPointerMove={updateDrag}
                 onPointerUp={finishDrag}
@@ -195,7 +195,7 @@ export function RoomRackMap({
           {racks
             .filter((rack) => !placementsByRack.has(rack.id))
             .map((rack) => (
-              <Button key={rack.id} size="small" onClick={() => onSelect(rack.id)}>
+              <Button key={rack.id} size="small" onClick={(event) => onSelect(rack.id, event.currentTarget)}>
                 {rack.name}
               </Button>
             ))}

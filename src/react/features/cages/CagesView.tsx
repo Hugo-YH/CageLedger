@@ -1,6 +1,6 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Flex, Select, Typography, theme } from "antd";
 
 import { useRooms, useRoomWorkspace } from "../../api/infrastructure";
@@ -8,10 +8,11 @@ import type { SessionUser } from "../../api/contracts";
 import { cageCode, currentOccupancyIndex } from "../../../domain/cages";
 import { localToday } from "../../../domain/iacucValidity";
 import { arrangeRoomRacks } from "../../../domain/rackLayout";
-import { BatchSlotEditor, PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
+import { BatchSlotEditor, PlacementDrawer, SlotEditor } from "./components/CageWorkspaceComponents";
 import { CageEmpty, CageLoading } from "./components/CageViewPrimitives";
 import { RoomRackLayoutEditor } from "./components/RoomRackLayoutEditor";
 import { RoomRackLegend, RoomRackMap } from "./components/RoomRackMap";
+import { RoomRackDetails } from "./components/RoomRackDetails";
 import { roomProjectColors } from "./components/roomProjectColors";
 import { PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
 import { ActionButton, ListRefreshStatus, ModalPresence } from "../../components/ui";
@@ -34,6 +35,8 @@ export function CagesView({ user }: { user: SessionUser }) {
   );
   const [rackId, setRackId] = useState("");
   const selectedRack = racks.find((rack) => rack.id === rackId) || racks[0];
+  const [rackDetails, setRackDetails] = useState<{ rackId: string; focusOnOpen: boolean } | null>(null);
+  const rackDetailsTrigger = useRef<HTMLElement | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [selectedSlotIds, setSelectedSlotIds] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
@@ -86,6 +89,20 @@ export function CagesView({ user }: { user: SessionUser }) {
   const scopeOperations = useLatestRequest();
   const selectedTask = tasks.find((task) => task.id === selectedTaskId);
   const selectedCount = batchMode ? selectedSlotIds.length : Number(Boolean(selectedSlot));
+
+  function showRackDetails(id = selectedRack?.id, trigger: HTMLElement | null = null, focusOnOpen = true) {
+    if (!id || id === rackDetails?.rackId) return;
+    rackDetailsTrigger.current = trigger;
+    setRackId(id);
+    setRackDetails({ rackId: id, focusOnOpen });
+  }
+
+  const closeRackDetails = useCallback(() => {
+    setRackDetails(null);
+    const trigger = rackDetailsTrigger.current;
+    (trigger?.isConnected ? trigger : document.getElementById("cages-rack-select"))?.focus();
+    rackDetailsTrigger.current = null;
+  }, []);
 
   function clearSelection() {
     scopeOperations.invalidate();
@@ -178,9 +195,10 @@ export function CagesView({ user }: { user: SessionUser }) {
               <ActionButton
                 icon={<ActionIcon name={batchMode ? "clear" : "select"} />}
                 aria-pressed={batchMode}
-                onClick={() => {
+                onClick={(event) => {
                   clearSelection();
                   setBatchMode((value) => !value);
+                  if (!batchMode) showRackDetails(undefined, event.currentTarget);
                 }}
               >
                 {batchMode ? "退出多选" : "多选录入"}
@@ -190,7 +208,10 @@ export function CagesView({ user }: { user: SessionUser }) {
               <Button
                 icon={<ActionIcon name="select" />}
                 disabled={!slots.length || roomQuery.isFetching}
-                onClick={() => setSelectedSlotIds(slots.map((slot) => slot.id))}
+                onClick={(event) => {
+                  showRackDetails(undefined, event.currentTarget);
+                  setSelectedSlotIds(slots.map((slot) => slot.id));
+                }}
               >
                 全选当前
               </Button>
@@ -231,6 +252,7 @@ export function CagesView({ user }: { user: SessionUser }) {
                 onChange={(value) => {
                   setRoomId(value);
                   setRackId("");
+                  setRackDetails(null);
                   setLayoutEditorOpen(false);
                 }}
               />
@@ -244,7 +266,7 @@ export function CagesView({ user }: { user: SessionUser }) {
                 id="cages-rack-select"
                 options={racks.map((rack) => ({ label: rack.name, value: rack.id }))}
                 value={selectedRack?.id || ""}
-                onChange={setRackId}
+                onSelect={(id) => showRackDetails(id, document.getElementById("cages-rack-select"))}
               />
             </label>
           </>
@@ -316,36 +338,36 @@ export function CagesView({ user }: { user: SessionUser }) {
                   {racks.length ? (
                     <Typography.Text type="secondary">{racks.length} 个笼架 · 选择笼架查看笼位</Typography.Text>
                   ) : null}
-                  <RoomRackMap
-                    {...mapData}
-                    placements={placements}
-                    selectedRackId={selectedRack?.id}
-                    onSelect={setRackId}
-                  />
+                  <div className="cage-room-map-stage">
+                    <div className="cage-room-map-base">
+                      <RoomRackMap
+                        {...mapData}
+                        placements={placements}
+                        selectedRackId={rackDetails?.rackId}
+                        onSelect={showRackDetails}
+                      />
+                    </div>
+                    {selectedRack && rackDetails?.rackId === selectedRack.id ? (
+                      <RoomRackDetails
+                        key={selectedRack.id}
+                        rack={selectedRack}
+                        roomName={selectedRoom?.name || ""}
+                        roomSpecies={selectedRoom?.defaultSpecies || ""}
+                        slots={slots}
+                        occupancyBySlot={occupancyBySlot}
+                        projectColors={projectColors}
+                        today={today}
+                        selectedSlotId={selectedSlotId}
+                        selectedSlotIds={selectedSlotIds}
+                        onSelect={selectSlot}
+                        onClose={closeRackDetails}
+                        focusOnOpen={rackDetails.focusOnOpen}
+                      />
+                    ) : null}
+                  </div>
                   {racks.length ? <RoomRackLegend colors={projectColors} /> : null}
                 </Flex>
               </Card>
-              {selectedRack ? (
-                <Card
-                  className="cage-room-panel"
-                  title={<h3 className="cage-room-panel-title">{selectedRack.name} · 笼位</h3>}
-                  extra={<Typography.Text type="secondary">{slots.length} 个笼位</Typography.Text>}
-                >
-                  <VirtualRack
-                    key={selectedRack.id}
-                    rack={selectedRack}
-                    roomName={selectedRoom?.name || ""}
-                    roomSpecies={selectedRoom?.defaultSpecies || ""}
-                    slots={slots}
-                    occupancyBySlot={occupancyBySlot}
-                    projectColors={projectColors}
-                    today={today}
-                    selectedSlotId={selectedSlotId}
-                    selectedSlotIds={selectedSlotIds}
-                    onSelect={selectSlot}
-                  />
-                </Card>
-              ) : null}
             </div>
           )}
         </Flex>
@@ -414,6 +436,7 @@ export function CagesView({ user }: { user: SessionUser }) {
               setBatchMode(false);
               setSelectedTaskId(task.id);
               setTasksOpen(false);
+              showRackDetails(selectedRack?.id, null, false);
               setNotice("已选择待进驻任务，请在笼位图中选择空笼位。");
             }}
             onClose={() => setTasksOpen(false)}

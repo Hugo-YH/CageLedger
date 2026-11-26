@@ -84,15 +84,22 @@ vi.mock("antd", async (importOriginal) => ({
     options,
     value,
     onChange,
+    onSelect,
     loading,
     ...props
   }: {
     options: Array<{ label: string; value: string }>;
     value: string;
     loading?: boolean;
-    onChange: (value: string) => void;
+    onChange?: (value: string) => void;
+    onSelect?: (value: string) => void;
   }) => (
-    <select {...props} aria-busy={loading} value={value} onChange={(event) => onChange(event.target.value)}>
+    <select
+      {...props}
+      aria-busy={loading}
+      value={value}
+      onChange={(event) => (onChange ?? onSelect)?.(event.target.value)}
+    >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
@@ -214,6 +221,9 @@ describe("cage workspace selection scope", () => {
 
   it("clears single-selection and reservation targets when changing rooms or racks", () => {
     render(<CagesView user={user} />);
+    expect(screen.queryByRole("region", { name: "笼架一 笼位详情" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^笼架一，/ }));
+    expect(screen.getByRole("region", { name: "笼架一 笼位详情" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
     expect(screen.getByRole("dialog", { name: "编辑 slot-1" })).toBeInTheDocument();
     changeScope("房间", "room-2");

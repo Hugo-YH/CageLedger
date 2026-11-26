@@ -37,9 +37,6 @@
 }
 
 .react-cage-view .react-rack-scroll {
-  --cage-slot-size: 148px;
-  --cage-slot-gap: 8px;
-
   min-inline-size: 0;
   max-block-size: min(64dvh, 700px);
   overflow: auto;
@@ -229,21 +226,36 @@
   }
 }
 
-[data-feature="cages"] .cage-workspace-body {
-  container-type: inline-size;
-}
+[data-feature="cages"] .cage-room-map-stage {
+  --cage-slot-size: 148px;
+  --cage-slot-gap: 8px;
 
-[data-feature="cages"] .cage-room-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
   align-items: start;
+  isolation: isolate;
 }
 
-@container (min-width: 920px) {
-  [data-feature="cages"] .cage-room-workbench {
-    grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
-  }
+[data-feature="cages"] :is(.cage-room-map-base, .cage-rack-detail) {
+  grid-area: 1 / 1;
+  min-inline-size: 0;
+}
+
+[data-feature="cages"] .cage-rack-detail {
+  z-index: var(--z-raised);
+  justify-self: center;
+  inline-size: min(
+    calc(100% - var(--space-2)),
+    clamp(320px, calc(var(--cage-rack-detail-columns) * (var(--cage-slot-size) + var(--cage-slot-gap)) + 56px), 880px)
+  );
+  margin-block: var(--space-2);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-pop);
+}
+
+[data-feature="cages"] .cage-rack-detail:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 [data-feature="cages"] .cage-room-panel {
@@ -276,8 +288,9 @@
 
 [data-feature="cages"] .cage-room-map {
   --rack-grid-size: clamp(26px, calc(100cqi / var(--rack-map-columns)), 44px);
-  --rack-grid-line: linear-gradient(to right, var(--line) 1px, transparent 1px);
-  --rack-grid-row: linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  --rack-grid-stroke: color-mix(in srgb, var(--line) var(--rack-grid-strength, 36%), transparent);
+  --rack-grid-line: linear-gradient(to right, var(--rack-grid-stroke) 1px, transparent 1px);
+  --rack-grid-row: linear-gradient(to bottom, var(--rack-grid-stroke) 1px, transparent 1px);
 
   position: relative;
   inline-size: calc(var(--rack-map-columns) * var(--rack-grid-size));
@@ -405,8 +418,13 @@
   text-overflow: ellipsis;
 }
 
+[data-feature="cages"].cage-room-layout-editor {
+  --rack-grid-strength: 55%;
+}
+
 @media (width < 768px) {
-  [data-feature="cages"].cage-room-layout-editor button:not(.cage-room-rack) {
+  [data-feature="cages"].cage-room-layout-editor button:not(.cage-room-rack),
+  [data-feature="cages"] .cage-rack-detail-close {
     min-inline-size: 44px;
     min-block-size: 44px;
   }

@@ -34,6 +34,10 @@ test("login and open the main business workspaces", async ({ page }) => {
     page.locator("#intake-room").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
   ).toContainText("8014");
   await page.getByRole("menuitem", { name: /二维码扫描/ }).click();
+  await page
+    .getByRole("dialog", { name: "离开并放弃未保存的修改？", exact: true })
+    .getByRole("button", { name: "放弃修改并离开", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: "识别笼卡", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "启动摄像头", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "返回笼卡管理", exact: true }).click();
@@ -46,6 +50,10 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(
     page.locator("#cages-rack-select").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
   ).toContainText("8014 01 号笼架");
+  await page
+    .getByRole("region", { name: "房间笼架布局", exact: true })
+    .getByRole("button", { name: /^8014 01 号笼架/ })
+    .click();
   await page.getByRole("button", { name: /8014-01-A1/ }).click();
   await expect(page.getByRole("heading", { name: /编辑笼位 8014-01-A1/ })).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).click();

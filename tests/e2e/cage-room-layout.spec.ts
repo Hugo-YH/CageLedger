@@ -62,19 +62,69 @@ test("room map keeps project colors across racks and saves the edited floor plan
   const map = page.getByRole("region", { name: "房间笼架布局" });
   const firstRack = map.getByRole("button", { name: /^测试笼架 1/ });
   const secondRack = map.getByRole("button", { name: /^测试笼架 2/ });
-  const firstSlot = page.getByRole("button", { name: new RegExp(`${roomName}-01-A1`) });
-  const secondSlot = page.getByRole("button", { name: new RegExp(`${roomName}-02-A1`) });
-  const thirdSlot = page.getByRole("button", { name: new RegExp(`${roomName}-02-B1`) });
+  const firstDetail = page.getByRole("region", { name: "测试笼架 1 笼位详情", exact: true });
+  const secondDetail = page.getByRole("region", { name: "测试笼架 2 笼位详情", exact: true });
+  const closeFirst = firstDetail.getByRole("button", { name: "关闭笼位详情", exact: true });
+  const closeSecond = secondDetail.getByRole("button", { name: "关闭笼位详情", exact: true });
+  const firstSlot = firstDetail.getByRole("button", { name: new RegExp(`${roomName}-01-A1`) });
+  const secondSlot = secondDetail.getByRole("button", { name: new RegExp(`${roomName}-02-A1`) });
+  const thirdSlot = secondDetail.getByRole("button", { name: new RegExp(`${roomName}-02-B1`) });
   const fill = (cell: typeof firstSlot) => cell.evaluate((element) => getComputedStyle(element).backgroundColor);
-  await expect(firstRack).toHaveAttribute("aria-pressed", "true");
-  await expect(firstSlot).toContainText("Z2026001");
-  await expect(firstSlot).toContainText("乙实验员");
-  await expect(firstSlot).toContainText(/小鼠.*3/);
+  await expect(page.getByRole("region", { name: /笼位详情$/ })).toBeHidden();
+  await expect(firstRack).toHaveAttribute("aria-pressed", "false");
+  await expect(secondRack).toHaveAttribute("aria-pressed", "false");
+
+  for (const [width, height] of [
+    [1440, 900],
+    [1180, 900],
+    [760, 900],
+    [844, 390],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await firstRack.click();
+    await expect(firstDetail).toBeVisible();
+    await expect(firstRack).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() =>
+        firstDetail.evaluate((detail) => {
+          const map = document.querySelector('[aria-label="房间笼架布局"]')!;
+          const floor = map.getBoundingClientRect();
+          const overlay = detail.getBoundingClientRect();
+          const left = Math.max(0, floor.left, overlay.left);
+          const top = Math.max(0, floor.top, overlay.top);
+          const right = Math.min(innerWidth, floor.right, overlay.right);
+          const bottom = Math.min(innerHeight, floor.bottom, overlay.bottom);
+          if (left >= right || top >= bottom) return false;
+          return detail.contains(document.elementFromPoint((left + right) / 2, (top + bottom) / 2));
+        }),
+      )
+      .toBe(true);
+    await expect(firstSlot).toContainText("Z2026001");
+    await expect(firstSlot).toContainText("乙实验员");
+    await expect(firstSlot).toContainText(/小鼠.*3/);
+    if (height < 500) {
+      await page.screenshot({ path: testInfo.outputPath("room-layout-overlay-landscape.png"), animations: "disabled" });
+    }
+    if (width === 1440) await closeFirst.press("Escape");
+    else await closeFirst.click();
+    await expect(firstDetail).toBeHidden();
+    await expect(firstRack).toBeFocused();
+    await expect(firstRack).toHaveAttribute("aria-pressed", "false");
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const rackSelect = page.getByRole("combobox", { name: "笼架", exact: true });
+  await rackSelect.click();
+  await page.locator(".ant-select-dropdown").filter({ visible: true }).getByText("测试笼架 1", { exact: true }).click();
+  await expect(firstDetail).toBeVisible();
+  await closeFirst.click();
+  await expect(rackSelect).toBeFocused();
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     await firstRack.click();
     const firstColor = await fill(firstSlot);
+    await closeFirst.click();
     await secondRack.click();
     await expect(secondRack).toHaveAttribute("aria-pressed", "true");
     await expect(secondSlot).toHaveAttribute("data-cage-status", "overdue");
@@ -82,9 +132,11 @@ test("room map keeps project colors across racks and saves the edited floor plan
     expect(await fill(secondSlot)).toBe(firstColor);
     expect(await fill(thirdSlot)).not.toBe(firstColor);
     await captureUiAudit(page, testInfo, `room-layout-${theme}`, page.locator(".cage-room-workbench"));
+    await closeSecond.click();
   }
 
   await firstRack.click();
+  await closeFirst.click();
   const edit = page.getByRole("button", { name: "编辑布局" });
   await edit.click();
   const dialog = page.getByRole("dialog", { name: "编辑笼架布局" });
@@ -117,4 +169,5 @@ test("room map keeps project colors across racks and saves the edited floor plan
   await chooseRoom(page);
   await expect(firstRack).toHaveAttribute("data-rotation", "90");
   await expect(secondRack).toBeVisible();
+  await expect(page.getByRole("region", { name: /笼位详情$/ })).toBeHidden();
 });
