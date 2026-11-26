@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ComponentProps } from "react";
 import type * as Antd from "antd";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CageRack, CageSlot, PlacementTask, SessionUser } from "../../api/contracts";
@@ -190,8 +190,17 @@ vi.mock("./components/CageWorkspaceComponents", async (importOriginal) => ({
   ),
 }));
 
-function changeScope(label: string, value: string) {
-  fireEvent.change(screen.getByRole("combobox", { name: label }), { target: { value } });
+function changeRoom(value: string) {
+  fireEvent.change(screen.getByRole("combobox", { name: "房间" }), { target: { value } });
+}
+
+function chooseRack(name: string) {
+  const map = screen.getByRole("region", { name: "房间笼架布局" });
+  fireEvent.click(within(map).getByRole("button", { name: new RegExp(`^${name}，`) }));
+}
+
+function closeRack() {
+  fireEvent.click(screen.getByRole("button", { name: "关闭笼位详情" }));
 }
 
 function selectTask() {
@@ -207,35 +216,53 @@ describe("cage workspace selection scope", () => {
 
   it("clears multi-selection and the pending editor when changing racks", () => {
     render(<CagesView user={user} />);
+    expect(screen.queryByRole("combobox", { name: "笼架" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
-    fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
+    const selectAll = screen.getByRole("button", { name: "全选当前" });
+    expect(selectAll).toBeDisabled();
+    expect(screen.queryByRole("region", { name: /笼位详情$/ })).not.toBeInTheDocument();
+    chooseRack("笼架一");
+    expect(selectAll).toBeEnabled();
+    fireEvent.click(selectAll);
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     expect(screen.getByRole("dialog", { name: "批量编辑 2 个笼位" })).toBeInTheDocument();
-    changeScope("笼架", "rack-2");
+    closeRack();
+    chooseRack("笼架二");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("已选 0 项")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "批量编辑" })).toBeDisabled();
     expect(operationFeedback.message.info).toHaveBeenCalledOnce();
   });
 
-  it("clears single-selection and reservation targets when changing rooms or racks", () => {
+  it("clears the selected slot across racks and keeps the placement task within its room", () => {
     render(<CagesView user={user} />);
     expect(screen.queryByRole("region", { name: "笼架一 笼位详情" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^笼架一，/ }));
+    chooseRack("笼架一");
     expect(screen.getByRole("region", { name: "笼架一 笼位详情" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
     expect(screen.getByRole("dialog", { name: "编辑 slot-1" })).toBeInTheDocument();
-    changeScope("房间", "room-2");
+    changeRoom("room-2");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(operationFeedback.message.info).toHaveBeenCalledOnce();
-    changeScope("房间", "room-1");
+    changeRoom("room-1");
     selectTask();
+    const confirm = screen.getByRole("button", { name: "确认预留" });
+    expect(confirm).toBeDisabled();
+    expect(screen.queryByRole("region", { name: /笼位详情$/ })).not.toBeInTheDocument();
+    chooseRack("笼架一");
     fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
-    expect(screen.getByRole("button", { name: "确认预留" })).toBeEnabled();
-    changeScope("笼架", "rack-2");
-    expect(screen.queryByRole("button", { name: "确认预留" })).not.toBeInTheDocument();
+    expect(confirm).toBeEnabled();
+    closeRack();
+    chooseRack("笼架二");
+    expect(confirm).toBeDisabled();
+    expect(screen.getByRole("button", { name: "取消预留" })).toBeInTheDocument();
     expect(screen.getByText("已选 0 项")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "slot-3" }));
+    expect(confirm).toBeEnabled();
+    changeRoom("room-2");
+    expect(screen.queryByRole("button", { name: "确认预留" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /笼位详情$/ })).not.toBeInTheDocument();
     expect(reserve).not.toHaveBeenCalled();
   });
 
@@ -258,10 +285,13 @@ describe("cage workspace selection scope", () => {
     );
     render(<CagesView user={user} />);
     selectTask();
+    chooseRack("笼架一");
     fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
     fireEvent.click(screen.getByRole("button", { name: "确认预留" }));
     expect(reserve).toHaveBeenCalledWith({ taskId: "task-1", slotId: "slot-1" });
-    changeScope("笼架", "rack-2");
+    closeRack();
+    chooseRack("笼架二");
+    fireEvent.click(screen.getByRole("button", { name: "取消预留" }));
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
     fireEvent.click(screen.getByRole("button", { name: "slot-3" }));
     await act(async () => {
@@ -283,10 +313,12 @@ describe("cage workspace selection scope", () => {
       .mockResolvedValue(undefined);
     render(<CagesView user={user} />);
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
+    chooseRack("笼架一");
     fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "批量保存" }));
-    changeScope("笼架", "rack-2");
+    closeRack();
+    chooseRack("笼架二");
     fireEvent.click(screen.getByRole("button", { name: "slot-3" }));
     await act(async () => {
       finish();
@@ -302,6 +334,7 @@ describe("cage workspace selection scope", () => {
     save.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve))).mockResolvedValue(undefined);
     render(<CagesView user={user} />);
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
+    chooseRack("笼架一");
     fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "批量保存" }));

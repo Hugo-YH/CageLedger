@@ -6,16 +6,15 @@ import { VirtualRack } from "./CageWorkspaceComponents";
 
 export function RoomRackDetails({
   onClose,
-  focusOnOpen,
   ...rackProps
-}: ComponentProps<typeof VirtualRack> & { onClose: () => void; focusOnOpen: boolean }) {
+}: ComponentProps<typeof VirtualRack> & { onClose: () => void }) {
   const panel = useRef<HTMLElement>(null);
   const { token } = theme.useToken();
   const { rack, slots } = rackProps;
 
   useEffect(() => {
-    if (focusOnOpen) panel.current?.focus();
-  }, [focusOnOpen]);
+    panel.current?.focus();
+  }, []);
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {

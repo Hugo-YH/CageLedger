@@ -226,6 +226,23 @@
   }
 }
 
+[data-feature="cages"].cage-workspace {
+  gap: var(--space-2);
+}
+
+[data-feature="cages"] .cage-room-heading {
+  padding-block: var(--space-1);
+}
+
+[data-feature="cages"] .cage-room-select {
+  inline-size: clamp(112px, 20vw, 196px);
+  max-inline-size: 100%;
+}
+
+[data-feature="cages"] .cage-room-zoom {
+  margin-inline-start: auto;
+}
+
 [data-feature="cages"] .cage-room-map-stage {
   --cage-slot-size: 148px;
   --cage-slot-gap: 8px;
@@ -239,6 +256,11 @@
 [data-feature="cages"] :is(.cage-room-map-base, .cage-rack-detail) {
   grid-area: 1 / 1;
   min-inline-size: 0;
+}
+
+[data-feature="cages"] .cage-room-map-base,
+[data-feature="cages"].cage-room-layout-editor {
+  container-type: inline-size;
 }
 
 [data-feature="cages"] .cage-rack-detail {
@@ -272,9 +294,12 @@
 }
 
 [data-feature="cages"] .cage-room-map-scroll {
-  container-type: inline-size;
-  min-inline-size: 0;
-  max-block-size: min(52vh, 528px);
+  --rack-map-view-height: min(54dvh, 520px);
+
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  max-block-size: var(--rack-map-view-height);
+  margin-inline: auto;
   overflow: auto;
   background: var(--surface-soft);
   border: 1px solid var(--line);
@@ -287,7 +312,11 @@
 }
 
 [data-feature="cages"] .cage-room-map {
-  --rack-grid-size: clamp(26px, calc(100cqi / var(--rack-map-columns)), 44px);
+  --rack-grid-fit: min(
+    calc((100cqi - 2px) / var(--rack-map-columns)),
+    calc((var(--rack-map-view-height) - 2px) / var(--rack-map-rows))
+  );
+  --rack-grid-size: calc(clamp(26px, var(--rack-grid-fit), 104px) * var(--rack-map-zoom));
   --rack-grid-stroke: color-mix(in srgb, var(--line) var(--rack-grid-strength, 36%), transparent);
   --rack-grid-line: linear-gradient(to right, var(--rack-grid-stroke) 1px, transparent 1px);
   --rack-grid-row: linear-gradient(to bottom, var(--rack-grid-stroke) 1px, transparent 1px);
@@ -299,6 +328,10 @@
   overflow: hidden;
   background-image: var(--rack-grid-line), var(--rack-grid-row);
   background-size: var(--rack-grid-size) var(--rack-grid-size);
+}
+
+[data-feature="cages"] .cage-room-map[data-editable="true"] {
+  --rack-grid-size: clamp(26px, calc(100cqi / var(--rack-map-columns)), 44px);
 }
 
 [data-feature="cages"] .cage-room-rack {
@@ -422,9 +455,15 @@
   --rack-grid-strength: 55%;
 }
 
+[data-feature="cages"].cage-room-layout-editor .cage-room-map-scroll {
+  inline-size: auto;
+  margin-inline: 0;
+}
+
 @media (width < 768px) {
   [data-feature="cages"].cage-room-layout-editor button:not(.cage-room-rack),
-  [data-feature="cages"] .cage-rack-detail-close {
+  [data-feature="cages"] .cage-rack-detail-close,
+  [data-feature="cages"] .cage-room-zoom button {
     min-inline-size: 44px;
     min-block-size: 44px;
   }

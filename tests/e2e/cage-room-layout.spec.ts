@@ -38,7 +38,14 @@ test("room map keeps project colors across racks and saves the edited floor plan
   };
   await create("rooms", { id: roomId, name: roomName, defaultSpecies: "mouse" });
   for (const [rack, id] of rackIds.entries()) {
-    await create("racks", { id, roomId, name: `测试笼架 ${rack + 1}`, index: rack + 1, rows: 1, cols: 2 });
+    await create("racks", {
+      id,
+      roomId,
+      name: `测试笼架 ${rack + 1}`,
+      index: rack + 1,
+      rows: rack === 0 ? 8 : 1,
+      cols: rack === 0 ? 11 : 2,
+    });
   }
   for (const { rack, col, iacuc, endDate } of occupiedSlots) {
     const id = `rack-layout-${rack}-${col}`;
@@ -69,10 +76,25 @@ test("room map keeps project colors across racks and saves the edited floor plan
   const firstSlot = firstDetail.getByRole("button", { name: new RegExp(`${roomName}-01-A1`) });
   const secondSlot = secondDetail.getByRole("button", { name: new RegExp(`${roomName}-02-A1`) });
   const thirdSlot = secondDetail.getByRole("button", { name: new RegExp(`${roomName}-02-B1`) });
+  const toolbar = page.getByRole("group", { name: "笼位图操作", exact: true });
+  const workbench = page.locator(".cage-room-workbench");
   const fill = (cell: typeof firstSlot) => cell.evaluate((element) => getComputedStyle(element).backgroundColor);
+  await expect(page.getByRole("combobox", { name: "笼架", exact: true })).toHaveCount(0);
+  await expect(toolbar.getByRole("combobox")).toHaveCount(0);
+  await expect(workbench.locator(".ant-card-head").getByRole("combobox", { name: "房间", exact: true })).toBeVisible();
+  const toolbarBox = (await toolbar.boundingBox())!;
+  const workbenchBox = (await workbench.boundingBox())!;
+  expect(workbenchBox.y - toolbarBox.y - toolbarBox.height).toBeLessThanOrEqual(24);
   await expect(page.getByRole("region", { name: /笼位详情$/ })).toBeHidden();
   await expect(firstRack).toHaveAttribute("aria-pressed", "false");
   await expect(secondRack).toHaveAttribute("aria-pressed", "false");
+  const occupiedMiniature = firstRack.locator('.cage-room-rack-preview [data-cage-status="active"]').first();
+  await expect(occupiedMiniature).toBeVisible();
+  const miniature = (await occupiedMiniature.boundingBox())!;
+  expect(miniature.width).toBeGreaterThan(12);
+  expect(miniature.height).toBeGreaterThan(6);
+  await page.setViewportSize({ width: 1139, height: 790 });
+  await page.screenshot({ path: testInfo.outputPath("room-map-overview.png"), animations: "disabled" });
 
   for (const [width, height] of [
     [1440, 900],
@@ -113,12 +135,36 @@ test("room map keeps project colors across racks and saves the edited floor plan
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  const rackSelect = page.getByRole("combobox", { name: "笼架", exact: true });
-  await rackSelect.click();
-  await page.locator(".ant-select-dropdown").filter({ visible: true }).getByText("测试笼架 1", { exact: true }).click();
-  await expect(firstDetail).toBeVisible();
-  await closeFirst.click();
-  await expect(rackSelect).toBeFocused();
+  const floorGeometry = () =>
+    map.evaluate((region) => {
+      const board = region.querySelector(".cage-room-map")!;
+      const floor = board.getBoundingClientRect();
+      return {
+        width: floor.width,
+        racks: Array.from(board.querySelectorAll(".cage-room-rack"), (rack) => {
+          const footprint = rack.getBoundingClientRect();
+          return [(footprint.left - floor.left) / floor.width, (footprint.top - floor.top) / floor.height];
+        }),
+      };
+    });
+  const readLayout = async () => {
+    const response = await page.request.get(`${roomPath}?view=cages`);
+    expect(response.ok()).toBe(true);
+    return ((await response.json()) as RoomWorkspace).rackLayout;
+  };
+  const beforeZoom = await floorGeometry();
+  const savedBeforeZoom = await readLayout();
+  await page.getByRole("button", { name: "放大房间图", exact: true }).click();
+  await expect.poll(async () => (await floorGeometry()).width).toBeGreaterThan(beforeZoom.width);
+  const enlarged = await floorGeometry();
+  expect(enlarged.racks).toHaveLength(beforeZoom.racks.length);
+  for (const [index, [column, row]] of enlarged.racks.entries()) {
+    expect(column).toBeCloseTo(beforeZoom.racks[index][0], 3);
+    expect(row).toBeCloseTo(beforeZoom.racks[index][1], 3);
+  }
+  await page.getByRole("button", { name: "缩小房间图", exact: true }).click();
+  await expect.poll(async () => Math.abs((await floorGeometry()).width - beforeZoom.width)).toBeLessThan(1);
+  expect(await readLayout()).toEqual(savedBeforeZoom);
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -163,11 +209,47 @@ test("room map keeps project colors across racks and saves the edited floor plan
   await dialog.getByRole("button", { name: "保存布局" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(edit).toBeFocused();
-  const saved = (await (await page.request.get(`${roomPath}?view=cages`)).json()) as RoomWorkspace;
-  expect(saved.rackLayout?.placements).toContainEqual({ rackId: rackIds[0], column: 2, row: 1, rotation: 90 });
+  const editedLayout = (await readLayout())!;
+  expect(editedLayout.placements).toContainEqual({ rackId: rackIds[0], column: 2, row: 1, rotation: 90 });
   await page.reload();
   await chooseRoom(page);
   await expect(firstRack).toHaveAttribute("data-rotation", "90");
   await expect(secondRack).toBeVisible();
   await expect(page.getByRole("region", { name: /笼位详情$/ })).toBeHidden();
+
+  const verticalPlacements = [
+    { rackId: rackIds[0], column: 3, row: 2, rotation: 0 },
+    { rackId: rackIds[1], column: 3, row: 5, rotation: 0 },
+  ];
+  const response = await page.request.put(`${roomPath}/rack-layout`, {
+    data: { placements: verticalPlacements, expectedUpdatedAt: editedLayout.updatedAt },
+  });
+  expect(response.ok()).toBe(true);
+  const verticalLayout = (await response.json()) as NonNullable<RoomWorkspace["rackLayout"]>;
+  expect(verticalLayout.placements).toEqual(verticalPlacements);
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.reload();
+  await chooseRoom(page);
+  await expect(firstRack).toBeInViewport();
+  await expect(secondRack).toBeInViewport();
+  const upperRack = (await firstRack.boundingBox())!;
+  const lowerRack = (await secondRack.boundingBox())!;
+  expect(Math.abs(upperRack.x - lowerRack.x)).toBeLessThan(1);
+  expect(lowerRack.y).toBeGreaterThanOrEqual(upperRack.y + upperRack.height - 1);
+  const frame = await map.evaluate((region) => {
+    const outer = region.getBoundingClientRect();
+    const floor = region.querySelector(".cage-room-map")!.getBoundingClientRect();
+    const card = region.closest(".cage-room-panel")!.getBoundingClientRect();
+    return {
+      frameWidth: outer.width,
+      floorWidth: floor.width,
+      cardWidth: card.width,
+      centerOffset: outer.left + outer.width / 2 - (card.left + card.width / 2),
+    };
+  });
+  expect(Math.abs(frame.frameWidth - frame.floorWidth)).toBeLessThanOrEqual(18);
+  expect(frame.frameWidth).toBeLessThan(frame.cardWidth * 0.85);
+  expect(Math.abs(frame.centerOffset)).toBeLessThanOrEqual(2);
+  expect(await readLayout()).toEqual(verticalLayout);
+  await page.screenshot({ path: testInfo.outputPath("room-map-vertical.png"), animations: "disabled" });
 });

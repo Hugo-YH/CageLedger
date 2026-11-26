@@ -1,7 +1,7 @@
 import { Button, Empty, Flex, Tag, Typography } from "antd";
 import { useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { cageDisplayStatus, cageStatusLabels } from "../../../../domain/cages";
-import { rackFootprint, rackLayoutSize, rackPlacementFits } from "../../../../domain/rackLayout";
+import { rackFootprint, rackLayoutSize, rackOverviewBounds, rackPlacementFits } from "../../../../domain/rackLayout";
 import type { CageRack, CageSlot, Occupancy, RackPlacement } from "../../../api/contracts";
 import { cageProjectKey, type RoomProjectColor } from "./roomProjectColors";
 
@@ -17,13 +17,13 @@ function cageProjectFill(occupancy: Occupancy | null, colors: ReadonlyMap<string
   return occupancy ? colors.get(cageProjectKey(occupancy.iacuc))?.fill : undefined;
 }
 
-function placementStyle(placement: RackPlacement, columns: number, rows: number): CSSProperties {
+function placementStyle(placement: RackPlacement, bounds: ReturnType<typeof rackOverviewBounds>): CSSProperties {
   const footprint = rackFootprint(placement.rotation);
   return {
-    insetInlineStart: `${(placement.column / columns) * 100}%`,
-    insetBlockStart: `${(placement.row / rows) * 100}%`,
-    inlineSize: `${(footprint.columns / columns) * 100}%`,
-    blockSize: `${(footprint.rows / rows) * 100}%`,
+    insetInlineStart: `${((placement.column - bounds.column) / bounds.columns) * 100}%`,
+    insetBlockStart: `${((placement.row - bounds.row) / bounds.rows) * 100}%`,
+    inlineSize: `${(footprint.columns / bounds.columns) * 100}%`,
+    blockSize: `${(footprint.rows / bounds.rows) * 100}%`,
   };
 }
 
@@ -38,12 +38,16 @@ export function RoomRackMap({
   onSelect,
   onMove,
   disabled = false,
+  zoom = 1,
+  regionRef,
 }: RoomRackMapData & {
   placements: readonly RackPlacement[];
   selectedRackId?: string;
   onSelect: (rackId: string, trigger?: HTMLElement) => void;
   onMove?: (placement: RackPlacement) => void;
   disabled?: boolean;
+  zoom?: number;
+  regionRef?: React.Ref<HTMLDivElement>;
 }) {
   const board = useRef<HTMLDivElement>(null);
   const gesture = useRef<{
@@ -56,7 +60,8 @@ export function RoomRackMap({
   } | null>(null);
   const [dragTarget, setDragTarget] = useState<RackPlacement | null>(null);
   const dropTarget = useRef<RackPlacement | null>(null);
-  const { columns, rows } = rackLayoutSize(placements);
+  const bounds = onMove ? { column: 0, row: 0, ...rackLayoutSize(placements) } : rackOverviewBounds(placements);
+  const { columns, rows } = bounds;
   const placementsByRack = new Map(placements.map((placement) => [placement.rackId, placement]));
   const slotsByRack = useMemo(() => {
     const grouped = new Map<string, CageSlot[]>();
@@ -112,11 +117,12 @@ export function RoomRackMap({
 
   return (
     <>
-      <div className="cage-room-map-scroll" aria-label="房间笼架布局" role="region" tabIndex={0}>
+      <div className="cage-room-map-scroll" aria-label="房间笼架布局" role="region" tabIndex={0} ref={regionRef}>
         <div
           className="cage-room-map"
+          data-editable={Boolean(onMove)}
           ref={board}
-          style={{ "--rack-map-columns": columns, "--rack-map-rows": rows } as CSSProperties}
+          style={{ "--rack-map-columns": columns, "--rack-map-rows": rows, "--rack-map-zoom": zoom } as CSSProperties}
         >
           {racks.map((rack) => {
             const placement = placementsByRack.get(rack.id);
@@ -132,7 +138,7 @@ export function RoomRackMap({
                 aria-label={`${rack.name}，${free} 个空位`}
                 aria-pressed={selectedRackId === rack.id}
                 disabled={disabled}
-                style={placementStyle(placement, columns, rows)}
+                style={placementStyle(placement, bounds)}
                 onClick={(event) => onSelect(rack.id, event.currentTarget)}
                 onPointerDown={(event) => startDrag(event, placement)}
                 onPointerMove={updateDrag}
@@ -163,7 +169,10 @@ export function RoomRackMap({
                 <span
                   className="cage-room-rack-preview"
                   aria-hidden="true"
-                  style={{ gridTemplateColumns: `repeat(${Math.max(1, rack.cols)}, minmax(0, 1fr))` }}
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(1, rack.cols)}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${Math.max(1, rack.rows)}, minmax(0, 1fr))`,
+                  }}
                 >
                   {rackSlots.map((slot) => {
                     const occupancy = occupancyBySlot.get(slot.id) ?? null;
@@ -171,7 +180,12 @@ export function RoomRackMap({
                       <i
                         key={slot.id}
                         data-cage-status={cageDisplayStatus(slot, occupancy, today)}
-                        style={{ "--cage-project-fill": cageProjectFill(occupancy, projectColors) } as CSSProperties}
+                        style={
+                          {
+                            gridArea: `${slot.row} / ${slot.col}`,
+                            "--cage-project-fill": cageProjectFill(occupancy, projectColors),
+                          } as CSSProperties
+                        }
                       />
                     );
                   })}
@@ -184,7 +198,7 @@ export function RoomRackMap({
               className="cage-room-rack-drop"
               aria-hidden="true"
               data-blocked={!rackPlacementFits(dragTarget, placements)}
-              style={placementStyle(dragTarget, columns, rows)}
+              style={placementStyle(dragTarget, bounds)}
             />
           ) : null}
         </div>

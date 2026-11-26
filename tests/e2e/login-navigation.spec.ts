@@ -47,9 +47,7 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(
     page.locator("#cages-room-select").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
   ).toContainText("8014");
-  await expect(
-    page.locator("#cages-rack-select").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
-  ).toContainText("8014 01 号笼架");
+  await expect(page.getByRole("combobox", { name: "笼架", exact: true })).toHaveCount(0);
   await page
     .getByRole("region", { name: "房间笼架布局", exact: true })
     .getByRole("button", { name: /^8014 01 号笼架/ })

@@ -200,32 +200,29 @@ for (const viewport of [
       await page.locator(".ant-mobile-navigation-sheet").getByText("笼位管理", { exact: true }).last().click();
     } else await page.getByRole("menuitem", { name: /笼位管理/ }).click();
     const cages = page.getByRole("group", { name: "笼位图操作", exact: true });
-    const rackSelect = page.getByRole("combobox", { name: "笼架", exact: true });
     const roomMap = page.getByRole("region", { name: "房间笼架布局", exact: true });
     const firstRack = roomMap.getByRole("button", { name: /^8014 01 号笼架/ });
+    const secondRack = roomMap.getByRole("button", { name: /^工具栏第二笼架/ });
+    const details = page.getByRole("region", { name: /笼位详情$/ });
+    const closeDetails = details.getByRole("button", { name: "关闭笼位详情", exact: true });
     await cages.getByRole("button", { name: "多选录入", exact: true }).click();
-    await cages.getByRole("button", { name: "全选当前", exact: true }).click();
+    const selectAll = cages.getByRole("button", { name: "全选当前", exact: true });
+    await expect(selectAll).toBeDisabled();
+    await expect(details).toBeHidden();
+    await firstRack.click();
+    await selectAll.click();
     await expect(cages).toContainText("已选 2 项");
     await captureToolbar(page, testInfo, "cages-selection", cages);
     await cages.getByRole("button", { name: "批量编辑", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "批量编辑 2 个笼位", exact: true })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
-    await expect(roomMap.getByRole("button")).toHaveCount(2);
-    await rackSelect.click();
-    await page
-      .locator(".ant-select-dropdown")
-      .filter({ visible: true })
-      .getByText("工具栏第二笼架", { exact: true })
-      .click();
+    await expect(roomMap.getByRole("button", { name: /个空位$/ })).toHaveCount(2);
+    await closeDetails.click();
+    await secondRack.click();
     await expect(page.getByRole("region", { name: "工具栏第二笼架 笼位详情", exact: true })).toBeVisible();
     await expect(cages).toContainText("已选 0 项");
     await expect(cages.getByRole("button", { name: "批量编辑", exact: true })).toBeDisabled();
-    await rackSelect.click();
-    await page
-      .locator(".ant-select-dropdown")
-      .filter({ visible: true })
-      .getByText("8014 01 号笼架", { exact: true })
-      .click();
+    await closeDetails.click();
     await cages.getByRole("button", { name: /待进驻/ }).click();
     await page
       .getByRole("dialog", { name: "待进驻动物", exact: true })
@@ -234,6 +231,8 @@ for (const viewport of [
     await expect(cages.getByRole("button", { name: "确认预留", exact: true })).toBeDisabled();
     await expect(cages.getByRole("button", { name: "取消预留", exact: true })).toBeEnabled();
     await expect(cages).not.toContainText("正在处理");
+    await expect(details).toBeHidden();
+    await firstRack.click();
     await page.getByRole("button", { name: /8014-01-A1/ }).click();
     await expect(cages.getByRole("button", { name: "确认预留", exact: true })).toBeEnabled();
     await captureToolbar(page, testInfo, "cages-reservation", cages);

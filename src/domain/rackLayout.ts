@@ -58,3 +58,19 @@ export function rackLayoutSize(layout: readonly RackPlacement[]) {
   }
   return { columns: Math.min(maxGridSize, columns), rows: Math.min(maxGridSize, rows) };
 }
+
+export function rackOverviewBounds(layout: readonly RackPlacement[]) {
+  if (!layout.length) return { column: 0, row: 0, ...rackLayoutSize(layout) };
+  let left = Infinity;
+  let top = Infinity;
+  let right = 0;
+  let bottom = 0;
+  for (const placement of layout) {
+    const size = rackFootprint(placement.rotation);
+    left = Math.min(left, placement.column);
+    top = Math.min(top, placement.row);
+    right = Math.max(right, placement.column + size.columns);
+    bottom = Math.max(bottom, placement.row + size.rows);
+  }
+  return { column: left - 1, row: top - 1, columns: right - left + 2, rows: bottom - top + 2 };
+}
