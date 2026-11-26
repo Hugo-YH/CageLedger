@@ -118,8 +118,8 @@ Codex 云端负责日常开发、验收、按影响范围的测试和交付任�
 
 ## 发布
 
-云端正式交付在最终源码相关验收、版本提交推送、ARM64 构建与冒烟、附注标签推送和 Packages 核验后，运行 `npm run release:cloud -- --publish`。它校验已有准备结果并发表 Release，不自动完成版本修改、测试、打包、提交、打标签或推送。
+云端正式交付在最终源码相关验收、版本提交推送、ARM64 构建与冒烟、附注标签推送和 Packages 核验后，运行 `npm run release:cloud -- --publish`。它校验已有准备结果并发表 Release。发布最新正式版还须更新 `latest`，回读核对其摘要与版本镜像一致。
 
-普通开发修改和提交不自动打包。默认 Release 只附来源与镜像摘要和拉取指引；显式 `--offline-image` 才上传完整离线镜像，不上传源码包；latest 和生产部署分别处理。操作见 [云端交付](docs/contracts/cloud-development.md) 与 [发布说明](wiki/发布与CI-CD.md)。
+普通开发修改和提交按日常开发范围处理。默认 Release 附带来源与镜像摘要和拉取指引，显式 `--offline-image` 才上传完整离线镜像。离线源码包由 Gitea 本地另行构建。生产部署需要单独授权。操作见 [云端交付](docs/contracts/cloud-development.md) 与 [发布说明](wiki/发布与CI-CD.md)。
 
 Mac mini 的 `release:local`、`doctor` 和 `status` 仍是手动备用配置，保留平台专用转换器信任和完整验证，不作为云端日常开发的前置条件。恢复、签名与状态目录见 [发布工程](docs/contracts/release-engineering.md)。

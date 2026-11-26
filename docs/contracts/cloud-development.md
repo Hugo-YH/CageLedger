@@ -100,15 +100,22 @@ Docker 网络构建保持代理与 TLS 验证，使用 BuildKit secret 临时挂
 
 日常交付以 Gitea Packages 的 ARM64 镜像为准，NAS 保留本地 Docker 层并正常增量拉取。离线镜像整包改为按需上传；离线源码包不由 Codex 上传，Gitea 本地源码包构建另行配置。已有 Release、自动源码入口、历史架构与制品保持原样。
 
-先冻结版本与更新记录，对最终源码完成相关测试、提交推送、同提交构建和新产物冒烟，再创建并推送匹配的不可变附注标签，按下列顺序交付（将 X.Y.Z 替换为实际版本）：
+先冻结版本与更新记录，对最终源码完成相关测试、提交推送、同提交构建和新产物冒烟，再创建并推送匹配的不可变附注标签。按以下顺序发布，将 `X.Y.Z` 替换为实际版本。
 
 ```bash
 npm run publish:registry -- --archive dist/CageLedger-image-X.Y.Z-arm64.tar.gz --state-dir ../CageLedger-registry-state/X.Y.Z
 npm run release:cloud -- --publish
+```
+
+确认 Gitea 当前最新正式 Release 为本次版本后，执行正式发布的最后一步。
+
+```bash
 npm run publish:registry -- --archive dist/CageLedger-image-X.Y.Z-arm64.tar.gz --state-dir ../CageLedger-registry-state/X.Y.Z --update-latest
 ```
 
-`release:cloud` 不自动改版本、运行测试、构建、提交、打标签或推送；它要求已有源码、标签、归档和 Packages 核验凭据匹配。默认只附小型来源/Registry 摘要 JSON、`PULL.txt` 和下载权限探针。创建和发表前均核验同版本已成功的 Packages 凭据及实时 ARM64 manifest、索引、config 和 blob 身份；不重新下载整层。凭据默认在仓库外 `CageLedger-registry-state/<版本>`，可用 `--registry-state-dir` 显式选择。无匹配凭据或远端摘要冲突时停止，不能凭“准备推送”发布空壳 Release。正式 Release 完成后才能显式更新 `latest`，它只包含 ARM64。
+`publish:registry --update-latest` 核验已发表的同版本 Release，并回读仅含 ARM64 的 `latest` 索引摘要，确认它与版本镜像一致。发布最新正式版的授权默认包含这一步。若 Release 已发表但 `latest` 更新或核验失败，记录已发表的 Release 和待完成项，保留同版本凭据以便续跑此步骤。
+
+`release:cloud` 要求已有源码、标签、归档和 Packages 核验凭据匹配。默认附小型来源与 Registry 摘要 JSON、`PULL.txt` 和下载权限探针。创建和发表前通过远端元数据核验同版本已成功的 Packages 凭据及实时 ARM64 manifest、索引、config 和 blob 身份。凭据默认在仓库外 `CageLedger-registry-state/<版本>`，可用 `--registry-state-dir` 选择。无匹配凭据或远端摘要冲突时停止。生产 NAS 的部署需要单独授权。
 
 明确需要离线交付时使用：
 

@@ -34,4 +34,4 @@ main ──────────────► rc ────────�
 
 Mac 手动备用的 `release:local` 使用其独立检出的官方 Gitea `origin`，保留 `check_stable_release_ready.sh`／`check_rc_merged.sh` 的分支祖先与合并检查，以及预发布版本和 `--bump` 的原行为。不得为使该配置运行而改写云端导入 remote，也不能把 Mac 预发布能力当作云端正式 Release 命令的能力。
 
-提交推送、标签、Packages、Release、latest 和生产部署各有授权边界；历史计划中的“未推送”或旧授权不覆盖当前用户指令。日常修改验证后及时提交推送的约定继续生效，普通代码备份不自动触发发布。
+日常修改按现有授权验证、提交和推送。发布最新正式版的授权默认包括该版本的附注标签、Packages、Release 和 `latest` 核验。用户明确限定发布范围时按该范围执行，生产部署需要单独授权。

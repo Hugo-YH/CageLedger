@@ -93,7 +93,7 @@ launchctl kickstart "gui/$(id -u)/us.cellnucle.cageledger.runner"
 
 仓库 `.gitea/workflows/macos-arm64.yml` 按 `macos-arm64` 标签调度，仅从 Actions 页面手动运行备用任务。任务执行类型／架构检查，再通过 `package:managed` 共用宿主锁、内存压力保护并串行构建开发产物。该入口先观察约 60 秒稳定资源状态，不要同时手动启动另一套重任务。输出为离线源码包、ARM64 镜像包及加载／SHA256 文件，上传到本次 Actions 的构建产物。
 
-完整发布前仍按测试策略完成完整门禁。此工作流不会创建 Release、推送镜像、修改 latest 或部署 DS223；这些操作需要独立的发布流程和授权，不在 Actions 中直接重入会创建提交与标签的 `release:local --push`。
+此 Actions 工作流交付备用构建产物。获授权的 Mac 正式发布使用 `release:local --push`，按测试策略完成完整门禁，并在发布最新正式版时核验 `latest`。部署 DS223 需要单独授权。
 
 Runner 主机的 Docker 构建使用当前本地 Docker Desktop／Colima context；日常云端构建入口使用受管 Linux socket 和专用 builder。Mac 工作流不 source `cloud_env.sh`，避免套用云端 socket、仿真和清缓存配置。
 

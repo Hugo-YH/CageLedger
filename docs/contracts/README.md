@@ -47,7 +47,7 @@
 - [发布工程](release-engineering.md)：发布身份、运行依赖、完整管线及恢复边界。
 - [Mac 手动备用 Runner](macos-gitea-runner.md)：Mac 平台工具、转换器信任和备用执行环境。
 
-`release:cloud` 核验已经准备好的附注标签、ARM64 产物和 Packages 后发表 Release；不自动创建这些输入。普通提交、版本发布、latest 与生产部署分别按授权执行，不能由旧记录推导新授权。
+`release:cloud` 核验已准备好的附注标签、ARM64 产物和 Packages 后发表 Release。发布最新正式版还需按[云端交付](cloud-development.md)更新 `latest` 并回读核验。普通提交和生产部署各按适用的授权执行。
 
 ## 文档与代理指令
 

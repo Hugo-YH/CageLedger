@@ -97,7 +97,7 @@ npm run dev
 
 本地生产服务在 `5173` 同时提供页面、文档和 `/api`。离线源码包在目标机器运行时无需 Node.js，仍需 Python 3.13 和运行依赖。
 
-项目 Python 命令默认使用 `.venv`；可通过 `CAGELEDGER_PYTHON_BIN` 指定其他 Python 3.13 可执行文件。验证范围见[测试策略](docs/contracts/testing-strategy.md)。云端正式发布在版本、验证、打包、标签推送和 Packages 核验完成后执行 `npm run release:cloud -- --publish`；该命令不自动完成准备步骤。Mac 专用 `release:local` 作为手动备用，具体流程见[发布与 CI-CD](wiki/发布与CI-CD.md)。
+项目 Python 命令默认使用 `.venv`，可通过 `CAGELEDGER_PYTHON_BIN` 指定其他 Python 3.13 可执行文件。验证范围见[测试策略](docs/contracts/testing-strategy.md)。云端正式发布在版本、验证、打包、标签推送和 Packages 核验完成后执行 `npm run release:cloud -- --publish`。发布最新正式版以 `latest` 与版本镜像摘要一致为完成条件。Mac 专用 `release:local` 作为手动备用，具体流程见[发布与 CI-CD](wiki/发布与CI-CD.md)。
 
 ## 文档
 

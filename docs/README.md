@@ -27,4 +27,4 @@
 
 当前分支、提交和版本从实际 Git 与 `package.json` 读取。验证矩阵统一维护在[测试策略](contracts/testing-strategy.md)，文档分层、来源和同步规则统一维护在[文档系统契约](contracts/documentation-system.md)。
 
-Wiki 接口清单由 `api-inventory.json` 与生成脚本维护，系统内更新记录由 `wiki/更新日志.md` 生成；不要手工修改派生文件。历史资料只供追溯，不改变当前任务和授权：提交推送、标签、Packages、Release、latest 与生产部署分别按当前约定执行。
+Wiki 接口清单由 `api-inventory.json` 与生成脚本维护，系统内更新记录由 `wiki/更新日志.md` 生成。派生文件通过各自的生成脚本更新。提交推送、正式发布收尾与生产部署按当前任务授权和[云端交付](contracts/cloud-development.md)执行，历史资料供追溯。

@@ -4,16 +4,16 @@
 
 ## 一次正式交付的结果
 
-<DocFigure src="/diagrams/release-delivery.svg" kind="diagram" alt="最终源码验证后构建并核验 ARM64 产物，发布 Packages 和 Release，再显式推进 latest 与部署" caption="逐项核对源码、标签、镜像和 Release；latest 更新与生产部署分别记录结果。" />
+<DocFigure src="/diagrams/release-delivery.svg" kind="diagram" alt="最终源码验证后构建并核验 ARM64 产物，发布 Packages 和 Release，再更新并核对 latest" caption="最新正式版发布以 latest 与版本镜像摘要一致为完成条件。生产部署另行授权。" />
 
-| 对象         | 完成结果                                        |
-| ------------ | ----------------------------------------------- |
-| 源码与版本   | 最终代码已验证、提交并推送，版本记录一致        |
-| 版本标签     | 本地与远端存在匹配提交的不可变附注标签 `vX.Y.Z` |
-| ARM64 产物   | 与该提交对应，版本、平台、来源和冒烟有效        |
-| Packages     | 同版本镜像上传并核验，摘要及远端身份一致        |
-| Release      | 正文与更新日志一致，附件和访问边界核验通过      |
-| latest／生产 | 仅在单独执行后报告其更新或部署结果              |
+| 对象       | 完成结果                                            |
+| ---------- | --------------------------------------------------- |
+| 源码与版本 | 最终代码已验证、提交并推送，版本记录一致            |
+| 版本标签   | 本地与远端存在匹配提交的不可变附注标签 `vX.Y.Z`     |
+| ARM64 产物 | 与该提交对应，版本、平台、来源和冒烟有效            |
+| Packages   | 同版本镜像上传并核验，摘要及远端身份一致            |
+| Release    | 正文与更新日志一致，附件和访问边界核验通过          |
+| `latest`   | 与 Gitea 最新正式 Release 的 ARM64 镜像索引摘要一致 |
 
 ## 1. 冻结版本与验证范围
 
@@ -35,7 +35,7 @@
 
 `runtime-image.lock.json` 和 `requirements-runtime.txt` 固定不可变生产运行环境。普通应用构建复用已验证依赖层；依赖输入变化时须显式执行 `npm run runtime:refresh` 并提交新锁。运行环境使用内容寻址标签，不移动业务版本或 latest，不能通过反复清空缓存、重新安装依赖代替刷新机制。
 
-## 3. 推送 Packages，再发表 Release
+## 3. 发布 Packages 与 Release，核验 `latest`
 
 以下命令中的 `X.Y.Z` 需替换为目标版本。执行前必须已有最终源码、匹配的本地及远端附注标签、同提交 ARM64 归档、有效来源与冒烟凭据。
 
@@ -48,13 +48,15 @@ npm run release:cloud -- --publish
 
 默认 Release 只附小型来源／镜像摘要清单、拉取指引和权限探针。Packages 按同摘要层复用，Release 核验远端索引、manifest、config 与 blob 身份；镜像拉取时的 tag／digest 机制可参考 Docker 官方说明。<sup>[1](#参考资料)</sup>
 
-正式 Release 完成后，需要更新 latest 时再显式执行：
+### 更新并核验 `latest`
+
+发表 Release 后，确认该版本是 Gitea 当前最新正式版，再执行下方命令。发布最新正式版默认包含此步骤。
 
 ```bash
 npm run publish:registry -- --archive dist/CageLedger-image-X.Y.Z-arm64.tar.gz --state-dir ../CageLedger-registry-state/X.Y.Z --update-latest
 ```
 
-该步骤仍不部署 NAS。生产升级另按[部署与运行](/operations/deployment#升级与回滚)执行。
+命令回读远端镜像索引，确认 `latest` 与版本标签指向同一份 ARM64 镜像。核验通过后才报告发布完成。生产升级需要单独授权，步骤见[部署与运行](/operations/deployment#升级与回滚)。
 
 ### 按需提供完整离线镜像
 
@@ -83,7 +85,7 @@ node scripts/run_python.mjs scripts/gitea_git.py fetch gitea
 
 保留仓库外同版本状态目录，先核对远端结果，再从匹配步骤恢复。摘要或所有权冲突时停止，不移动标签、不覆盖制品；需要重新审计时可显式使用 `--audit-remote`。权限探针验证真实匿名访问边界，不能以私有元数据返回 `401` 替代文件访问验证。
 
-交付记录应给出源码提交、附注标签、Packages 同版本摘要、Release 正文与附件、应用版本及来源 revision，并单列 latest 是否更新、NAS 是否部署。文档由 `wiki/` 构建到 `/docs/`，Gitea Wiki 仅保留迁移入口。
+交付记录应给出源码提交、附注标签、Packages 同版本摘要、Release 正文与附件、应用版本及来源 revision，以及 `latest` 的摘要核验结果和 NAS 的部署状态。如果 Release 已发表但 `latest` 更新失败，保留同版本凭据续跑 `--update-latest`。文档由 `wiki/` 构建到 `/docs/`，Gitea Wiki 保留迁移入口。
 
 ## Mac 手动备用配置
 
