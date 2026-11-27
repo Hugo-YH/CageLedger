@@ -974,6 +974,13 @@
   vertical-align: middle;
 }
 
+[data-ui="data-table"] .ant-btn.project-people-copy {
+  max-inline-size: 100%;
+  block-size: auto;
+  padding: 0;
+  text-align: start;
+}
+
 .table-wrap td .table-cell-text,
 .table-wrap td .cell-clamp {
   display: -webkit-box;

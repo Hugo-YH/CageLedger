@@ -23,6 +23,7 @@ import type {
   ReceptionSortKey,
 } from "../../../contracts/reception";
 import { CellText } from "../../components/ui/CellText";
+import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "../../components/ProjectPeopleCopyButton";
 import { formatPersonNames } from "../../../domain/personNames";
 import { abbreviateSupplier, normalizeIntakeOrderIdentifiers } from "../../../domain/intake";
 import { queryKeys } from "../../api/queryKeys";
@@ -167,6 +168,7 @@ export function ReceptionView() {
         />
       ),
       render: (_: unknown, item: ReceptionRecord) => {
+        if (key === "owner") return <ProjectPeopleCopyButton item={item} disabled={retained.blocked} />;
         if (key === "projectMatched")
           return <Tag color={item.projectMatched ? "green" : "gold"}>{item.projectMatched ? "已匹配" : "未匹配"}</Tag>;
         if (key === "receiptDate")
@@ -183,7 +185,7 @@ export function ReceptionView() {
         const text =
           key === "supplier"
             ? abbreviateSupplier(String(value || ""))
-            : key === "pi" || key === "owner"
+            : key === "pi"
               ? formatPersonNames(String(value || ""))
               : value;
         const displayText = String(
@@ -373,19 +375,24 @@ export function ReceptionView() {
                   role="region"
                   tabIndex={0}
                 >
-                  <DataTable<ReceptionRecord>
-                    columns={columns}
-                    dataSource={items}
-                    rowKey="id"
-                    resizeKey="reception-list"
-                    pagination={false}
-                    refreshing={query.isFetching}
-                    locale={{
-                      emptyText: (
-                        <EmptyState title="暂无匹配的已接收批次" detail="可调整列筛选；批次确认接收后会显示在此处。" />
-                      ),
-                    }}
-                  />
+                  <ProjectPeopleCopyProvider>
+                    <DataTable<ReceptionRecord>
+                      columns={columns}
+                      dataSource={items}
+                      rowKey="id"
+                      resizeKey="reception-list"
+                      pagination={false}
+                      refreshing={query.isFetching}
+                      locale={{
+                        emptyText: (
+                          <EmptyState
+                            title="暂无匹配的已接收批次"
+                            detail="可调整列筛选；批次确认接收后会显示在此处。"
+                          />
+                        ),
+                      }}
+                    />
+                  </ProjectPeopleCopyProvider>
                 </div>
                 <Flex align="center" gap={12} justify="space-between" wrap>
                   <Typography.Text type="secondary">

@@ -13,9 +13,11 @@ import type {
 import { requestDownload, requestJson } from "../../api/client";
 import { AntdProvider } from "../../components/ui";
 import { UiProvider } from "../../state/ui";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import { ReceptionView } from "./ReceptionView";
 
 vi.mock("../../api/client", () => ({ requestJson: vi.fn(), requestDownload: vi.fn(), requestMultipart: vi.fn() }));
+vi.mock("../../utils/clipboard", () => ({ copyTextToClipboard: vi.fn() }));
 vi.mock("../../api/session", () => ({
   useSession: () => ({ data: { user: { id: "admin", role: "admin", roomIds: [] } } }),
 }));
@@ -133,6 +135,9 @@ beforeEach(() => {
     const path = new URL(String(url), "http://localhost");
     if (path.pathname === "/api/receptions/preview") return previewLoader();
     if (path.pathname === "/api/receptions/filter-options") return { items: [] };
+    if (path.pathname === "/api/iacuc-index") {
+      return { items: [{ iacuc: record.iacuc, pi: "汇总项目负责人", owner: "汇总实验负责人" }] };
+    }
     if (path.pathname === "/api/receptions") {
       if (failList) throw new Error("offline");
       const offset = Number(path.searchParams.get("offset") || "0");
@@ -145,12 +150,25 @@ beforeEach(() => {
     throw new Error(`Unexpected URL ${url}`);
   });
   vi.mocked(requestDownload).mockReset();
+  vi.mocked(copyTextToClipboard).mockReset();
 });
 afterEach(() => {
   cleanup();
   client.clear();
   vi.unstubAllGlobals();
   vi.mocked(requestJson).mockReset();
+});
+
+it("copies the project directory's formatted names from the experiment-owner cell", async () => {
+  vi.mocked(copyTextToClipboard).mockResolvedValue(true);
+  render(view());
+  const copy = await screen.findByRole("button", { name: `复制项目负责人和实验负责人：${record.owner}` });
+  fireEvent.click(copy);
+  await waitFor(() => expect(copyTextToClipboard).toHaveBeenCalledWith("汇总项目负责人组汇总实验负责人"));
+  await waitFor(() =>
+    expect(operationFeedback.message.success).toHaveBeenCalledWith("已复制：汇总项目负责人组汇总实验负责人"),
+  );
+  expect(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` })).not.toBeChecked();
 });
 
 it("shows the list without directories, previews frozen versions, and keeps selection on export failure", async () => {

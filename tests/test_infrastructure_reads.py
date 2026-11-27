@@ -174,6 +174,50 @@ class InfrastructureReadTests(unittest.TestCase):
         response, *status = handler.send_json.call_args.args
         return response, status[0] if status else 200
 
+    def test_cage_details_read_only_the_occupancy_or_its_linked_room_task(self):
+        self.conn.execute(
+            "INSERT INTO intake_batches(id,batch_no,status,updated_at,payload) VALUES('batch','batch','received','',?)",
+            (json.dumps({"strainRaw": "BALB/c", "specification": "8w", "sex": "雌性"}),),
+        )
+        for task_id, room_id, linked_id in (
+            ("related", "r1", "o1"),
+            ("other-room", "r2", "o1"),
+            ("other-slot", "r1", "o2"),
+        ):
+            self.conn.execute(
+                """
+                INSERT INTO placement_tasks(id,target_room_id,status,payload,source_batch_id,source_receipt_id,planned_move_in_date)
+                VALUES(?,?,'active',?,'batch','receipt','')
+                """,
+                (task_id, room_id, json.dumps({"status": "active", "reservedOccupancyId": linked_id})),
+            )
+
+        for task_id, expected in (("related", {"o1": "BALB/c"}), ("other-room", None), ("other-slot", None)):
+            with self.subTest(task=task_id):
+                self.conn.execute(
+                    "UPDATE occupancies SET payload=json_set(payload,'$.placementTaskId',?) WHERE id='o1'", (task_id,)
+                )
+                actual = service.room_workspace(self.conn, LIMITED, "r1", view="cages")
+                self.assertEqual(actual.get("occupancyStrains"), expected)
+                self.assertEqual(
+                    actual.get("occupancyIntakeDetails"),
+                    {"o1": {"specification": "8w", "sex": "雌性"}} if expected else None,
+                )
+
+        self.conn.execute(
+            """
+            UPDATE occupancies SET payload=json_set(payload,'$.strainStandard','C57BL/6J','$.placementTaskId','related')
+            WHERE id='o1'
+            """
+        )
+        actual = service.room_workspace(self.conn, LIMITED, "r1", view="cages")
+        self.assertEqual(actual["occupancyStrains"], {"o1": "C57BL/6J"})
+        self.conn.execute("UPDATE occupancies SET payload=json_set(payload,'$.strainStandard',NULL) WHERE id='o1'")
+        self.assertNotIn("occupancyStrains", service.room_workspace(self.conn, LIMITED, "r1", view="cages"))
+        full = service.room_workspace(self.conn, LIMITED, "r1")
+        self.assertNotIn("occupancyStrains", full)
+        self.assertNotIn("occupancyIntakeDetails", full)
+
     def test_layout_permissions_versions_and_audit_are_scoped_to_metadata(self):
         before = assemble_state(self.conn)
         body = {"placements": [PLACEMENT], "expectedUpdatedAt": ""}
@@ -205,6 +249,7 @@ class InfrastructureReadTests(unittest.TestCase):
         self.assertEqual(self.put_layout("r1", ADMIN, {**body, "expectedUpdatedAt": saved["updatedAt"]})[1], 409)
 
     def test_layout_geometry_uses_rotated_extents_and_rejects_invalid_racks(self):
+        self.conn.execute("UPDATE racks SET payload=json_set(payload,'$.cols',4,'$.rows',8) WHERE id='rack1'")
         self.conn.execute(
             "INSERT INTO racks(id,room_id,name,payload) VALUES('other','r1','other',?)",
             (json.dumps({"id": "other", "roomId": "r1", "name": "other"}),),
@@ -212,13 +257,15 @@ class InfrastructureReadTests(unittest.TestCase):
         self.conn.commit()
         other = {"rackId": "other", "column": 3, "row": 1, "rotation": 90}
         for placements in (
-            [PLACEMENT, other],
+            [PLACEMENT, {**other, "column": 1}],
+            [{**PLACEMENT, "rotation": 90}, {**other, "column": 1.75, "row": 1}],
             [PLACEMENT, {**PLACEMENT, "column": 4}],
             [{**PLACEMENT, "rackId": "rack2"}],
-            [{**PLACEMENT, "column": 253}],
+            [{**PLACEMENT, "column": 255}],
             [{**other, "row": 253}],
             [{**PLACEMENT, "column": -1}],
-            [{**PLACEMENT, "column": 0.0}],
+            [{**PLACEMENT, "column": 0.1}],
+            [{**PLACEMENT, "column": 254.875}],
             [{**PLACEMENT, "row": True}],
             [{**PLACEMENT, "rotation": False}],
             [{**PLACEMENT, "rotation": 180}],
@@ -229,10 +276,16 @@ class InfrastructureReadTests(unittest.TestCase):
                 )
         self.assertEqual(service.room_workspace(self.conn, ADMIN, "r1", view="cages")["rackLayout"], EMPTY_LAYOUT)
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0], 0)
-        valid = [{**PLACEMENT, "column": 250, "row": 254}, {**other, "column": 254, "row": 252}]
+        valid = [PLACEMENT, {**other, "column": 1.25}]
         saved, status = self.put_layout("r1", ADMIN, {"placements": valid, "expectedUpdatedAt": ""})
         self.assertEqual((saved["placements"], status), (valid, 200))
         self.assertEqual(service.room_workspace(self.conn, ADMIN, "r1", view="cages")["rackLayout"], saved)
+
+        self.conn.execute("UPDATE racks SET payload=json_set(payload,'$.cols',6,'$.rows',2) WHERE id='rack1'")
+        body = {"placements": [PLACEMENT, {**other, "column": 2.25}], "expectedUpdatedAt": saved["updatedAt"]}
+        self.assertEqual(self.put_layout("r1", ADMIN, body)[1], 400)
+        body["placements"][1]["column"] = 2.5
+        self.assertEqual(self.put_layout("r1", ADMIN, body)[1], 200)
 
     def test_layout_persists_across_schema_and_legacy_room_rewrite_then_cascades(self):
         saved, status = self.put_layout("r1", ADMIN, {"placements": [PLACEMENT], "expectedUpdatedAt": ""})

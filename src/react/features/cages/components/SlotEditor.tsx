@@ -1,11 +1,12 @@
 import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
 import { useRef, useState } from "react";
-import { Alert, Input } from "antd";
-import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
+import { Alert, Input, Select } from "antd";
+import type { CageRack, CageSlot, Occupancy, OccupancyIntakeDetails } from "../../../api/contracts";
 import { useSaveOccupancy } from "../../../api/cages";
 import { ModalShell } from "../../../components/WorkspaceUi";
 import { ActionButton, ReadOnlyInput } from "../../../components/ui";
-import { animalAgeText, cageCode, emptyOccupancy } from "../../../../domain/cages";
+import { animalAgeText, cageCode, cageSpecies, emptyOccupancy } from "../../../../domain/cages";
+import { animalSpeciesOptions, normalizeIntakeSex } from "../../../../domain/intake";
 import { Field, SexSelect, SlotStatusSelect } from "./CageFormControls";
 import { useUnsavedChanges } from "../../../hooks/useUnsavedChanges";
 import { today } from "./cageWorkspaceDate";
@@ -16,6 +17,8 @@ export function SlotEditor({
   roomName,
   roomSpecies,
   occupancy,
+  strain,
+  intakeDetails,
   roomId,
   onClose,
   beginOperation,
@@ -25,6 +28,8 @@ export function SlotEditor({
   roomName: string;
   roomSpecies: string;
   occupancy: Occupancy | null;
+  strain?: string;
+  intakeDetails?: OccupancyIntakeDetails;
   roomId: string;
   onClose: () => void;
   beginOperation: () => () => boolean;
@@ -35,7 +40,10 @@ export function SlotEditor({
     () => occupancy || emptyOccupancy(slot.id, cageCode(slot, rack.index, roomName), today),
   );
   const [confirmClear, setConfirmClear] = useState(false);
-  const showMonkeyFields = roomSpecies === "monkey";
+  const species = cageSpecies(draft.species, roomSpecies);
+  const showMonkeyFields = species === "monkey";
+  const intakeSex = normalizeIntakeSex(intakeDetails?.sex);
+  const animalSex = draft.animalSex || (intakeSex === "雌性" ? "female" : intakeSex === "雄性" ? "male" : "unknown");
   const ageText = animalAgeText(draft.birthDate, today);
   const save = useSaveOccupancy(roomId);
   const [original] = useState(() => JSON.stringify(draft));
@@ -49,6 +57,14 @@ export function SlotEditor({
   };
   const update = (key: keyof Occupancy, value: string | number | null) =>
     setDraft((current) => ({ ...current, [key]: value }));
+  const sexSelect = (
+    <SexSelect
+      disabled={save.isPending}
+      id="cage-slot-sex"
+      value={animalSex}
+      onChange={(value) => update("animalSex", value)}
+    />
+  );
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (writing.current) return;
@@ -122,20 +138,41 @@ export function SlotEditor({
             disabled={save.isPending}
             label="动物数量"
             type="number"
-            value={draft.animalCount || ""}
+            value={draft.animalCount ?? ""}
             onChange={(value) => update("animalCount", value ? Number(value) : null)}
+          />
+        </div>
+        <div className={`compact-form-row ${showMonkeyFields ? "third" : "half"}`}>
+          <label htmlFor="cage-slot-species">
+            物种
+            <Select
+              aria-label="物种"
+              id="cage-slot-species"
+              disabled={save.isPending}
+              options={animalSpeciesOptions}
+              value={species || undefined}
+              onChange={(value) => update("species", value)}
+            />
+          </label>
+          {showMonkeyFields ? null : sexSelect}
+          <Field
+            disabled={save.isPending}
+            label="品系"
+            value={draft.strainStandard === null ? "" : draft.strainStandard || strain || ""}
+            onChange={(value) => update("strainStandard", value ? value : null)}
+          />
+          <Field
+            disabled={save.isPending}
+            label="规格（体重/日龄）"
+            value={draft.specification === null ? "" : draft.specification || intakeDetails?.specification || ""}
+            onChange={(value) => update("specification", value ? value : null)}
           />
         </div>
         {showMonkeyFields ? (
           <fieldset className="monkey-detail-fields">
             <legend>猴个体信息</legend>
             <div className="compact-form-row third">
-              <SexSelect
-                disabled={save.isPending}
-                id="cage-slot-sex"
-                value={draft.animalSex || "unknown"}
-                onChange={(value) => update("animalSex", value)}
-              />
+              {sexSelect}
               <Field
                 disabled={save.isPending}
                 label="出生日期"

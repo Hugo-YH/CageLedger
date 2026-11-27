@@ -60,23 +60,27 @@
 }
 
 .react-cage-view .slot {
-  display: grid;
-  align-content: start;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
+  display: block;
   min-inline-size: 0;
-  padding: 10px;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--cage-project-fill, var(--surface));
   color: var(--text-strong);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--text-xs);
   text-align: start;
 }
 
+.react-cage-view .slot-card-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  block-size: 100%;
+}
+
 .react-cage-view .slot[data-cage-status="empty"] {
-  background: var(--surface-soft);
+  background: var(--bg);
 }
 
 .react-cage-view .slot[data-cage-status="reserved"] {
@@ -109,39 +113,101 @@
 .react-cage-view .slot-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 4px;
-  line-height: 20px;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
+  line-height: 18px;
 }
 
 .react-cage-view .slot-code {
   flex: 0 0 auto;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   font-variant-numeric: tabular-nums;
 }
 
 .react-cage-view .slot-state {
+  min-inline-size: 0;
+  padding-inline: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--surface);
   color: var(--text-subtle);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.react-cage-view .slot-state-dot {
+  flex: none;
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  margin-inline-end: var(--space-1);
+  border-radius: 50%;
+  background: var(--warning-text);
+}
+
+.react-cage-view .slot[data-cage-status="active"] .slot-state {
+  background: var(--success-soft);
+  color: var(--success-text);
+}
+
+.react-cage-view .slot[data-cage-status="reserved"] .slot-state {
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.react-cage-view .slot[data-cage-status="overdue"] .slot-state {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.react-cage-view :is(.slot-record, .slot-animals) {
+  display: grid;
+  min-inline-size: 0;
+  padding: var(--space-1) var(--space-2);
+  border-block-start: 1px solid var(--line);
+}
+
+.react-cage-view .slot-record {
+  align-content: center;
+  gap: 2px;
+  overflow: hidden;
+  line-height: 16px;
+}
+
 .react-cage-view .slot-iacuc {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
   line-height: 20px;
 }
 
-.react-cage-view .slot-iacuc,
-.react-cage-view .slot-person,
-.react-cage-view .slot-animal-meta {
+.react-cage-view .slot-animals {
+  background: var(--bg);
+  line-height: 14px;
+}
+
+.react-cage-view .slot-animal-main {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-1);
+  font-weight: var(--weight-strong);
+  line-height: 18px;
+}
+
+.react-cage-view .slot-animal-count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.react-cage-view :is(.slot-iacuc, .slot-person, .slot-animal-type, .slot-animal-meta) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.react-cage-view .slot-person,
-.react-cage-view .slot-animal-meta {
+.react-cage-view :is(.slot-person, .slot-animal-meta) {
   color: var(--text-subtle);
 }
 
@@ -234,13 +300,29 @@
   padding-block: var(--space-1);
 }
 
+[data-feature="cages"] .cage-facility-select {
+  inline-size: clamp(128px, 16vw, 156px);
+}
+
 [data-feature="cages"] .cage-room-select {
   inline-size: clamp(112px, 20vw, 196px);
   max-inline-size: 100%;
 }
 
 [data-feature="cages"] .cage-room-zoom {
-  margin-inline-start: auto;
+  position: absolute;
+  z-index: var(--z-raised);
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+  padding: 2px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+[data-feature="cages"] .cage-room-zoom-level {
+  min-inline-size: 56px;
+  font-variant-numeric: tabular-nums;
 }
 
 [data-feature="cages"] .cage-room-map-stage {
@@ -306,6 +388,15 @@
   border-radius: var(--radius-panel);
 }
 
+[data-feature="cages"] .cage-room-map-frame {
+  position: relative;
+  inline-size: 100%;
+}
+
+[data-feature="cages"] .cage-room-map-frame .cage-room-map-scroll {
+  scroll-padding-block-start: 52px;
+}
+
 [data-feature="cages"] .cage-room-map-scroll:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -316,14 +407,15 @@
     calc((100cqi - 2px) / var(--rack-map-columns)),
     calc((var(--rack-map-view-height) - 2px) / var(--rack-map-rows))
   );
-  --rack-grid-size: calc(clamp(26px, var(--rack-grid-fit), 104px) * var(--rack-map-zoom));
+  --rack-layout-unit: calc(clamp(26px, var(--rack-grid-fit), 104px) * var(--rack-map-zoom));
+  --rack-grid-size: var(--rack-layout-unit);
   --rack-grid-stroke: color-mix(in srgb, var(--line) var(--rack-grid-strength, 36%), transparent);
   --rack-grid-line: linear-gradient(to right, var(--rack-grid-stroke) 1px, transparent 1px);
   --rack-grid-row: linear-gradient(to bottom, var(--rack-grid-stroke) 1px, transparent 1px);
 
   position: relative;
-  inline-size: calc(var(--rack-map-columns) * var(--rack-grid-size));
-  block-size: calc(var(--rack-map-rows) * var(--rack-grid-size));
+  inline-size: calc(var(--rack-map-columns) * var(--rack-layout-unit));
+  block-size: calc(var(--rack-map-rows) * var(--rack-layout-unit));
   margin-inline: auto;
   overflow: hidden;
   background-image: var(--rack-grid-line), var(--rack-grid-row);
@@ -331,25 +423,93 @@
 }
 
 [data-feature="cages"] .cage-room-map[data-editable="true"] {
-  --rack-grid-size: clamp(26px, calc(100cqi / var(--rack-map-columns)), 44px);
+  --rack-layout-unit: clamp(32px, var(--rack-grid-fit), 64px);
+  --rack-grid-size: calc(var(--rack-layout-unit) / var(--rack-map-grid-divisions));
+}
+
+[data-feature="cages"] .cage-room-map[data-details="true"] {
+  --rack-layout-unit: max(
+    calc(clamp(26px, var(--rack-grid-fit), 104px) * var(--rack-map-zoom)),
+    calc(var(--rack-detail-columns-per-unit) * 118px + 12px),
+    calc(var(--rack-detail-rows-per-unit) * 126px + 22px)
+  );
 }
 
 [data-feature="cages"] .cage-room-rack {
+  --rack-heading-size: 20px;
+  --rack-min-card-width: 88px;
+  --rack-cell-gap: 2px;
+  --rack-inline-chrome: calc(2 * var(--space-2) + 4px);
+  --rack-block-chrome: calc(3 * var(--space-1) + 4px + var(--rack-heading-size));
+  --rack-column-gaps: calc((var(--rack-slot-columns) - 1) * var(--rack-cell-gap));
+  --rack-row-gaps: calc((var(--rack-slot-rows) - 1) * var(--rack-cell-gap));
+  --rack-cell-size: max(
+    1px,
+    min(
+      var(--rack-cell-cap, calc(var(--rack-footprint-columns) * var(--rack-layout-unit))),
+      calc(
+        (
+            var(--rack-footprint-columns) * var(--rack-layout-unit) - var(--rack-inline-chrome) -
+              var(--rack-column-gaps)
+          ) /
+          var(--rack-slot-columns)
+      ),
+      calc(
+        (var(--rack-footprint-rows) * var(--rack-layout-unit) - var(--rack-block-chrome) - var(--rack-row-gaps)) /
+          var(--rack-slot-rows)
+      )
+    )
+  );
+
   position: absolute;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-1);
   min-inline-size: 0;
+  max-inline-size: max(
+    var(--rack-min-card-width),
+    calc(var(--rack-slot-columns) * var(--rack-cell-size) + var(--rack-column-gaps) + var(--rack-inline-chrome))
+  );
+  max-block-size: calc(var(--rack-slot-rows) * var(--rack-cell-size) + var(--rack-row-gaps) + var(--rack-block-chrome));
   padding: var(--space-1) var(--space-2);
   overflow: hidden;
   text-align: start;
   border-inline-start-width: 3px;
 }
 
-[data-feature="cages"] .cage-room-rack[aria-pressed="true"] {
+[data-feature="cages"] .cage-room-rack[data-editable="true"] {
+  --rack-min-card-width: 0px;
+}
+
+[data-feature="cages"] .cage-room-rack:is([aria-pressed="true"], [data-selected="true"]) {
   border-color: var(--primary);
   background: var(--primary-soft);
+}
+
+[data-feature="cages"] .cage-room-rack-detail {
+  --rack-heading-size: 24px;
+  --rack-cell-cap: var(--cage-slot-size);
+
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-inline-start-width: 3px;
+  border-radius: var(--radius-control);
+}
+
+[data-feature="cages"] .cage-room-rack-detail .cage-room-rack-detail-heading {
+  justify-content: flex-start;
+  flex: none;
+  block-size: var(--rack-heading-size);
+  min-inline-size: 0;
+  padding-inline: var(--space-1);
+  overflow: hidden;
+  font-weight: var(--weight-strong);
+}
+
+[data-feature="cages"] .cage-room-rack-detail-heading > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 [data-feature="cages"] .cage-room-rack[data-rotation="90"] {
@@ -368,24 +528,133 @@
 
 [data-feature="cages"] .cage-room-rack-name {
   display: flex;
-  gap: var(--space-1);
-  justify-content: space-between;
+  flex: none;
+  align-items: center;
+  block-size: var(--rack-heading-size);
   min-inline-size: 0;
   font-size: var(--text-xs);
   line-height: var(--leading-relaxed);
 }
 
-[data-feature="cages"] .cage-room-rack[data-rotation="90"] .cage-room-rack-name {
-  display: grid;
-  gap: 0;
-}
-
 [data-feature="cages"] .cage-room-rack-preview {
   display: grid;
-  flex: 1;
-  gap: 2px;
+  flex: none;
+  grid-template-columns: repeat(var(--rack-slot-columns), var(--rack-cell-size));
+  grid-template-rows: repeat(var(--rack-slot-rows), var(--rack-cell-size));
+  gap: var(--rack-cell-gap);
   min-block-size: 0;
   overflow: hidden;
+}
+
+[data-feature="cages"] .cage-room-slot {
+  container: cage-room-slot / size;
+  overflow: hidden;
+}
+
+[data-feature="cages"]
+  :is(
+    .cage-room-slot-summary,
+    .cage-room-slot-record,
+    .cage-room-slot-animals,
+    .cage-room-slot-people,
+    .cage-room-slot-animal
+  ) {
+  display: none;
+}
+
+@container cage-room-slot (width >= 22px) and (height >= 18px) {
+  [data-feature="cages"] .cage-room-slot-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    block-size: 100%;
+    color: var(--text);
+    font-size: var(--text-xs);
+    line-height: 14px;
+    white-space: nowrap;
+  }
+
+  [data-feature="cages"]
+    :is(
+      .cage-room-slot-header,
+      .cage-room-slot-iacuc,
+      .cage-room-slot-people,
+      .cage-room-slot-animal,
+      .cage-room-slot-count
+    ) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-feature="cages"] .cage-room-slot-header {
+    padding: 1px 3px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-feature="cages"] :is(.cage-room-slot-record, .cage-room-slot-animals) {
+    padding: 1px 3px;
+    overflow: hidden;
+    border-block-start: 1px solid var(--line);
+  }
+
+  [data-feature="cages"] .cage-room-slot-record {
+    align-content: center;
+    grid-row: 2;
+  }
+
+  [data-feature="cages"] .cage-room-slot-animals {
+    align-items: baseline;
+    grid-row: 3;
+    gap: 2px;
+    background: var(--bg);
+  }
+
+  [data-feature="cages"] .cage-room-slot-count {
+    margin-inline-start: auto;
+    font-weight: var(--weight-strong);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@container cage-room-slot (width >= 32px) and (height >= 34px) {
+  [data-feature="cages"] .cage-room-slot-animals:has(.cage-room-slot-count) {
+    display: flex;
+  }
+}
+
+@container cage-room-slot (width >= 60px) and (height >= 52px) {
+  [data-feature="cages"] .cage-room-slot-record:has(.cage-room-slot-iacuc) {
+    display: grid;
+  }
+}
+
+@container cage-room-slot (width >= 60px) and (height >= 70px) {
+  [data-feature="cages"] .cage-room-slot-header {
+    padding-inline: 5px;
+  }
+
+  [data-feature="cages"] .cage-room-slot-record {
+    display: grid;
+    gap: 1px;
+    padding-inline: 5px;
+  }
+
+  [data-feature="cages"] .cage-room-slot-animals {
+    display: flex;
+    padding-inline: 5px;
+  }
+
+  [data-feature="cages"] :is(.cage-room-slot-people, .cage-room-slot-animal) {
+    display: block;
+  }
+
+  [data-feature="cages"] .cage-room-slot-animal {
+    flex: 1 1 0;
+  }
+
+  [data-feature="cages"] .cage-room-slot-people {
+    color: var(--text-subtle);
+  }
 }
 
 [data-feature="cages"] .cage-room-rack-drop {
@@ -416,43 +685,30 @@
   block-size: 12px;
 }
 
-[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i {
+[data-feature="cages"] :is(.cage-room-slot, .cage-map-key i) {
   background: var(--cage-project-fill, var(--surface-soft));
   border: 1px solid var(--line);
   border-radius: 2px;
 }
 
-[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="active"] {
+[data-feature="cages"] :is(.cage-room-slot, .cage-map-key i)[data-cage-status="active"] {
   background: var(--cage-project-fill, var(--success-soft));
 }
 
-[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="reserved"] {
+[data-feature="cages"] :is(.cage-room-slot, .cage-map-key i)[data-cage-status="reserved"] {
   border: 1px dashed var(--amber);
 }
 
-[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="open"] {
+[data-feature="cages"] :is(.cage-room-slot, .cage-map-key i)[data-cage-status="open"] {
   border: 1px dotted var(--warning-text);
 }
 
-[data-feature="cages"] :is(.cage-room-rack-preview, .cage-map-key) i[data-cage-status="overdue"] {
+[data-feature="cages"] :is(.cage-room-slot, .cage-map-key i)[data-cage-status="overdue"] {
   border-color: var(--danger);
 }
 
-[data-feature="cages"] .cage-project-key {
-  max-block-size: 96px;
-  overflow: auto;
-}
-
-[data-feature="cages"] .cage-project-tag {
-  max-inline-size: 100%;
-  margin-inline-end: 0;
-  overflow: hidden;
-  color: var(--text);
-  text-overflow: ellipsis;
-}
-
 [data-feature="cages"].cage-room-layout-editor {
-  --rack-grid-strength: 55%;
+  --rack-grid-strength: 32%;
 }
 
 [data-feature="cages"].cage-room-layout-editor .cage-room-map-scroll {
@@ -461,6 +717,10 @@
 }
 
 @media (width < 768px) {
+  [data-feature="cages"] .cage-room-map-frame .cage-room-map-scroll {
+    scroll-padding-block-start: 64px;
+  }
+
   [data-feature="cages"].cage-room-layout-editor button:not(.cage-room-rack),
   [data-feature="cages"] .cage-rack-detail-close,
   [data-feature="cages"] .cage-room-zoom button {

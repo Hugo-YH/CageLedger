@@ -1,14 +1,11 @@
 import { memo, type CSSProperties } from "react";
 import {
-  animalAgeText,
-  animalSexLabel,
   cageCode,
   cageDisplayStatus,
+  cageOccupancyDetails,
   cageStatusLabels,
   slotPosition,
 } from "../../../../domain/cages";
-import { speciesLabel } from "../../../../domain/intake";
-import { formatPersonNames } from "../../../../domain/personNames";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 
 export const CageSlotButton = memo(function CageSlotButton({
@@ -17,7 +14,10 @@ export const CageSlotButton = memo(function CageSlotButton({
   roomName,
   roomSpecies,
   occupancy,
+  strain,
   projectFill,
+  gridColumn = slot.col,
+  gridRow,
   selected,
   today,
   onSelect,
@@ -27,7 +27,10 @@ export const CageSlotButton = memo(function CageSlotButton({
   roomName: string;
   roomSpecies: string;
   occupancy: Occupancy | null;
+  strain?: string;
   projectFill?: string;
+  gridColumn?: number;
+  gridRow?: number;
   selected: boolean;
   today: string;
   onSelect: (slot: CageSlot) => void;
@@ -35,20 +38,17 @@ export const CageSlotButton = memo(function CageSlotButton({
   const code = cageCode(slot, rack.index, roomName);
   const status = cageDisplayStatus(slot, occupancy, today);
   const label = cageStatusLabels[status];
-  const iacuc = occupancy?.iacuc || "未填写 IACUC";
-  const owner = occupancy && (formatPersonNames(occupancy.owner) || "未填写");
-  const species = occupancy?.species || roomSpecies;
-  const animalSummary = occupancy
-    ? [speciesLabel(species), occupancy.animalCount == null ? "数量未填写" : `${occupancy.animalCount} 只`]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
-  const monkeySummary =
-    occupancy && species === "monkey"
-      ? `${animalSexLabel(occupancy.animalSex)} · ${animalAgeText(occupancy.birthDate, today) || "年龄未填写"}`
-      : "";
-  const accessibleLabel = occupancy
-    ? [code, label, iacuc, `实验负责人 ${owner}`, animalSummary, monkeySummary]
+  const details = cageOccupancyDetails(occupancy, roomSpecies, today, strain);
+  const accessibleLabel = details
+    ? [
+        code,
+        label,
+        details.iacuc,
+        details.people.description,
+        details.animalSummary,
+        details.strain,
+        details.monkeySummary,
+      ]
     : [code, label];
   return (
     <button
@@ -57,29 +57,73 @@ export const CageSlotButton = memo(function CageSlotButton({
       aria-label={accessibleLabel.filter(Boolean).join("，")}
       aria-pressed={selected}
       data-cage-status={status}
-      style={{ gridColumn: slot.col, "--cage-project-fill": projectFill } as CSSProperties}
+      style={{ gridColumn, gridRow, "--cage-project-fill": projectFill } as CSSProperties}
       onClick={() => onSelect(slot)}
     >
-      <span className="slot-header">
-        <span className="slot-code" title={code}>
-          {slotPosition(slot)}
-        </span>
-        <span className="slot-state">{label}</span>
-      </span>
-      {occupancy ? (
-        <>
-          <strong className="slot-iacuc" title={iacuc}>
-            {iacuc}
-          </strong>
-          <span className="slot-person" title={`实验负责人 ${owner}`}>
-            实验负责人 {owner}
-          </span>
-          <span className="slot-animal-meta" title={animalSummary}>
-            {animalSummary}
-          </span>
-          {monkeySummary ? <span className="slot-animal-meta">{monkeySummary}</span> : null}
-        </>
-      ) : null}
+      <CageSlotContent
+        code={code}
+        position={slotPosition(slot)}
+        label={label}
+        showStatusDot={status === "open"}
+        details={details}
+      />
     </button>
   );
 });
+
+function CageSlotContent({
+  code,
+  position,
+  label,
+  showStatusDot,
+  details,
+}: {
+  code: string;
+  position: string;
+  label: string;
+  showStatusDot: boolean;
+  details: ReturnType<typeof cageOccupancyDetails>;
+}) {
+  return (
+    <span className="slot-card-content">
+      <span className="slot-header">
+        <span className="slot-code" title={code}>
+          {position}
+        </span>
+        {showStatusDot ? (
+          <span className="slot-state-dot" title={label} aria-hidden="true" />
+        ) : (
+          <span className="slot-state" title={label}>
+            {label}
+          </span>
+        )}
+      </span>
+      {details ? (
+        <>
+          <span className="slot-record">
+            <strong className="slot-iacuc" title={details.iacuc}>
+              {details.iacuc}
+            </strong>
+            {details.people.names ? (
+              <span className="slot-person" title={details.people.description}>
+                {details.people.names}
+              </span>
+            ) : null}
+          </span>
+          <span className="slot-animals">
+            <span className="slot-animal-main" title={details.animalSummary}>
+              <span className="slot-animal-type">{details.animal}</span>
+              {details.count ? <span className="slot-animal-count">{details.count}</span> : null}
+            </span>
+            {details.strain ? (
+              <span className="slot-animal-meta" title={`品系 ${details.strain}`}>
+                {details.strain}
+              </span>
+            ) : null}
+            {details.monkeySummary ? <span className="slot-animal-meta">{details.monkeySummary}</span> : null}
+          </span>
+        </>
+      ) : null}
+    </span>
+  );
+}

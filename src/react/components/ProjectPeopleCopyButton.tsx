@@ -1,8 +1,7 @@
-import { formatPersonNames } from "../../../../domain/personNames";
+import { formatPersonNames } from "../../domain/personNames";
 import { Button, Tooltip, type GetRef } from "antd";
 import { createContext, useContext, useLayoutEffect, useRef, type PropsWithChildren } from "react";
 
-import type { IntakeBatch } from "../../../api/contracts";
 import { useCopyProjectPeople } from "../hooks/useCopyProjectPeople";
 
 const CopyProjectPeopleContext = createContext<ReturnType<typeof useCopyProjectPeople> | null>(null);
@@ -17,7 +16,7 @@ export function ProjectPeopleCopyButton({
   item,
   disabled = false,
 }: {
-  item: Pick<IntakeBatch, "id" | "iacuc" | "owner">;
+  item: { id: string; iacuc: string; owner: string };
   disabled?: boolean;
 }) {
   const controller = useContext(CopyProjectPeopleContext);
@@ -41,7 +40,7 @@ export function ProjectPeopleCopyButton({
       >
         <Button
           type="link"
-          className="intake-project-people-copy"
+          className="project-people-copy"
           aria-label={`复制项目负责人和实验负责人：${text}`}
           loading={pending}
           disabled={disabled || Boolean(copyingId)}

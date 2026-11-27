@@ -2,7 +2,7 @@ import { memo, useMemo, useRef, type CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CageRack, CageSlot, Occupancy } from "../../../api/contracts";
 import { CageSlotButton } from "./CageSlotButton";
-import { cageProjectKey, type RoomProjectColor } from "./roomProjectColors";
+import { cageProjectKey } from "./roomProjectColors";
 
 export const VirtualRack = memo(function VirtualRack({
   rack,
@@ -10,6 +10,7 @@ export const VirtualRack = memo(function VirtualRack({
   roomSpecies,
   slots,
   occupancyBySlot,
+  occupancyStrains,
   projectColors,
   today,
   selectedSlotId,
@@ -21,7 +22,8 @@ export const VirtualRack = memo(function VirtualRack({
   roomSpecies: string;
   slots: CageSlot[];
   occupancyBySlot: ReadonlyMap<string, Occupancy>;
-  projectColors: ReadonlyMap<string, RoomProjectColor>;
+  occupancyStrains?: Readonly<Record<string, string>>;
+  projectColors: ReadonlyMap<string, string>;
   today: string;
   selectedSlotId: string;
   selectedSlotIds: string[];
@@ -76,7 +78,8 @@ export const VirtualRack = memo(function VirtualRack({
                     roomName={roomName}
                     roomSpecies={roomSpecies}
                     occupancy={occupancy}
-                    projectFill={occupancy ? projectColors.get(cageProjectKey(occupancy.iacuc))?.fill : undefined}
+                    strain={occupancy ? occupancyStrains?.[occupancy.id] : undefined}
+                    projectFill={projectColors.get(cageProjectKey(occupancy?.iacuc))}
                     selected={slot.id === selectedSlotId || selectedSlotIdSet.has(slot.id)}
                     today={today}
                     onSelect={onSelect}

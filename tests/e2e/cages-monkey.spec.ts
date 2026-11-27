@@ -191,7 +191,10 @@ test("monkey rooms preserve sex, birth date, and calculated age", async ({ page 
   });
   const toolbar = page.getByRole("group", { name: "笼位图操作", exact: true });
   await toolbar.getByRole("button", { name: "多选录入", exact: true }).click();
-  await toolbar.getByRole("button", { name: "全选当前", exact: true }).click();
+  const selectAll = toolbar.getByRole("button", { name: "全选当前", exact: true });
+  await expect(selectAll).toBeDisabled();
+  await rack.click();
+  await selectAll.click();
   await toolbar.getByRole("button", { name: "批量编辑", exact: true }).click();
   const batch = page.getByRole("dialog", { name: "批量编辑 2 个笼位", exact: true });
   await batch.getByLabel("备注", { exact: true }).fill("E2E 批量版本验证");

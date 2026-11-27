@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { fetchIacucSearch } from "../../../api/iacuc";
 import { queryKeys } from "../../../api/queryKeys";
 import { copyTextToClipboard } from "../../../utils/clipboard";
-import { useCopyProjectPeople } from "./useCopyProjectPeople";
+import { useCopyProjectPeople } from "../../../hooks/useCopyProjectPeople";
 
 const message = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock("../../../hooks/useOperationFeedback", () => ({ useOperationFeedback: () => ({ message }) }));

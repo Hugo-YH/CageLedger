@@ -1,4 +1,4 @@
-import { ensureTestInfrastructure, expect, openNavigationEntry, test } from "./fixtures";
+import { chooseCageRoom, ensureTestInfrastructure, expect, openNavigationEntry, test } from "./fixtures";
 import { captureUiAudit } from "./uiAudit";
 import type { Page } from "@playwright/test";
 
@@ -114,12 +114,13 @@ test("cage request failures provide retry and retain an open editor during backg
     else await route.fallback();
   });
   await openNavigationEntry(page, "笼位管理", "笼位管理");
+  await chooseCageRoom(page, "8014");
   await expect(page.getByText("笼位信息加载失败", { exact: true })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("当前房间尚未创建笼架", { exact: true })).toBeHidden();
   fail = false;
   await page.getByRole("button", { name: "重新加载", exact: true }).click();
   await page.getByRole("region", { name: "房间笼架布局", exact: true }).getByRole("button").first().click();
-  const slot = page.locator(".react-rack-scroll .slot").first();
+  const slot = page.getByRole("region", { name: "房间笼架布局", exact: true }).locator(".slot").first();
   await expect(slot).toBeVisible();
   fail = true;
   gate = new Promise<void>((resolve) => (release = resolve));

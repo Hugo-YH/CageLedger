@@ -75,6 +75,8 @@ export interface Occupancy {
   endDate: string;
   animalCount?: number | null;
   species?: string;
+  strainStandard?: string | null;
+  specification?: string | null;
   animalSex?: string;
   birthDate?: string;
   notes: string;
@@ -127,6 +129,13 @@ export interface RoomWorkspace {
   racks: CageRack[];
   slots: CageSlot[];
   occupancies: Occupancy[];
+  occupancyStrains?: Record<string, string>;
+  occupancyIntakeDetails?: Record<string, OccupancyIntakeDetails>;
   placementTasks: PlacementTask[];
   rackLayout?: RoomRackLayout;
+}
+
+export interface OccupancyIntakeDetails {
+  specification?: string;
+  sex?: string;
 }

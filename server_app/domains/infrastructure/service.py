@@ -2,6 +2,7 @@
 
 import time
 from datetime import UTC, datetime, timedelta
+from math import ceil, floor
 
 from server_app.cache import log_perf
 from server_app.domains.administration.audit import audit_event, write_audit_events
@@ -10,6 +11,7 @@ from server_app.shared.concurrency import StaleWriteError, begin_write
 from . import repository as repo
 
 RACK_LAYOUT_LIMIT = 256
+RACK_LAYOUT_GRID_DIVISIONS = 4
 
 
 def authorized_ids(actor):
@@ -72,7 +74,7 @@ def save_rack_layout(conn, actor, room_id, body):
     before = repo.read_rack_layout(conn, room_id)
     if before["updatedAt"] != body["expectedUpdatedAt"]:
         raise StaleWriteError("笼架布局已被其他操作更新，请刷新后重新编辑")
-    placements = _rack_layout_placements(body.get("placements"), repo.room_rack_ids(conn, room_id))
+    placements = _rack_layout_placements(body.get("placements"), repo.room_rack_sizes(conn, room_id))
     at = datetime.now(UTC)
     if before["updatedAt"]:
         at = max(at, datetime.fromisoformat(before["updatedAt"]) + timedelta(microseconds=1))
@@ -97,28 +99,54 @@ def save_rack_layout(conn, actor, room_id, body):
     return after
 
 
-def _rack_layout_placements(placements, rack_ids):
+def _rack_footprint(size, rotation):
+    cols, rows = size
+    width, height = 16, 8
+    if all(type(value) in (int, float) and 1 <= value < float("inf") for value in size):
+        # Match the room map: fit the rack inside the old 4 × 2 footprint, in quarter units.
+        scale = min(16 / cols, 8 / rows)
+        width = max(5, floor(cols * scale + 0.5))
+        height = max(4, floor(rows * scale + 0.5))
+        cell = min((width - 1) / cols, (height - 2) / rows)
+        width = max(5, min(width, ceil(1 + cell * cols)))
+        height = max(4, min(height, ceil(2 + cell * rows)))
+    return (height, width) if rotation == 90 else (width, height)
+
+
+def _rack_layout_placements(placements, rack_sizes):
     if not isinstance(placements, list):
         raise ValueError("笼架摆放须为数组")
     normalized = []
     placed = set()
-    occupied = set()
+    occupied_rows = {}
     for item in placements:
         if not isinstance(item, dict):
             raise ValueError("笼架摆放格式无效")
         rack_id = item.get("rackId")
-        if not isinstance(rack_id, str) or rack_id not in rack_ids or rack_id in placed:
+        if not isinstance(rack_id, str) or rack_id not in rack_sizes or rack_id in placed:
             raise ValueError("笼架须属于该饲养间且只能摆放一次")
         column, row, rotation = item.get("column"), item.get("row"), item.get("rotation")
-        if any(type(value) is not int for value in (column, row, rotation)) or rotation not in (0, 90):
-            raise ValueError("笼架坐标须为整数，旋转角度须为 0 或 90")
-        width, height = (2, 4) if rotation == 90 else (4, 2)
-        if not (0 <= column <= RACK_LAYOUT_LIMIT - width and 0 <= row <= RACK_LAYOUT_LIMIT - height):
+        if any(type(value) not in (int, float) for value in (column, row)):
+            raise ValueError("笼架坐标须为数值")
+        if type(rotation) is not int or rotation not in (0, 90):
+            raise ValueError("笼架旋转角度须为 0 或 90")
+        width, height = _rack_footprint(rack_sizes[rack_id], rotation)
+        if not (
+            0 <= column <= RACK_LAYOUT_LIMIT - width / RACK_LAYOUT_GRID_DIVISIONS
+            and 0 <= row <= RACK_LAYOUT_LIMIT - height / RACK_LAYOUT_GRID_DIVISIONS
+        ):
             raise ValueError("笼架摆放超出布局边界")
-        cells = {(x, y) for x in range(column, column + width) for y in range(row, row + height)}
-        if occupied & cells:
+        grid_column = column * RACK_LAYOUT_GRID_DIVISIONS
+        grid_row = row * RACK_LAYOUT_GRID_DIVISIONS
+        if grid_column % 1 or grid_row % 1:
+            raise ValueError("笼架坐标须对齐布局网格（0.25 的倍数）")
+        rows = range(int(grid_row), int(grid_row) + height)
+        # One bit per alignment cell keeps collision checks bounded even on large layouts.
+        mask = ((1 << width) - 1) << int(grid_column)
+        if any(occupied_rows.get(y, 0) & mask for y in rows):
             raise ValueError("笼架摆放不能重叠")
-        occupied.update(cells)
+        for y in rows:
+            occupied_rows[y] = occupied_rows.get(y, 0) | mask
         placed.add(rack_id)
         normalized.append({"rackId": rack_id, "column": column, "row": row, "rotation": rotation})
     return normalized

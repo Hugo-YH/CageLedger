@@ -1,11 +1,11 @@
 import { useOperationFeedback } from "../../hooks/useOperationFeedback";
 import { ActionIcon } from "../../components/ui/ActionIcon";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Flex, Select, Tooltip, Typography, theme } from "antd";
+import { Alert, Button, Card, Empty, Flex, Select, Tooltip, Typography, theme } from "antd";
 
 import { useRooms, useRoomWorkspace } from "../../api/infrastructure";
-import type { SessionUser } from "../../api/contracts";
+import type { CageRoom, SessionUser } from "../../api/contracts";
 import { cageCode, currentOccupancyIndex } from "../../../domain/cages";
 import { localToday } from "../../../domain/iacucValidity";
 import { arrangeRoomRacks } from "../../../domain/rackLayout";
@@ -16,20 +16,75 @@ import { RoomRackLegend, RoomRackMap } from "./components/RoomRackMap";
 import { RoomRackDetails } from "./components/RoomRackDetails";
 import { roomProjectColors } from "./components/roomProjectColors";
 import { PageState, WorkspaceToolbar } from "../../components/WorkspaceUi";
-import { ActionButton, ListRefreshStatus, ModalPresence } from "../../components/ui";
+import { ActionButton, HelpPopover, ListRefreshStatus, ModalPresence } from "../../components/ui";
 import { useReservePlacement } from "../../api/cages";
 import { useLatestRequest } from "../../hooks/useLatestRequest";
 import { useSelectionScope } from "../../hooks/useSelectionScope";
 
-const zoomLevels = [1, 1.25, 1.5, 2];
+const zoomLevels = [1, 2, 3];
+const detailZoomLevel = zoomLevels.length - 1;
+const facilityLabels: Record<string, string> = { zhujiang: "珠江新城设施", bioisland: "生物岛设施" };
+
+function roomFacility(room: CageRoom) {
+  const facility = room.facility?.trim() || "zhujiang";
+  return facility === "island" ? "bioisland" : facility;
+}
+
+type MapDestination = { rackId: string; focus: boolean } | { center: [number, number]; pointer?: [number, number] };
+type MapTransition = { destination?: MapDestination; previousBounds?: DOMRect };
+
+function panRoomMap(map: HTMLElement, destination: MapDestination) {
+  const bounds = map.getBoundingClientRect();
+  if ("rackId" in destination) {
+    const rack = [...map.querySelectorAll<HTMLElement>("[data-rack-id]")].find(
+      (item) => item.dataset.rackId === destination.rackId,
+    );
+    if (!rack) return;
+    const target = rack.getBoundingClientRect();
+    const controls = map.nextElementSibling?.getBoundingClientRect();
+    const topPadding = controls && controls.left < bounds.right ? controls.bottom - bounds.top + 8 : 8;
+    map.scrollLeft += target.left - bounds.left - Math.max(0, (map.clientWidth - target.width) / 2);
+    map.scrollTop += target.top - bounds.top - topPadding;
+    if (destination.focus) {
+      const heading = rack instanceof HTMLButtonElement ? rack : rack.querySelector("button");
+      heading?.focus({ preventScroll: true });
+    }
+  } else if (map.firstElementChild) {
+    const board = map.firstElementChild.getBoundingClientRect();
+    const x = destination.pointer?.[0] ?? bounds.left + map.clientWidth / 2;
+    const y = destination.pointer?.[1] ?? bounds.top + map.clientHeight / 2;
+    map.scrollLeft += board.left + destination.center[0] * board.width - x;
+    map.scrollTop += board.top + destination.center[1] * board.height - y;
+  }
+}
+
+function animateRoomMap(board: Element, before: DOMRect, timing: KeyframeAnimationOptions) {
+  if (typeof board.animate !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+  const after = board.getBoundingClientRect();
+  if (!before.width || !before.height || !after.width || !after.height) return null;
+  const translate = `translate(${before.left - after.left}px, ${before.top - after.top}px)`;
+  const scale = `scale(${before.width / after.width}, ${before.height / after.height})`;
+  return board.animate(
+    [
+      { transformOrigin: "0 0", transform: `${translate} ${scale}` },
+      { transformOrigin: "0 0", transform: "none" },
+    ],
+    timing,
+  );
+}
 
 export function CagesView({ user }: { user: SessionUser }) {
   const feedback = useOperationFeedback();
   const { token } = theme.useToken();
   const summary = useRooms();
   const rooms = summary.data?.items || [];
+  const [facility, setFacility] = useState("");
   const [roomId, setRoomId] = useState("");
-  const selectedRoomId = roomId || rooms[0]?.id || "";
+  const facilities = [...new Set(rooms.map(roomFacility))];
+  const activeFacility = facilities.includes(facility) ? facility : "";
+  const visibleRooms = activeFacility ? rooms.filter((room) => roomFacility(room) === activeFacility) : rooms;
+  const selectedRoomId = visibleRooms.some((room) => room.id === roomId) ? roomId : "";
+  const selectedRoom = visibleRooms.find((room) => room.id === selectedRoomId);
   const roomQuery = useRoomWorkspace(selectedRoomId, "cages");
   const data = roomQuery.data;
   const racks = useMemo(
@@ -41,6 +96,8 @@ export function CagesView({ user }: { user: SessionUser }) {
   const [rackDetailsOpen, setRackDetailsOpen] = useState(false);
   const rackDetailsTrigger = useRef<HTMLElement | null>(null);
   const roomMap = useRef<HTMLDivElement>(null);
+  const mapTransition = useRef<MapTransition | null>(null);
+  const mapAnimation = useRef<Animation | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0);
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [selectedSlotIds, setSelectedSlotIds] = useState<string[]>([]);
@@ -57,13 +114,16 @@ export function CagesView({ user }: { user: SessionUser }) {
   const selectedSlot = slots.find((slot) => slot.id === selectedSlotId) || null;
   const occupancies = data?.occupancies || [];
   const occupancyBySlot = useMemo(() => currentOccupancyIndex(data?.occupancies || []), [data?.occupancies]);
-  const projectColors = useMemo(() => roomProjectColors(occupancyBySlot.values(), token), [occupancyBySlot, token]);
+  const selectedOccupancy = occupancyBySlot.get(selectedSlotId) ?? null;
+  const projectColors = useMemo(
+    () => roomProjectColors(data?.slots || [], occupancyBySlot, token),
+    [data?.slots, occupancyBySlot, token],
+  );
   const placements = useMemo(
     () => arrangeRoomRacks(racks, data?.rackLayout?.placements || []),
     [racks, data?.rackLayout],
   );
   const today = localToday();
-  const mapData = { racks, slots: data?.slots || [], occupancyBySlot, projectColors, today };
   const canEditLayout = user.role === "admin" || (user.role === "room_admin" && user.roomIds.includes(selectedRoomId));
   const selectedSlotIdSet = useMemo(() => new Set(selectedSlotIds), [selectedSlotIds]);
   const selectedSlots = useMemo(
@@ -85,20 +145,114 @@ export function CagesView({ user }: { user: SessionUser }) {
         );
       else setSelectedSlotId(slot.id);
     },
-    [batchMode],
+    [batchMode, setSelectedSlotId, setSelectedSlotIds],
   );
-  const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
+  const mapData = {
+    racks,
+    slots: data?.slots || [],
+    occupancyBySlot,
+    occupancyStrains: data?.occupancyStrains,
+    roomName: selectedRoom?.name || "",
+    roomSpecies: selectedRoom?.defaultSpecies || "",
+    projectColors,
+    today,
+  };
 
   const reserve = useReservePlacement(selectedRoomId);
   const scopeOperations = useLatestRequest();
   const selectedTask = tasks.find((task) => task.id === selectedTaskId);
   const selectedCount = batchMode ? selectedSlotIds.length : Number(Boolean(selectedSlot));
 
-  function showRackDetails(id = selectedRack?.id, trigger: HTMLElement | null = null) {
-    if (!id || (rackDetailsOpen && id === rackId)) return;
-    rackDetailsTrigger.current = trigger;
+  useLayoutEffect(() => {
+    const transition = mapTransition.current;
+    mapTransition.current = null;
+    const map = roomMap.current;
+    if (!map || !transition) return;
+    if (transition.destination) panRoomMap(map, transition.destination);
+    const board = map.firstElementChild;
+    if (board && transition.previousBounds) {
+      mapAnimation.current = animateRoomMap(board, transition.previousBounds, {
+        duration: Number.parseFloat(token.motionDurationMid) * 1000,
+        easing: token.motionEaseOut,
+      });
+    }
+  }, [zoomLevel, token.motionDurationMid, token.motionEaseOut]);
+
+  useEffect(() => () => mapAnimation.current?.cancel(), []);
+
+  function navigateRoomMap(level: number, destination?: MapDestination, pointer?: [number, number]) {
+    const map = roomMap.current;
+    const previousBounds = map?.firstElementChild?.getBoundingClientRect();
+    if (map && !destination && map.firstElementChild) {
+      const bounds = map.getBoundingClientRect();
+      if (pointer && (pointer[0] < bounds.left || pointer[0] > bounds.right)) pointer = undefined;
+      const x = pointer?.[0] ?? bounds.left + map.clientWidth / 2;
+      const y = pointer?.[1] ?? bounds.top + map.clientHeight / 2;
+      const board = map.firstElementChild.getBoundingClientRect();
+      if (!pointer && level > zoomLevel) {
+        let nearest = Infinity;
+        for (const rack of map.querySelectorAll<HTMLElement>("[data-rack-id]")) {
+          const target = rack.getBoundingClientRect();
+          const distance = Math.hypot(target.left + target.width / 2 - x, target.top + target.height / 2 - y);
+          if (distance < nearest && rack.dataset.rackId) {
+            nearest = distance;
+            destination = { rackId: rack.dataset.rackId, focus: false };
+          }
+        }
+      }
+      if (!destination && board.width && board.height) {
+        destination = { center: [(x - board.left) / board.width, (y - board.top) / board.height], pointer };
+      }
+    }
+    mapAnimation.current?.cancel();
+    mapAnimation.current = null;
+    if (level === zoomLevel) {
+      if (map && destination) panRoomMap(map, destination);
+      return;
+    }
+    mapTransition.current = { destination, previousBounds };
+    setZoomLevel(level);
+  }
+
+  function changeRack(id: string) {
+    if (id === rackId) return;
+    if (selectedCount) void feedback.message.info("范围已变化，已清空选择");
+    clearRackSelection();
     setRackId(id);
-    setRackDetailsOpen(true);
+  }
+
+  function changeRoom(id: string) {
+    setRoomId(id);
+    if (id === selectedRoomId) return;
+    setRackId("");
+    setRackDetailsOpen(false);
+    rackDetailsTrigger.current = null;
+    mapTransition.current = null;
+    mapAnimation.current?.cancel();
+    mapAnimation.current = null;
+    setZoomLevel(0);
+    setSelectedTaskId("");
+    setTasksOpen(false);
+    setLayoutEditorOpen(false);
+    if (!id) setBatchMode(false);
+  }
+
+  function changeFacility(value: string) {
+    setFacility(value);
+    if (value && selectedRoom && roomFacility(selectedRoom) !== value) changeRoom("");
+  }
+
+  function showRackDetails(id = selectedRack?.id, trigger: HTMLElement | null = null) {
+    if (!id) return;
+    if (placements.some((placement) => placement.rackId === id)) {
+      if (batchMode || selectedTask) changeRack(id);
+      setRackDetailsOpen(false);
+      navigateRoomMap(detailZoomLevel, { rackId: id, focus: true });
+    } else {
+      changeRack(id);
+      rackDetailsTrigger.current = trigger;
+      setRackDetailsOpen(true);
+    }
   }
 
   const closeRackDetails = useCallback(() => {
@@ -108,24 +262,20 @@ export function CagesView({ user }: { user: SessionUser }) {
     rackDetailsTrigger.current = null;
   }, []);
 
-  function clearRackSelection() {
+  const clearRackSelection = useCallback(() => {
     scopeOperations.invalidate();
     setReservationError("");
     setSelectedSlotId("");
     setSelectedSlotIds([]);
     setBatchEditorOpen(false);
-  }
+  }, [scopeOperations, setBatchEditorOpen, setReservationError, setSelectedSlotId, setSelectedSlotIds]);
 
   function clearSelection() {
     clearRackSelection();
     setSelectedTaskId("");
     setTasksOpen(false);
   }
-  useSelectionScope(
-    JSON.stringify([selectedRoomId, selectedRack?.id || ""]),
-    clearRackSelection,
-    Boolean(selectedSlotId) || selectedSlotIds.length > 0,
-  );
+  useSelectionScope(selectedRoomId, clearRackSelection, Boolean(selectedSlotId) || selectedSlotIds.length > 0);
 
   async function reserveSelected() {
     if (!selectedTask || !selectedSlot || !selectedRack || selectedSlot.status !== "empty") return;
@@ -147,10 +297,11 @@ export function CagesView({ user }: { user: SessionUser }) {
   }
   useEffect(() => {
     if (data && rackId && !selectedRack) {
+      clearRackSelection();
       setRackId("");
       setRackDetailsOpen(false);
     }
-  }, [data, rackId, selectedRack]);
+  }, [clearRackSelection, data, rackId, selectedRack]);
 
   if (summary.isPending) return <CageLoading />;
   if (summary.isError && !rooms.length) {
@@ -181,7 +332,7 @@ export function CagesView({ user }: { user: SessionUser }) {
               {selectedTask.batchNo} ·{" "}
               {selectedSlot?.status === "empty" && selectedRack
                 ? `预留到 ${cageCode(selectedSlot, selectedRack.index, selectedRoom?.name || "")}`
-                : rackDetailsOpen && selectedRack
+                : selectedRack && (rackDetailsOpen || zoomLevel === detailZoomLevel)
                   ? `${selectedRack.name} · 请选择空笼位`
                   : "请在房间图选择笼架"}
             </span>
@@ -207,10 +358,14 @@ export function CagesView({ user }: { user: SessionUser }) {
               <ActionButton
                 icon={<ActionIcon name={batchMode ? "clear" : "select"} />}
                 aria-pressed={batchMode}
-                onClick={(event) => {
+                disabled={!data}
+                onClick={() => {
                   clearSelection();
                   setBatchMode((value) => !value);
-                  if (!batchMode) showRackDetails(undefined, event.currentTarget);
+                  if (!batchMode) {
+                    setRackId("");
+                    setRackDetailsOpen(false);
+                  }
                 }}
               >
                 {batchMode ? "退出多选" : "多选录入"}
@@ -292,24 +447,45 @@ export function CagesView({ user }: { user: SessionUser }) {
             className="cage-room-workbench cage-room-panel"
             title={
               <Flex className="cage-room-heading" align="center" gap={8} wrap>
-                <h3 className="cage-room-panel-title">房间布局</h3>
-                <Select
-                  aria-label="房间"
-                  className="cage-room-select"
-                  id="cages-room-select"
-                  options={rooms.map((room) => ({ label: room.name, value: room.id }))}
-                  value={selectedRoomId}
-                  onChange={(value) => {
-                    setRoomId(value);
-                    setRackId("");
-                    setRackDetailsOpen(false);
-                    rackDetailsTrigger.current = null;
-                    setZoomLevel(0);
-                    setSelectedTaskId("");
-                    setTasksOpen(false);
-                    setLayoutEditorOpen(false);
-                  }}
-                />
+                <Flex align="center" gap={8}>
+                  <label htmlFor="cages-facility-select">设施</label>
+                  <Select
+                    aria-label="设施"
+                    className="cage-facility-select"
+                    id="cages-facility-select"
+                    options={[
+                      { label: "全部设施", value: "" },
+                      ...facilities.map((value) => ({ label: facilityLabels[value] || value, value })),
+                    ]}
+                    value={activeFacility}
+                    onChange={changeFacility}
+                  />
+                </Flex>
+                <Flex align="center" gap={8}>
+                  <h3 className="cage-room-panel-title">饲养间</h3>
+                  <Select
+                    aria-label="房间"
+                    className="cage-room-select"
+                    id="cages-room-select"
+                    options={[
+                      { label: "请选择饲养间", value: "" },
+                      ...visibleRooms.map((room) => ({ label: room.name, value: room.id })),
+                    ]}
+                    value={selectedRoomId}
+                    onChange={changeRoom}
+                  />
+                </Flex>
+                {data ? (
+                  <Flex align="center" gap={4}>
+                    <Typography.Text type="secondary">{racks.length} 个笼架</Typography.Text>
+                    {racks.length ? (
+                      <HelpPopover label="房间图操作说明">
+                        {zoomLevel === detailZoomLevel ? "点击笼位操作。" : "点击笼架查看详情。"}
+                      </HelpPopover>
+                    ) : null}
+                  </Flex>
+                ) : null}
+                <ListRefreshStatus active={roomQuery.isFetching && Boolean(data)} />
               </Flex>
             }
             extra={
@@ -324,7 +500,9 @@ export function CagesView({ user }: { user: SessionUser }) {
               body: { padding: token.padding },
             }}
           >
-            {roomQuery.isPending ? (
+            {!selectedRoomId ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请选择饲养间查看笼架" />
+            ) : roomQuery.isPending ? (
               <CageLoading />
             ) : roomQuery.isError && !data ? (
               <PageState
@@ -334,44 +512,59 @@ export function CagesView({ user }: { user: SessionUser }) {
               />
             ) : (
               <Flex vertical gap={12}>
-                {racks.length ? (
-                  <Flex align="center" justify="space-between" gap={8} wrap>
-                    <Typography.Text type="secondary">{racks.length} 个笼架 · 点击查看笼位</Typography.Text>
-                    <ListRefreshStatus active={roomQuery.isFetching && Boolean(data)} />
-                    <Flex className="cage-room-zoom" align="center" gap={4} role="group" aria-label="房间图缩放">
-                      <Tooltip title="缩小房间图">
-                        <Button
-                          aria-label="缩小房间图"
-                          icon={<ZoomOutOutlined aria-hidden />}
-                          disabled={zoomLevel === 0}
-                          onClick={() => setZoomLevel((level) => Math.max(0, level - 1))}
-                        />
-                      </Tooltip>
-                      <Button type="text" aria-label="恢复房间图比例" onClick={() => setZoomLevel(0)}>
-                        {zoomLevels[zoomLevel] * 100}%
-                      </Button>
-                      <Tooltip title="放大房间图">
-                        <Button
-                          aria-label="放大房间图"
-                          icon={<ZoomInOutlined aria-hidden />}
-                          disabled={zoomLevel === zoomLevels.length - 1}
-                          onClick={() => setZoomLevel((level) => Math.min(zoomLevels.length - 1, level + 1))}
-                        />
-                      </Tooltip>
-                    </Flex>
-                  </Flex>
-                ) : (
-                  <ListRefreshStatus active={roomQuery.isFetching && Boolean(data)} />
-                )}
                 <div className="cage-room-map-stage">
                   <div className="cage-room-map-base">
                     <RoomRackMap
                       {...mapData}
                       placements={placements}
-                      selectedRackId={rackDetailsOpen ? selectedRack?.id : undefined}
+                      selectedRackId={
+                        (batchMode || selectedTask) && (rackDetailsOpen || zoomLevel === detailZoomLevel)
+                          ? selectedRack?.id
+                          : undefined
+                      }
                       onSelect={showRackDetails}
+                      onSelectSlot={(slot) => {
+                        changeRack(slot.rackId);
+                        setRackDetailsOpen(false);
+                        selectSlot(slot);
+                      }}
+                      selectedSlotIds={batchMode ? selectedSlotIdSet : new Set(selectedSlotId ? [selectedSlotId] : [])}
+                      onOverview={(id) => navigateRoomMap(0, id ? { rackId: id, focus: true } : undefined)}
+                      onZoomGesture={(direction, pointer) => {
+                        const level =
+                          direction === 0 ? 0 : Math.max(0, Math.min(detailZoomLevel, zoomLevel + direction));
+                        if (level !== zoomLevel) navigateRoomMap(level, undefined, pointer);
+                      }}
                       zoom={zoomLevels[zoomLevel]}
                       regionRef={roomMap}
+                      controls={
+                        <Flex className="cage-room-zoom" align="center" gap={4} role="group" aria-label="房间图缩放">
+                          <Tooltip title="缩小房间图">
+                            <Button
+                              aria-label="缩小房间图"
+                              icon={<ZoomOutOutlined aria-hidden />}
+                              disabled={zoomLevel === 0}
+                              onClick={() => navigateRoomMap(zoomLevel - 1)}
+                            />
+                          </Tooltip>
+                          <Button
+                            className="cage-room-zoom-level"
+                            type="text"
+                            aria-label="恢复房间图比例"
+                            onClick={() => navigateRoomMap(0)}
+                          >
+                            {zoomLevels[zoomLevel] * 100}%
+                          </Button>
+                          <Tooltip title="放大房间图">
+                            <Button
+                              aria-label="放大房间图"
+                              icon={<ZoomInOutlined aria-hidden />}
+                              disabled={zoomLevel === detailZoomLevel}
+                              onClick={() => navigateRoomMap(zoomLevel + 1)}
+                            />
+                          </Tooltip>
+                        </Flex>
+                      }
                     />
                   </div>
                   {selectedRack && rackDetailsOpen ? (
@@ -382,6 +575,7 @@ export function CagesView({ user }: { user: SessionUser }) {
                       roomSpecies={selectedRoom?.defaultSpecies || ""}
                       slots={slots}
                       occupancyBySlot={occupancyBySlot}
+                      occupancyStrains={data?.occupancyStrains}
                       projectColors={projectColors}
                       today={today}
                       selectedSlotId={selectedSlotId}
@@ -391,7 +585,7 @@ export function CagesView({ user }: { user: SessionUser }) {
                     />
                   ) : null}
                 </div>
-                {racks.length ? <RoomRackLegend colors={projectColors} /> : null}
+                {racks.length ? <RoomRackLegend /> : null}
               </Flex>
             )}
           </Card>
@@ -419,7 +613,9 @@ export function CagesView({ user }: { user: SessionUser }) {
             rack={selectedRack}
             roomName={selectedRoom?.name || ""}
             roomSpecies={selectedRoom?.defaultSpecies || ""}
-            occupancy={occupancyBySlot.get(selectedSlot.id) || null}
+            occupancy={selectedOccupancy}
+            strain={selectedOccupancy ? data?.occupancyStrains?.[selectedOccupancy.id] : undefined}
+            intakeDetails={selectedOccupancy ? data?.occupancyIntakeDetails?.[selectedOccupancy.id] : undefined}
             roomId={selectedRoomId}
             onClose={() => setSelectedSlotId("")}
             beginOperation={scopeOperations.begin}
@@ -458,6 +654,8 @@ export function CagesView({ user }: { user: SessionUser }) {
             onSelect={(task) => {
               clearSelection();
               setBatchMode(false);
+              setRackId("");
+              setRackDetailsOpen(false);
               setSelectedTaskId(task.id);
               setTasksOpen(false);
             }}

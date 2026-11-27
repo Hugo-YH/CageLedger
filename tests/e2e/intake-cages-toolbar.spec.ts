@@ -2,9 +2,17 @@ import { writeFile } from "node:fs/promises";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import type { PlacementWriteResponse, RoomWorkspace } from "../../src/contracts/infrastructure";
 import { captureUiAudit, contrastFromLayers } from "./uiAudit";
-import { ensureTestInfrastructure, expect, openIntakeEntry, openNavigationEntry, test } from "./fixtures";
+import {
+  chooseCageRoom,
+  ensureTestInfrastructure,
+  expect,
+  openIntakeEntry,
+  openNavigationEntry,
+  test,
+} from "./fixtures";
 
-const slotLabels = ".slot-code, .slot-iacuc, .slot-person, .slot-state, .slot-animal-meta";
+const slotLabels =
+  ".slot-code, .slot-iacuc, .slot-person, .slot-state, .slot-animal-type, .slot-animal-count, .slot-animal-meta";
 
 test.afterEach(async ({ page }) => {
   await page.request.delete(`/api/intake-batches/toolbar-intake-${page.viewportSize()!.width}`);
@@ -199,16 +207,17 @@ for (const viewport of [
       await page.getByRole("tab", { name: "更多", exact: true }).click();
       await page.locator(".ant-mobile-navigation-sheet").getByText("笼位管理", { exact: true }).last().click();
     } else await page.getByRole("menuitem", { name: /笼位管理/ }).click();
+    await chooseCageRoom(page, "8014");
     const cages = page.getByRole("group", { name: "笼位图操作", exact: true });
     const roomMap = page.getByRole("region", { name: "房间笼架布局", exact: true });
     const firstRack = roomMap.getByRole("button", { name: /^8014 01 号笼架/ });
     const secondRack = roomMap.getByRole("button", { name: /^工具栏第二笼架/ });
-    const details = page.getByRole("region", { name: /笼位详情$/ });
-    const closeDetails = details.getByRole("button", { name: "关闭笼位详情", exact: true });
+    const firstSlot = roomMap.getByRole("button", { name: /8014-01-A1/ });
+    const zoom = page.getByRole("button", { name: "恢复房间图比例", exact: true });
     await cages.getByRole("button", { name: "多选录入", exact: true }).click();
     const selectAll = cages.getByRole("button", { name: "全选当前", exact: true });
     await expect(selectAll).toBeDisabled();
-    await expect(details).toBeHidden();
+    await expect(firstSlot).toBeHidden();
     await firstRack.click();
     await selectAll.click();
     await expect(cages).toContainText("已选 2 项");
@@ -217,12 +226,12 @@ for (const viewport of [
     await expect(page.getByRole("dialog", { name: "批量编辑 2 个笼位", exact: true })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "关闭", exact: true }).click();
     await expect(roomMap.getByRole("button", { name: /个空位$/ })).toHaveCount(2);
-    await closeDetails.click();
+    await zoom.click();
     await secondRack.click();
-    await expect(page.getByRole("region", { name: "工具栏第二笼架 笼位详情", exact: true })).toBeVisible();
+    await expect(secondRack).toHaveAttribute("aria-pressed", "true");
     await expect(cages).toContainText("已选 0 项");
     await expect(cages.getByRole("button", { name: "批量编辑", exact: true })).toBeDisabled();
-    await closeDetails.click();
+    await zoom.click();
     await cages.getByRole("button", { name: /待进驻/ }).click();
     await page
       .getByRole("dialog", { name: "待进驻动物", exact: true })
@@ -231,7 +240,7 @@ for (const viewport of [
     await expect(cages.getByRole("button", { name: "确认预留", exact: true })).toBeDisabled();
     await expect(cages.getByRole("button", { name: "取消预留", exact: true })).toBeEnabled();
     await expect(cages).not.toContainText("正在处理");
-    await expect(details).toBeHidden();
+    await expect(firstSlot).toBeHidden();
     await firstRack.click();
     await page.getByRole("button", { name: /8014-01-A1/ }).click();
     await expect(cages.getByRole("button", { name: "确认预留", exact: true })).toBeEnabled();
@@ -345,6 +354,7 @@ for (const viewport of [
           });
           expect(updated.ok()).toBe(true);
           await page.reload();
+          await chooseCageRoom(page, "8014");
           await firstRack.click();
           const slot = page.getByRole("button", { name: /8014-01-A1/ });
           await expect(slot).toHaveAttribute("data-cage-status", tone);

@@ -1,4 +1,5 @@
 import {
+  chooseCageRoom,
   ensureTestInfrastructure,
   expect,
   openSettlementNavigation,
@@ -44,6 +45,8 @@ test("login and open the main business workspaces", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "接收笼卡", exact: true, level: 2 })).toBeVisible();
   await page.getByRole("menuitem", { name: /笼位管理/ }).click();
   await expect(page.getByRole("heading", { name: "笼位管理", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByText("请选择饲养间查看笼架", { exact: true })).toBeVisible();
+  await chooseCageRoom(page, "8014");
   await expect(
     page.locator("#cages-room-select").locator("xpath=ancestor::div[contains(@class, 'ant-select')][1]"),
   ).toContainText("8014");

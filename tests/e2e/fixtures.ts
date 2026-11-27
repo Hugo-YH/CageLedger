@@ -91,6 +91,11 @@ export async function openIntakeEntry(page: Page) {
   await openNavigationEntry(page, "笼卡管理", "预约消息识别");
 }
 
+export async function chooseCageRoom(page: Page, name: string) {
+  await page.getByRole("combobox", { name: "房间", exact: true }).click();
+  await page.locator(".ant-select-dropdown").filter({ visible: true }).getByText(name, { exact: true }).click();
+}
+
 export async function openQuantityEntry(page: Page) {
   await openNavigationEntry(page, "饲养费管理", "录入数量统计表");
 }

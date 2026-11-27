@@ -858,7 +858,7 @@
           "path": "/api/infrastructure/rooms/{id}",
           "purpose": "当前授权房间工作数据",
           "request": "id；可选view=cages只读当前占用与待进驻任务",
-          "response": "默认 {rooms,racks,slots,occupancies,placementTasks}。cages 只返回当前占用和待进驻任务，并附 {rackLayout:{placements,updatedAt}}",
+          "response": "默认 {rooms,racks,slots,occupancies,placementTasks}。cages 返回当前占用、待进驻任务和 rackLayout，有来源记录时附 occupancyStrains、occupancyIntakeDetails",
           "permission": "login",
           "protection": "read"
         },

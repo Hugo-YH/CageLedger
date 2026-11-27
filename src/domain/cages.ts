@@ -1,5 +1,7 @@
 import type { CageSlot, Occupancy } from "../contracts/infrastructure";
 import { createClientId } from "./id";
+import { inferSpecies, speciesLabel } from "./intake";
+import { formatPersonNames } from "./personNames";
 
 export function currentOccupancy(slotId: string, occupancies: Occupancy[]) {
   return (
@@ -56,6 +58,40 @@ export function cageDisplayStatus(slot: CageSlot, occupancy: Occupancy | null, t
   return period === "open" || period === "overdue" ? period : slot.status;
 }
 
+export function cageSpecies(occupancySpecies: string | undefined, roomSpecies: string) {
+  // Legacy occupancies may store the ethics application's animal description.
+  const species = occupancySpecies?.trim() || roomSpecies.trim();
+  return species ? inferSpecies(species) : "";
+}
+
+export function cageOccupancyPeople(occupancy: Occupancy) {
+  const pi = formatPersonNames(occupancy.pi);
+  const owner = formatPersonNames(occupancy.owner);
+  return {
+    names: [pi, owner].filter(Boolean).join(" "),
+    description: [pi && `项目负责人 ${pi}`, owner && `实验负责人 ${owner}`].filter(Boolean).join("，"),
+  };
+}
+
+export function cageOccupancyDetails(occupancy: Occupancy | null, roomSpecies: string, today: string, strain?: string) {
+  if (!occupancy) return null;
+  const species = cageSpecies(occupancy.species, roomSpecies);
+  const animal = speciesLabel(species);
+  const count = occupancy.animalCount == null ? "" : `${occupancy.animalCount} 只`;
+  return {
+    iacuc: occupancy.iacuc || "未填写 IACUC",
+    people: cageOccupancyPeople(occupancy),
+    animal,
+    count,
+    animalSummary: [animal, count].filter(Boolean).join(" · "),
+    strain: typeof strain === "string" && strain !== animal ? strain : undefined,
+    monkeySummary:
+      species === "monkey"
+        ? `${animalSexLabel(occupancy.animalSex)} · ${animalAgeText(occupancy.birthDate, today) || "年龄未填写"}`
+        : "",
+  };
+}
+
 export function animalAgeText(birthDate: string | undefined, referenceDate: string) {
   if (!birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return "";
   const birth = parseDateParts(birthDate);
@@ -80,6 +116,7 @@ export function animalAgeText(birthDate: string | undefined, referenceDate: stri
 export function animalSexLabel(value: string | undefined) {
   if (value === "male") return "雄";
   if (value === "female") return "雌";
+  if (value === "mixed") return "雌雄混合";
   return "未填写";
 }
 

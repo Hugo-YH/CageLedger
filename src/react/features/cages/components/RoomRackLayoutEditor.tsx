@@ -6,8 +6,8 @@ import {
   RotateRightOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Flex, Tooltip, Typography } from "antd";
-import { useState } from "react";
-import { rackPlacementFits } from "../../../../domain/rackLayout";
+import { useMemo, useState } from "react";
+import { rackLayoutGridDivisions, rackPlacementFits } from "../../../../domain/rackLayout";
 import type { RackPlacement } from "../../../api/contracts";
 import { useSaveRoomRackLayout } from "../../../api/infrastructure";
 import { ModalShell } from "../../../components/WorkspaceUi";
@@ -50,12 +50,13 @@ export function RoomRackLayoutEditor({
   const dirty = JSON.stringify(placements) !== JSON.stringify(baseline.placements);
   const confirmLeave = useUnsavedChanges(dirty, action.pending);
   const selected = placements.find((placement) => placement.rackId === selectedRackId);
-  const selectedRack = mapData.racks.find((rack) => rack.id === selectedRackId);
+  const racks = useMemo(() => new Map(mapData.racks.map((rack) => [rack.id, rack])), [mapData.racks]);
+  const selectedRack = racks.get(selectedRackId);
 
   function move(placement: RackPlacement) {
     if (action.isPending()) return;
     const current = placements.find((item) => item.rackId === placement.rackId);
-    if (!rackPlacementFits(placement, placements)) {
+    if (!rackPlacementFits(placement, placements, racks)) {
       setPlacementError("该位置超出摆放范围或与其他笼架重叠。");
       return;
     }
@@ -89,7 +90,7 @@ export function RoomRackLayoutEditor({
         <Flex align="center" justify="space-between" gap={8} wrap>
           <Typography.Text role="status">
             {selected && selectedRack
-              ? `${selectedRack.name} · 第 ${selected.column + 1} 列 · 第 ${selected.row + 1} 行 · ${selected.rotation}°`
+              ? `${selectedRack.name} · 第 ${selected.column * rackLayoutGridDivisions + 1} 列 · 第 ${selected.row * rackLayoutGridDivisions + 1} 行 · ${selected.rotation}°`
               : "请选择已布置的笼架"}
           </Typography.Text>
           <Flex gap={8} wrap>
@@ -100,7 +101,12 @@ export function RoomRackLayoutEditor({
                   icon={<Icon aria-hidden />}
                   disabled={!selected || action.pending}
                   onClick={() =>
-                    selected && move({ ...selected, column: selected.column + column, row: selected.row + row })
+                    selected &&
+                    move({
+                      ...selected,
+                      column: selected.column + column / rackLayoutGridDivisions,
+                      row: selected.row + row / rackLayoutGridDivisions,
+                    })
                   }
                 />
               </Tooltip>

@@ -20,7 +20,7 @@ import { IntakeSummaryExport } from "./IntakeSummaryExport";
 import { IntakeStatistics } from "./IntakeStatistics";
 import { CellText } from "../../../components/ui/CellText";
 import { IntakeStatusTag } from "./IntakeStatusTag";
-import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "./ProjectPeopleCopyButton";
+import { ProjectPeopleCopyButton, ProjectPeopleCopyProvider } from "../../../components/ProjectPeopleCopyButton";
 
 type IntakeBatchListProps = {
   total: number;

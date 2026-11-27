@@ -146,24 +146,27 @@ function normalizedDate(value: string, fallbackYear = new Date().getFullYear()) 
 export function inferSpecies(value: string) {
   if (/猴|monkey|macaque/i.test(value)) return "monkey";
   if (/兔|rabbit/i.test(value)) return "rabbit";
+  if (/豚鼠|guinea/i.test(value)) return "guinea_pig";
   if (/猪|pig|swine/i.test(value)) return "pig";
   if (/犬|狗|dog|canine/i.test(value)) return "dog";
-  if (/豚鼠|guinea/i.test(value)) return "guinea_pig";
   if (/大鼠|rat|sprague|wistar|lewis|\bsd\b/i.test(value)) return "rat";
   return "mouse";
 }
 
+const speciesLabels: Record<string, string> = {
+  mouse: "小鼠",
+  rat: "大鼠",
+  guinea_pig: "豚鼠",
+  rabbit: "兔",
+  monkey: "猴",
+  pig: "猪",
+  dog: "犬",
+};
+
+export const animalSpeciesOptions = Object.entries(speciesLabels).map(([value, label]) => ({ value, label }));
+
 export function speciesLabel(value: string) {
-  const labels: Record<string, string> = {
-    mouse: "小鼠",
-    rat: "大鼠",
-    guinea_pig: "豚鼠",
-    rabbit: "兔",
-    monkey: "猴",
-    pig: "猪",
-    dog: "犬",
-  };
-  return labels[value] ?? value;
+  return speciesLabels[value] ?? value;
 }
 
 export function defaultAnimalsPerCage(species: string) {

@@ -109,6 +109,7 @@ export function SexSelect({
           { value: "unknown", label: "请选择" },
           { value: "male", label: "雄" },
           { value: "female", label: "雌" },
+          { value: "mixed", label: "雌性/雄性" },
         ]}
         style={{ width: "100%" }}
         value={value}

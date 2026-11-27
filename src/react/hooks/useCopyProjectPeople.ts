@@ -1,12 +1,11 @@
-import { useOperationFeedback } from "../../../hooks/useOperationFeedback";
+import { useOperationFeedback } from "./useOperationFeedback";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import type { IntakeBatch } from "../../../api/contracts";
-import { fetchIacucSearch } from "../../../api/iacuc";
-import { queryKeys } from "../../../api/queryKeys";
-import { useLatestRequest } from "../../../hooks/useLatestRequest";
-import { copyTextToClipboard } from "../../../utils/clipboard";
+import { fetchIacucSearch } from "../api/iacuc";
+import { queryKeys } from "../api/queryKeys";
+import { useLatestRequest } from "./useLatestRequest";
+import { copyTextToClipboard } from "../utils/clipboard";
 
 export function useCopyProjectPeople() {
   const client = useQueryClient();
@@ -15,7 +14,7 @@ export function useCopyProjectPeople() {
   const busy = useRef(false);
   const [progress, setProgress] = useState<{ id: string; phase: "querying" | "copying" } | null>(null);
 
-  async function copy(item: Pick<IntakeBatch, "id" | "iacuc">) {
+  async function copy(item: { id: string; iacuc: string }) {
     if (busy.current) return;
     const code = item.iacuc.trim().toUpperCase();
     if (!code) {

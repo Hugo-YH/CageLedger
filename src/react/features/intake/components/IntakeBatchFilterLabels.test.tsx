@@ -37,7 +37,7 @@ vi.mock("../../../components/ui", () => ({
 }));
 vi.mock("./IntakeSummaryExport", () => ({ IntakeSummaryExport: () => null }));
 vi.mock("./IntakeStatistics", () => ({ IntakeStatistics: () => null }));
-vi.mock("./ProjectPeopleCopyButton", () => ({
+vi.mock("../../../components/ProjectPeopleCopyButton", () => ({
   ProjectPeopleCopyProvider: ({ children }: { children: ReactNode }) => children,
   ProjectPeopleCopyButton: () => null,
 }));

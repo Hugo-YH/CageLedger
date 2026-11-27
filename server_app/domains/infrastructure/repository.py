@@ -46,8 +46,12 @@ def rack_slots(conn, rack_id):
     return payloads(conn, "SELECT payload FROM cage_slots WHERE rack_id=? ORDER BY row_no,col_no,rowid", (rack_id,))
 
 
-def room_rack_ids(conn, room_id):
-    return {row["id"] for row in conn.execute("SELECT id FROM racks WHERE room_id=?", (room_id,))}
+def room_rack_sizes(conn, room_id):
+    sizes = {}
+    for row in conn.execute("SELECT id,payload FROM racks WHERE room_id=?", (room_id,)):
+        rack = json.loads(row["payload"])
+        sizes[row["id"]] = (rack.get("cols"), rack.get("rows"))
+    return sizes
 
 
 def read_rack_layout(conn, room_id):
@@ -70,8 +74,55 @@ def save_rack_layout(conn, room_id, layout):
     )
 
 
+def room_occupancies(conn, room_id, current_only):
+    source = "FROM occupancies o JOIN cage_slots s ON s.id=o.slot_id JOIN racks r ON r.id=s.rack_id"
+    order = "ORDER BY o.start_date,o.rowid"
+    if not current_only:
+        return {"occupancies": payloads(conn, f"SELECT o.payload {source} WHERE r.room_id=? {order}", (room_id,))}
+
+    rows = conn.execute(
+        f"""
+        SELECT o.id, o.payload,
+            CASE WHEN json_type(o.payload,'$.strainStandard') IS NOT 'null' THEN COALESCE(
+                NULLIF(TRIM(json_extract(o.payload,'$.strainStandard')), ''),
+                NULLIF(TRIM(json_extract(o.payload,'$.strainRaw')), ''),
+                NULLIF(TRIM(json_extract(t.payload,'$.strainStandard')), ''),
+                NULLIF(TRIM(json_extract(t.payload,'$.strainRaw')), ''),
+                NULLIF(TRIM(json_extract(b.payload,'$.strainStandard')), ''),
+                NULLIF(TRIM(json_extract(b.payload,'$.strainRaw')), '')
+            ) END AS strain,
+            COALESCE(
+                NULLIF(TRIM(json_extract(t.payload,'$.specification')), ''),
+                NULLIF(TRIM(json_extract(b.payload,'$.specification')), '')
+            ) AS specification,
+            COALESCE(
+                NULLIF(TRIM(json_extract(t.payload,'$.sex')), ''),
+                NULLIF(TRIM(json_extract(b.payload,'$.sex')), '')
+            ) AS sex
+        {source}
+        LEFT JOIN placement_tasks t ON t.id=json_extract(o.payload,'$.placementTaskId')
+            AND t.target_room_id=r.room_id AND json_extract(t.payload,'$.reservedOccupancyId')=o.id
+        LEFT JOIN intake_batches b ON b.id=t.source_batch_id
+        WHERE r.room_id=? AND json_extract(o.payload,'$.status') IN ('active','reserved')
+        {order}
+        """,
+        (room_id,),
+    ).fetchall()
+    result = {"occupancies": [json.loads(row["payload"]) for row in rows]}
+    strains = {row["id"]: row["strain"] for row in rows if row["strain"]}
+    if strains:
+        result["occupancyStrains"] = strains
+    intake_details = {
+        row["id"]: {field: row[field] for field in ("specification", "sex") if row[field]}
+        for row in rows
+        if row["specification"] or row["sex"]
+    }
+    if intake_details:
+        result["occupancyIntakeDetails"] = intake_details
+    return result
+
+
 def room_workspace(conn, room_id, *, current_only=False):
-    occupancy_filter = " AND json_extract(o.payload,'$.status') IN ('active','reserved')" if current_only else ""
     task_filter = (
         " AND COALESCE(json_extract(payload,'$.status'),'') NOT IN ('active','cancelled')" if current_only else ""
     )
@@ -82,11 +133,7 @@ def room_workspace(conn, room_id, *, current_only=False):
             "SELECT s.payload FROM cage_slots s JOIN racks r ON r.id=s.rack_id WHERE r.room_id=? ORDER BY s.rack_id,s.row_no,s.col_no,s.rowid",
             (room_id,),
         ),
-        "occupancies": payloads(
-            conn,
-            f"SELECT o.payload FROM occupancies o JOIN cage_slots s ON s.id=o.slot_id JOIN racks r ON r.id=s.rack_id WHERE r.room_id=?{occupancy_filter} ORDER BY o.start_date,o.rowid",
-            (room_id,),
-        ),
+        **room_occupancies(conn, room_id, current_only),
         "placementTasks": payloads(
             conn,
             f"SELECT payload FROM placement_tasks WHERE target_room_id=?{task_filter} ORDER BY planned_move_in_date,rowid",

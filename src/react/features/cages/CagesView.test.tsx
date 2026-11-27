@@ -7,7 +7,7 @@ import type { CageRack, CageSlot, PlacementTask, SessionUser } from "../../api/c
 import type { CommandBarProps } from "../../components/ui/CommandBar";
 import type { ModalShell } from "../../components/WorkspaceUi";
 import type * as CageWorkspaceComponents from "./components/CageWorkspaceComponents";
-import type { PlacementDrawer, SlotEditor, VirtualRack } from "./components/CageWorkspaceComponents";
+import type { PlacementDrawer, SlotEditor } from "./components/CageWorkspaceComponents";
 import { CagesView } from "./CagesView";
 
 const operationFeedback = vi.hoisted(() => ({
@@ -33,7 +33,7 @@ const user: SessionUser = {
 };
 const rooms = [
   { id: "room-1", name: "房间一" },
-  { id: "room-2", name: "房间二" },
+  { id: "room-2", name: "房间二", facility: "bioisland" },
 ];
 const racks: CageRack[] = [
   { id: "rack-1", roomId: "room-1", name: "笼架一", index: 1, rows: 1, cols: 2 },
@@ -63,9 +63,9 @@ const tasks: PlacementTask[] = [
 
 vi.mock("../../api/infrastructure", () => ({
   useRooms: () => ({ data: { items: rooms }, isPending: false, isFetching: false }),
-  useRoomWorkspace: () => ({
-    data: { rooms, racks, slots, occupancies: [], placementTasks: tasks },
-    isPending: false,
+  useRoomWorkspace: (roomId: string) => ({
+    data: roomId ? { rooms, racks, slots, occupancies: [], placementTasks: tasks } : undefined,
+    isPending: !roomId,
     isFetching: false,
   }),
 }));
@@ -120,6 +120,7 @@ vi.mock("../../components/ui", () => ({
   // Modal/Drawer tests cover visual exit retention; this suite isolates selection scope.
   ModalPresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   ListRefreshStatus: ({ active }: { active: boolean }) => (active ? <div role="status">正在更新</div> : null),
+  HelpPopover: ({ label }: { label: string }) => <button aria-label={label} type="button" />,
   ActionButton: ({
     tone,
     loading,
@@ -165,15 +166,6 @@ vi.mock("./components/CageFormControls", () => ({
 }));
 vi.mock("./components/CageWorkspaceComponents", async (importOriginal) => ({
   ...(await importOriginal<typeof CageWorkspaceComponents>()),
-  VirtualRack: ({ slots: visibleSlots, selectedSlotIds, onSelect }: ComponentProps<typeof VirtualRack>) => (
-    <div>
-      {visibleSlots.map((slot) => (
-        <button key={slot.id} aria-pressed={selectedSlotIds.includes(slot.id)} onClick={() => onSelect(slot)}>
-          {slot.id}
-        </button>
-      ))}
-    </div>
-  ),
   SlotEditor: ({ slot, onClose }: ComponentProps<typeof SlotEditor>) => (
     <div role="dialog" aria-label={`编辑 ${slot.id}`}>
       <button onClick={onClose}>关闭编辑</button>
@@ -194,13 +186,23 @@ function changeRoom(value: string) {
   fireEvent.change(screen.getByRole("combobox", { name: "房间" }), { target: { value } });
 }
 
+function renderRoom() {
+  render(<CagesView user={user} />);
+  changeRoom("room-1");
+}
+
 function chooseRack(name: string) {
   const map = screen.getByRole("region", { name: "房间笼架布局" });
   fireEvent.click(within(map).getByRole("button", { name: new RegExp(`^${name}，`) }));
 }
 
 function closeRack() {
-  fireEvent.click(screen.getByRole("button", { name: "关闭笼位详情" }));
+  fireEvent.click(screen.getByRole("button", { name: "恢复房间图比例" }));
+}
+
+function chooseSlot(code: string) {
+  const map = screen.getByRole("region", { name: "房间笼架布局" });
+  fireEvent.click(within(map).getByRole("button", { name: new RegExp(`^${code}，`) }));
 }
 
 function selectTask() {
@@ -214,9 +216,37 @@ describe("cage workspace selection scope", () => {
     vi.resetAllMocks();
   });
 
-  it("clears multi-selection and the pending editor when changing racks", () => {
+  it("filters authorized rooms by facility and keeps the current room when clearing the filter", () => {
     render(<CagesView user={user} />);
+    const facility = screen.getByRole("combobox", { name: "设施" });
+    const room = screen.getByRole("combobox", { name: "房间" });
+    expect(facility).toHaveValue("");
+    expect(room).toHaveValue("");
+    expect(screen.queryByRole("region", { name: "房间笼架布局" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "多选录入" })).toBeDisabled();
+    fireEvent.change(facility, { target: { value: "bioisland" } });
+    expect(room).toHaveValue("");
+    expect(within(room).queryByRole("option", { name: "房间一" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "房间笼架布局" })).not.toBeInTheDocument();
+    changeRoom("room-2");
+    expect(screen.getByRole("button", { name: "恢复房间图比例" })).toHaveTextContent("100%");
+    expect(screen.getByRole("button", { name: /^笼架三，/ })).toBeInTheDocument();
+
+    fireEvent.change(facility, { target: { value: "" } });
+    expect(room).toHaveValue("room-2");
+    expect(within(room).getByRole("option", { name: "房间一" })).toBeInTheDocument();
+
+    fireEvent.change(facility, { target: { value: "zhujiang" } });
+    expect(room).toHaveValue("");
+    expect(screen.queryByRole("region", { name: "房间笼架布局" })).not.toBeInTheDocument();
+  });
+
+  it("clears multi-selection and the pending editor when changing racks", () => {
+    renderRoom();
     expect(screen.queryByRole("combobox", { name: "笼架" })).not.toBeInTheDocument();
+    chooseRack("笼架一");
+    expect(screen.getByRole("button", { name: /^笼架一，/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^笼架一，/ })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
     const selectAll = screen.getByRole("button", { name: "全选当前" });
     expect(selectAll).toBeDisabled();
@@ -236,11 +266,12 @@ describe("cage workspace selection scope", () => {
   });
 
   it("clears the selected slot across racks and keeps the placement task within its room", () => {
-    render(<CagesView user={user} />);
+    renderRoom();
     expect(screen.queryByRole("region", { name: "笼架一 笼位详情" })).not.toBeInTheDocument();
     chooseRack("笼架一");
-    expect(screen.getByRole("region", { name: "笼架一 笼位详情" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
+    expect(screen.getByRole("button", { name: "恢复房间图比例" })).toHaveTextContent("300%");
+    expect(screen.queryByRole("region", { name: "笼架一 笼位详情" })).not.toBeInTheDocument();
+    chooseSlot("房间一-01-A1");
     expect(screen.getByRole("dialog", { name: "编辑 slot-1" })).toBeInTheDocument();
     changeRoom("room-2");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -251,14 +282,14 @@ describe("cage workspace selection scope", () => {
     expect(confirm).toBeDisabled();
     expect(screen.queryByRole("region", { name: /笼位详情$/ })).not.toBeInTheDocument();
     chooseRack("笼架一");
-    fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
+    chooseSlot("房间一-01-A1");
     expect(confirm).toBeEnabled();
     closeRack();
     chooseRack("笼架二");
     expect(confirm).toBeDisabled();
     expect(screen.getByRole("button", { name: "取消预留" })).toBeInTheDocument();
     expect(screen.getByText("已选 0 项")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "slot-3" }));
+    chooseSlot("房间一-02-A1");
     expect(confirm).toBeEnabled();
     changeRoom("room-2");
     expect(screen.queryByRole("button", { name: "确认预留" })).not.toBeInTheDocument();
@@ -267,7 +298,7 @@ describe("cage workspace selection scope", () => {
   });
 
   it("can cancel a reservation before choosing a slot", () => {
-    render(<CagesView user={user} />);
+    renderRoom();
     selectTask();
     expect(screen.getByRole("button", { name: "确认预留" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "取消预留" }));
@@ -283,17 +314,17 @@ describe("cage workspace selection scope", () => {
         finish = resolve;
       }),
     );
-    render(<CagesView user={user} />);
+    renderRoom();
     selectTask();
     chooseRack("笼架一");
-    fireEvent.click(screen.getByRole("button", { name: "slot-1" }));
+    chooseSlot("房间一-01-A1");
     fireEvent.click(screen.getByRole("button", { name: "确认预留" }));
     expect(reserve).toHaveBeenCalledWith({ taskId: "task-1", slotId: "slot-1" });
     closeRack();
     chooseRack("笼架二");
     fireEvent.click(screen.getByRole("button", { name: "取消预留" }));
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
-    fireEvent.click(screen.getByRole("button", { name: "slot-3" }));
+    chooseSlot("房间一-02-A1");
     await act(async () => {
       finish();
       await Promise.resolve();
@@ -311,15 +342,13 @@ describe("cage workspace selection scope", () => {
         }),
       )
       .mockResolvedValue(undefined);
-    render(<CagesView user={user} />);
+    renderRoom();
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
     chooseRack("笼架一");
     fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "批量保存" }));
-    closeRack();
-    chooseRack("笼架二");
-    fireEvent.click(screen.getByRole("button", { name: "slot-3" }));
+    chooseSlot("房间一-02-A1");
     await act(async () => {
       finish();
       await Promise.resolve();
@@ -332,14 +361,14 @@ describe("cage workspace selection scope", () => {
   it("does not close a reopened batch editor when a previously closed job finishes in the same scope", async () => {
     let finish!: () => void;
     save.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve))).mockResolvedValue(undefined);
-    render(<CagesView user={user} />);
+    renderRoom();
     fireEvent.click(screen.getByRole("button", { name: "多选录入" }));
     chooseRack("笼架一");
     fireEvent.click(screen.getByRole("button", { name: "全选当前" }));
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "批量保存" }));
     fireEvent.click(screen.getByRole("button", { name: "清空选择" }));
-    fireEvent.click(screen.getByRole("button", { name: "slot-2" }));
+    chooseSlot("房间一-01-B1");
     fireEvent.click(screen.getByRole("button", { name: "批量编辑" }));
     await act(async () => {
       finish();

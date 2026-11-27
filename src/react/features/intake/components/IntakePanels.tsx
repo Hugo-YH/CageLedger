@@ -6,7 +6,7 @@ import { Alert, Button, Card, Col, Divider, Form, Input, Row, Select, Space, Typ
 import { useRef } from "react";
 
 import type { IntakeBatch, IntakeBatchStatus, IntakePurpose } from "../../../api/contracts";
-import { isDirectSampling, normalizeIntakeSex } from "../../../../domain/intake";
+import { animalSpeciesOptions, isDirectSampling, normalizeIntakeSex } from "../../../../domain/intake";
 import { IntakeRecognitionHelp, IntakeRecognitionImages } from "./IntakeRecognitionImages";
 import type { IntakeRecognitionImageInput } from "../../../api/contracts";
 import { CommandBar } from "../../../components/ui";
@@ -279,15 +279,7 @@ export function IntakeEntryPanel({
               <Form.Item label="物种">
                 <Select
                   aria-label="物种"
-                  options={[
-                    ["mouse", "小鼠"],
-                    ["rat", "大鼠"],
-                    ["guinea_pig", "豚鼠"],
-                    ["rabbit", "兔"],
-                    ["monkey", "猴"],
-                    ["pig", "猪"],
-                    ["dog", "犬"],
-                  ].map(([value, label]) => ({ value, label }))}
+                  options={animalSpeciesOptions}
                   value={draft.species}
                   onChange={(value) => onUpdate("species", value)}
                 />

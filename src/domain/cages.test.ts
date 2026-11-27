@@ -3,6 +3,8 @@ import {
   animalAgeText,
   animalSexLabel,
   cageCode,
+  cageOccupancyDetails,
+  cageSpecies,
   currentOccupancy,
   currentOccupancyIndex,
   emptyOccupancy,
@@ -16,6 +18,24 @@ describe("cage map domain", () => {
     expect(slotPosition(slot)).toBe("C2");
     expect(cageCode(slot, 2)).toBe("02-C2");
     expect(cageCode(slot, 2, "8014")).toBe("8014-02-C2");
+  });
+  it("uses a species label for legacy ethics descriptions and a separate recorded strain", () => {
+    const occupancy = {
+      ...emptyOccupancy("s1", "8014-01-C1", "2026-11-27"),
+      species: "C57小鼠 460只； 6种基因工程小鼠 560只",
+    };
+    expect(cageOccupancyDetails(occupancy, "mouse", "2026-11-27")).toMatchObject({
+      animal: "小鼠",
+      animalSummary: "小鼠",
+      strain: undefined,
+    });
+    expect(cageOccupancyDetails(occupancy, "mouse", "2026-11-27", "C57BL/6J")).toMatchObject({
+      animal: "小鼠",
+      strain: "C57BL/6J",
+    });
+    expect(cageSpecies("恒河猴12只", "mouse")).toBe("monkey");
+    expect(cageSpecies("", "guinea_pig")).toBe("guinea_pig");
+    expect(cageSpecies(undefined, "")).toBe("");
   });
   it("classifies active feeding periods", () => {
     expect(

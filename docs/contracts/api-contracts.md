@@ -20,9 +20,9 @@ JSON、multipart上传及失败的下载请求共用前端 `ApiError`，保留�
 
 无权限返回403，不存在返回404。原 `/api/bootstrap` 的参数和响应继续兼容；summary 缓存检查在读取共享 state 之前执行。
 
-笼位图使用 `/api/infrastructure/rooms/{id}?view=cages`。该视图只返回 `active`／`reserved` 占用和状态不为 `active`／`cancelled` 的进驻任务，保持原排序，并提供 `rackLayout: {placements,updatedAt}`。省略 `view` 返回该房间完整占用历史。笼位图使用独立查询键，单项操作只失效目标房间及关联笼架，批量操作在本轮结束时统一刷新一次。
+笼位图使用 `/api/infrastructure/rooms/{id}?view=cages`。该视图只返回 `active`／`reserved` 占用和状态不为 `active`／`cancelled` 的进驻任务，保持原排序，并提供 `rackLayout: {placements,updatedAt}`。有品系记录时，另附以占用 ID 为键的 `occupancyStrains`，优先使用占用记录及其关联进驻任务的品系，再读取任务对应的接收批次。`occupancyIntakeDetails` 用于回显同一关联任务和批次提供的规格及性别。编辑单笼保存 `strainStandard`、`specification` 和 `animalSex`，优先使用单笼的值，品系及规格显式保存 `null` 表示清空。省略 `view` 返回该房间完整占用历史。笼位图使用独立查询键，单项操作只失效目标房间及关联笼架，批量操作在本轮结束时统一刷新一次。
 
-系统管理员和获授权的房间管理员通过 `PUT /api/infrastructure/rooms/{id}/rack-layout` 保存 `{placements,expectedUpdatedAt}`，响应为 `{placements,updatedAt}`。每个摆放记录包含 `rackId`、从 0 开始的 `column` 和 `row`，以及 `0` 或 `90` 的 `rotation`。首次保存使用空字符串版本。坐标越界、重叠或笼架不属于房间返回 400，版本过期返回 409。
+系统管理员和获授权的房间管理员通过 `PUT /api/infrastructure/rooms/{id}/rack-layout` 保存 `{placements,expectedUpdatedAt}`，响应为 `{placements,updatedAt}`。每个摆放记录包含 `rackId`、从 0 开始的 `column` 和 `row`，以及 `0` 或 `90` 的 `rotation`。坐标沿用原来的尺度，允许 `0.25` 的倍数，已有整数坐标继续有效。占地在原有 4 × 2 范围内为标题和内边距留出空间，再按方形笼位网格收紧到对齐步长，旋转 90° 时交换宽高。首次保存使用空字符串版本。坐标未对齐、越界、重叠或笼架不属于房间返回 400，版本过期返回 409。
 
 数量表和技术服务列表支持 `view=summary`。数量表原默认列表本来就采用 SQL 投影，显式 summary 与该投影一致；技术服务 summary 保留月份、伦理号、服务项目、服务日数、数量、金额、保护状态和 `updatedAt`，省略 `rows`、价格快照等详情。不传 view 的原列表响应保持原状。预览和编辑通过原单条详情接口读取完整数据；技术服务普通编辑仍使用原价格快照，删除继续提交列表所见版本，不能通过读详情静默替换该版本。
 
