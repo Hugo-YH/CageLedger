@@ -285,20 +285,22 @@ it.each([
 
 it("keeps the successful page and pauses selection/export after a later page fails, then retries", async () => {
   render(view());
-  await screen.findByText(record.batchNo);
-  fireEvent.click(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` }));
+  const batch = await screen.findByText(record.batchNo);
+  const row = within(batch.closest("tr")!);
+  const toolbar = within(screen.getByLabelText("接收列表操作"));
+  fireEvent.click(row.getByRole("checkbox", { name: `选择 ${record.batchNo}` }));
   failList = true;
   fireEvent.click(screen.getByTitle("2"));
   await screen.findByText("接收列表更新失败，暂显示上次成功结果；选择和导出已暂停");
   expect(screen.getByText(record.batchNo)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "导出Excel" })).toBeDisabled();
-  expect(screen.getByRole("checkbox", { name: `选择 ${record.batchNo}` })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "合格证识别" })).toBeDisabled();
+  expect(toolbar.getByRole("button", { name: "导出Excel" })).toBeDisabled();
+  expect(row.getByRole("checkbox", { name: `选择 ${record.batchNo}` })).toBeDisabled();
+  expect(row.getByRole("button", { name: "合格证识别" })).toBeDisabled();
   expect(screen.getByTitle("1")).toHaveClass("ant-pagination-item-active");
   failList = false;
-  fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+  fireEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: /重\s*试/ }));
   await screen.findByText("RECEPTION-TWO");
-  expect(screen.getByRole("button", { name: "导出Excel" })).toBeEnabled();
+  expect(toolbar.getByRole("button", { name: "导出Excel" })).toBeEnabled();
   expect(screen.getByTitle("2")).toHaveClass("ant-pagination-item-active");
 });
 
